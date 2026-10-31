@@ -1,6 +1,6 @@
 /*
  * enc.tl - encoded input for the tests of uudecode, made independently
- * of uuencode (as Python's binascii and base64 write it)
+ * of uuencode (historical uuencode and RFC 4648 base64)
  *
  *     tl enc.tl uu|b64 MODE NAME FILE [bt]
  *

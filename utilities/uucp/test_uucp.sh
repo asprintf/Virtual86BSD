@@ -89,8 +89,8 @@ t "-C: the copy goes when the job is done" '' 0 sh -c 'ls h/spool/data' sh "$U"
 t "a system not reached: status 1, the job queued" "uucp: cannot reach down: the connection was lost; the job is queued
 1" 1 sh -c 'rm -f h/spool/jobs/*; "$1" a.txt "down!~/x" 2>&1; s=$?; ls h/spool/jobs | wc -l | tr -d " "; exit $s' sh "$U"
 rm -f h/spool/jobs/*
-t "-m: mail to the user when it is done" "$me uucp job there.N done" 0 sh -c 'rm -f mailbox; "$1" -m a.txt "there!~/mm.txt" && head -1 mailbox | sed "s/[0-9][0-9]* done/N done/"' sh "$U"
-t "-m: mail when it fails" "$me uucp job there.N failed" 1 sh -c 'rm -f mailbox; "$1" -m nosuch.txt "there!~/mm.txt" 2>/dev/null; s=$?; head -1 mailbox | sed "s/[0-9][0-9]* failed/N failed/"; exit $s' sh "$U"
+t "-m: mail to the user when it is done" "$me uucp job there.N done" 0 sh -c 'rm -f mailbox; "$1" -m a.txt "there!~/mm.txt" && head -n 1 mailbox | sed "s/[0-9][0-9]* done/N done/"' sh "$U"
+t "-m: mail when it fails" "$me uucp job there.N failed" 1 sh -c 'rm -f mailbox; "$1" -m nosuch.txt "there!~/mm.txt" 2>/dev/null; s=$?; head -n 1 mailbox | sed "s/[0-9][0-9]* failed/N failed/"; exit $s' sh "$U"
 t "-n user: mail to the user there" "bob uucp: a file arrived
 here!$me sent $T/a.txt, now $T/t/pub/n.txt." 0 sh -c 'rm -f mailbox; "$1" -n bob a.txt "there!~/n.txt" && cat mailbox' sh "$U"
 t "no mail without -m" '' 0 sh -c 'rm -f mailbox; "$1" a.txt "there!~/nm.txt" && ! test -f mailbox' sh "$U"

@@ -36,6 +36,6 @@ int main(int argc, char **argv)
 G
 $YACC g.y 2>&1 && $CC $CWARN -o g y.tab.c || exit 1
 ./g 'x;' 'q;x;' 'qq;x;' 'q;q;' 'x;q;x;' 'xxx;x;' 'x;q' 'q;qx;x;'
-sed 's/^%%$/%start t\n%%/;' g.y | awk 'NR==1 || !/^%start t$/ || !done++' > h.y
+awk '/^%%$/ { print "%start t" } { print }' g.y | awk 'NR==1 || !/^%start t$/ || !done++' > h.y
 $YACC h.y 2>/dev/null && $CC $CQUIET -o h y.tab.c || exit 1
 ./h '-' '-b' 'b-' 'bb-b' '-bb'

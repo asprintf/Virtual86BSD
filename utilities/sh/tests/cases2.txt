@@ -183,7 +183,7 @@ set -f; echo $- | grep -c f; set +f
 #### expand: dollar bang unset
 echo "[${!-none}]"
 #### expand: cmdsub trailing newlines only
-x=$(printf '\n\na\n\n'); echo "[$x]" | od -c | head -2
+x=$(printf '\n\na\n\n'); echo "[$x]" | od -c | head -n 2
 #### expand: cmdsub in heredoc delim line
 cat <<EOF
 $(echo one)
@@ -212,7 +212,7 @@ printf '%s=%s\n' a 1 b 2 c
 #### builtins: printf char constants
 printf '%d %d\n' "'a" '"b'
 #### builtins: printf octal escapes
-printf 'a\101b\0c' | od -c | head -1
+printf 'a\101b\0c' | od -c | head -n 1
 #### builtins: printf width star
 printf '[%*d][%-*s]\n' 5 42 4 ab
 #### builtins: printf missing args zero
@@ -270,7 +270,7 @@ f() { return 255; }; f; echo $?
 #### builtins: break in function not affecting loop
 f() { break; }; for i in 1 2; do f 2>/dev/null; echo $i; done
 #### builtins: times format
-times | head -1 | grep -cE '^[0-9]+m[0-9.]+s [0-9]+m[0-9.]+s$'
+times | head -n 1 | grep -cE '^[0-9]+m[0-9.]+s [0-9]+m[0-9.]+s$'
 #### builtins: trap EXIT in function context
 f() { trap 'echo exit-trap' EXIT; }; f; echo body
 #### builtins: trap with numeric signal
@@ -284,7 +284,7 @@ trap 'x' NOSUCHSIG 2>/dev/null; echo $?
 #### builtins: trap ignore then child
 trap '' USR1; sh -c 'kill -USR1 $$; echo child-survived'; trap - USR1
 #### builtins: trap during wait
-trap 'echo trapped' USR1; (sleep 0.2; kill -USR1 $$) & sleep 1; wait; echo done
+trap 'echo trapped' USR1; (sleep 1; kill -USR1 $$) & sleep 2; wait; echo done
 #### builtins: kill with signal name
 sleep 5 & p=$!; kill -s TERM $p; wait $p; echo $?
 sleep 5 & p=$!; kill -9 $p; wait $p; echo $?
@@ -394,9 +394,9 @@ EOF
 #### exec: stdin of async is devnull
 echo data | { cat & wait; }
 #### exec: background job does not block
-sleep 0.3 & echo immediate; wait
+sleep 1 & echo immediate; wait
 #### exec: pipeline last status and wait all
-(sleep 0.2; echo late) | true; echo after
+(sleep 1; echo late) | true; echo after
 #### exec: deep pipeline
 echo x | cat | cat | cat | cat | cat | tr x y
 #### exec: exit in pipeline component
@@ -424,9 +424,9 @@ exit 3
 #### exec: xtrace format
 set -x; x=1; echo "$x" 2>&1; set +x
 #### exec: xtrace to stderr
-(set -x; echo hi) 2>&1 | head -1 | grep -c '^+'
+(set -x; echo hi) 2>&1 | head -n 1 | grep -c '^+'
 #### exec: verbose
-(set -v; echo v) 2>&1 | head -1
+(set -v; echo v) 2>&1 | head -n 1
 #### exec: assignment visible in same command expansion order
 x=1; x=2 y=$x; echo $y
 #### exec: assignment to readonly before regular command
@@ -531,3 +531,10 @@ i=0; s=x; while [ $i -lt 14 ]; do s=$s$s; i=$((i+1)); done; echo ${#s}
 x-y=1 2>/dev/null; echo $?
 #### misc: numbers as command
 1=2 2>/dev/null; echo $?
+#### async: $! is the last command of a pipeline
+sleep 1 | sleep 2 & p=$!; ps -o args= -p $p; wait
+#### async: SIGINT and SIGQUIT ignored without job control
+sleep 1 & p=$!; kill -s INT $p; kill -s QUIT $p; wait $p; echo st=$?
+(sleep 1; echo done) | cat & p=$!; kill -s INT $p; wait $p; echo st=$?
+#### functions: assignments exported while the function runs
+f() { sh -c 'echo "[$V]"'; }; V=x f; echo "after: [${V-unset}]"; export -p | grep -c ' V=' || true

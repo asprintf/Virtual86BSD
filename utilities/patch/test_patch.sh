@@ -27,7 +27,7 @@ $cc -o "$T.tl" "$TL/tl.c" || { echo "cannot compile ../testlib/tl.c"; exit 2; }
 TLBIN=$T.tl; export TLBIN
 tl() { "$TLBIN" "$@"; }
 # ptyrun FDS COMMAND...: COMMAND with the descriptors FDS on a terminal (../testlib/ptyrun.tl)
-ptyrun() { "$TLBIN" "$TL/ptyrun.tl" "$@"; }
+ptyrun() { PTYRUN_INPUT=${PTYRUN_INPUT-} PTYRUN_WAIT=${PTYRUN_WAIT-} "$TLBIN" "$TL/ptyrun.tl" "$@"; }   # (assignments before a function call need not be exported)
 cd "$T" || exit 2
 export LC_ALL=C
 root=false; [ "$(id -u)" = 0 ] && root=true
@@ -36,7 +36,7 @@ nl='
 # lines FIRST LAST: the lines "line N", one a line
 lines() { awk -v a="$1" -v b="$2" 'BEGIN { for (i = a; i <= b; i++) print "line", i }'; }
 lines 1 40 > old
-sed 's/^line 5$/line five/; /^line 20$/d; s/^line 35$/line 35\nline 35b/' old > new
+awk '$0 == "line 5" { print "line five"; next } $0 == "line 20" { next } { print } $0 == "line 35" { print "line 35b" }' old > new
 # "$TLBIN" -e "$NOTTY" COMMAND...: COMMAND without a controlling terminal
 NOTTY='setsid(); exec(argv); exit(127);'
 export NOTTY

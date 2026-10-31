@@ -31,7 +31,7 @@ while [ $r -lt "$runs" ]; do
         n=$((n + 1))
         if [ "$a" != "$b" ]; then
             fail=$((fail + 1)); echo "FAIL seed $seed run $r: du $o t"
-            printf '%s\n---\n%s\n' "$a" "$b" | head -20
+            printf '%s\n---\n%s\n' "$a" "$b" | head -n 20
         fi
     done
     # hard links: the totals

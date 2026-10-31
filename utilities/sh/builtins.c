@@ -102,7 +102,7 @@ static char *find_dot_file(const char *name)
 {
     const char *p = var_get("PATH");
     StrBuf b;
-    if (!p) p = "";
+    if (!p) p = command_default_path();   /* PATH unset: as for commands */
     for (;;) {
         const char *e = strchr(p, ':');
         size_t n = e ? (size_t)(e - p) : strlen(p);
@@ -1423,15 +1423,6 @@ static int is_reserved(const char *s)
     return 0;
 }
 
-static const char *default_path(void)
-{
-    static char buf[1024];
-    size_t n = confstr(_CS_PATH, buf, sizeof buf);
-    if (n == 0 || n > sizeof buf)
-        return "/usr/bin:/bin";
-    return buf;
-}
-
 /* mode: 0 = type, 1 = command -v, 2 = command -V */
 static int describe(const char *name, int mode, int usedefpath)
 {
@@ -1439,7 +1430,7 @@ static int describe(const char *name, int mode, int usedefpath)
     Alias *a;
     char *path;
     StackMark m;
-    const char *pathvar = usedefpath ? default_path() : NULL;
+    const char *pathvar = usedefpath ? command_default_path() : NULL;
     setstackmark(&m);
     if ((a = alias_lookup(name))) {
         if (mode == 1)

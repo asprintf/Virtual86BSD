@@ -6,7 +6,7 @@ int x;
 %%
 a   { x++; }
 L
-$LEX g.l && grep '#line' lex.yy.c | sed 's/^#line [0-9]* "lex.yy.c"/#line N "lex.yy.c"/' | sort | uniq -c
+$LEX g.l && grep '#line' lex.yy.c | sed 's/^#line [0-9]* "lex.yy.c"/#line N "lex.yy.c"/' | sort | uniq -c | sed 's/^ *//'   # POSIX: "%d %s"; GNU pads
 awk '/^#line [0-9]+ "lex.yy.c"/ { if ($2 != NR + 1) print "wrong", NR, $2 }' lex.yy.c
 $CC $CWARN -c lex.yy.c && echo compiled
 cat > n.l <<'L'

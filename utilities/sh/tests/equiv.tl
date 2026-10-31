@@ -16,7 +16,7 @@
  * written as "sh" in what they print), so that argv[0] does not differ.
  */
 include "gensh.tl";
-include "pyrepr.tl";
+include "quote.tl";
 
 var TMP = getenv("TMPDIR");
 var WORK = (TMP != nil && TMP != "" ? TMP : "/tmp") + "/sh-equiv-work";
@@ -84,14 +84,14 @@ func norm(s, w) {
     return replace(replace(s, w, "$WORK"), SHLINK, "sh");
 }
 
-/* the value as Python's repr would show it (bytes for the outputs) */
+/* the value quoted (as bytes for the outputs) */
 func showval(x) {
     if (x == nil)
         return "None";
     if (typeof(x) == "list")
-        return pyrepr(x[0]);
+        return quoted(x[0]);
     if (typeof(x) == "string")
-        return pybytes(slice(x, 0, 400));
+        return quotedbytes(slice(x, 0, 400));
     return str(x);
 }
 
@@ -115,7 +115,7 @@ func compare(name, a, b, script, isbytes, again) {
             }
     n_diffs++;
     print("DIFF", name);
-    print("  script:", slice(isbytes ? pybytes(script) : pyrepr(script), 0, 600));
+    print("  script:", slice(isbytes ? quotedbytes(script) : quoted(script), 0, 600));
     var labels = ["stdout", "stderr", "status"];
     for (var i = 0; i < 3; i++)
         if (a[i] != b[i]) {

@@ -360,9 +360,10 @@ static bool in_libc(char *name) {
 static int do_link(StrArray *objs_by_operand, StrArray *names_by_operand, char *output) {
   StrArray in = {0}, names = {0};
   /* crt1.o is required; crti.o and crtn.o (the frame of .init and
-     .fini) are used when the C library has them */
+     .fini) are used when the C library has them.  A shared library (-G)
+     gets none of them: they belong to programs. */
   char *crtpath[3] = {NULL, NULL, NULL};
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 3 && !opt_G; i++) {
     if (!libc_crt[i])
       continue;
     crtpath[i] = libc_file(libc_crt[i]);
@@ -372,7 +373,8 @@ static int do_link(StrArray *objs_by_operand, StrArray *names_by_operand, char *
       return 1;
     }
   }
-  strarray_push(&in, crtpath[0]);
+  if (crtpath[0])
+    strarray_push(&in, crtpath[0]);
   if (crtpath[1])
     strarray_push(&in, crtpath[1]);
 
@@ -409,18 +411,35 @@ static int do_link(StrArray *objs_by_operand, StrArray *names_by_operand, char *
   }
 
   /* The equivalent of -l c after the last operand, and c17's run-time
-     support, searched together */
-  int group_start = in.len;
-  char *libc = resolve_lib("c", &ldirs);
-  if (!libc) {
-    fprintf(stderr, "%s: cannot find libc.%s (C library %s, in %s)\n", progname,
-            link_dynamic ? "so" : "a", libc_name, libc_lib.data[0]);
-    return 1;
+     support, searched together.  A shared library depends on the C
+     library's shared library, if it has one (and if it is not that
+     library itself, libc.so...); c17's run-time support becomes part of
+     it, not exported. */
+  int group_start = in.len, hide_from = -1;
+  char *libc;
+  if (opt_G) {
+    char *base = strrchr(output, '/') ? strrchr(output, '/') + 1 : output;
+    libc = NULL;
+    if (strncmp(base, "libc.so", 7))
+      for (int i = 0; i < libc_lib.len && !libc; i++)
+        if (file_exists(format("%s/libc.so", libc_lib.data[i])))
+          libc = format("%s/libc.so", libc_lib.data[i]);
+  } else {
+    libc = resolve_lib("c", &ldirs);
+    if (!libc) {
+      fprintf(stderr, "%s: cannot find libc.%s (C library %s, in %s)\n", progname,
+              link_dynamic ? "so" : "a", libc_name, libc_lib.data[0]);
+      return 1;
+    }
   }
-  strarray_push(&in, libc);
+  if (libc)
+    strarray_push(&in, libc);
   char *rt = format("%s/libc17rt.a", libdir);
-  if (file_exists(rt))
+  if (file_exists(rt)) {
+    if (opt_G)
+      hide_from = in.len;
     strarray_push(&in, rt);
+  }
   if (crtpath[2])
     strarray_push(&in, crtpath[2]);
 
@@ -440,7 +459,14 @@ static int do_link(StrArray *objs_by_operand, StrArray *names_by_operand, char *
   lo.output = output;
   lo.strip = opt_s;
   lo.group_start = group_start;
-  if (link_dynamic) {
+  if (opt_G) {
+    char *base = strrchr(output, '/') ? strrchr(output, '/') + 1 : output;
+    lo.shared = true;
+    lo.soname = base;
+    lo.hide_from = hide_from;
+    lo.rpath = rpath.data;
+    lo.nrpath = rpath.len;
+  } else if (link_dynamic) {
     lo.interp = libc_interp;
     lo.rpath = rpath.data;
     lo.nrpath = rpath.len;
@@ -578,18 +604,17 @@ int main(int argc, char **argv) {
 
   libdir = find_libdir();
   find_libc();
-  if (opt_G)
-    fatal("-G is not supported yet: no shared objects");
-  link_dynamic = opt_dynamic ? true : opt_static ? false : libc_dynamic;
-  if (link_dynamic && !libc_interp)
+  /* -G: position-independent code, and without -c a shared library */
+  link_dynamic = opt_G || (opt_dynamic ? true : opt_static ? false : libc_dynamic);
+  if (link_dynamic && !opt_G && !libc_interp)
     fatal("-B dynamic: the C library %s has no dynamic linker ('interp')", libc_name);
-  if (!link_dynamic && !opt_E && !opt_c && !opt_S)
+  if (!link_dynamic && !opt_G && !opt_E && !opt_c && !opt_S)
     for (int i = 0; i < nlink_items; i++)
       if (link_items[i].kind == LI_RPATH) {
         fprintf(stderr, "%s: warning: -R ignored: static linking\n", progname);
         break;
       }
-  opt_pic = false;
+  opt_pic = opt_G;
   if (opt_g && opt_s)
     opt_g = false;  /* unspecified; we strip */
 

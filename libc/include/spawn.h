@@ -12,7 +12,8 @@ typedef struct {
 	short __flags;
 	pid_t __pgrp;
 	sigset_t __def, __mask;
-	int __pad[16];
+	int __policy, __prio;
+	int __pad[14];
 } posix_spawnattr_t;
 
 typedef struct {
@@ -24,8 +25,9 @@ typedef struct {
 #define POSIX_SPAWN_SETPGROUP  0x02
 #define POSIX_SPAWN_SETSIGDEF  0x04
 #define POSIX_SPAWN_SETSIGMASK 0x08
+#define POSIX_SPAWN_SETSCHEDPARAM 0x10
+#define POSIX_SPAWN_SETSCHEDULER  0x20
 #define POSIX_SPAWN_SETSID     0x80
-/* POSIX_SPAWN_SETSCHEDPARAM, POSIX_SPAWN_SETSCHEDULER: with <sched.h>. */
 
 __BEGIN_DECLS
 int posix_spawn(pid_t *__RESTRICT, const char *__RESTRICT, const posix_spawn_file_actions_t *__RESTRICT,
@@ -42,11 +44,15 @@ int posix_spawn_file_actions_init(posix_spawn_file_actions_t *);
 int posix_spawnattr_destroy(posix_spawnattr_t *);
 int posix_spawnattr_getflags(const posix_spawnattr_t *__RESTRICT, short *__RESTRICT);
 int posix_spawnattr_getpgroup(const posix_spawnattr_t *__RESTRICT, pid_t *__RESTRICT);
+int posix_spawnattr_getschedparam(const posix_spawnattr_t *__RESTRICT, struct sched_param *__RESTRICT);
+int posix_spawnattr_getschedpolicy(const posix_spawnattr_t *__RESTRICT, int *__RESTRICT);
 int posix_spawnattr_getsigdefault(const posix_spawnattr_t *__RESTRICT, sigset_t *__RESTRICT);
 int posix_spawnattr_getsigmask(const posix_spawnattr_t *__RESTRICT, sigset_t *__RESTRICT);
 int posix_spawnattr_init(posix_spawnattr_t *);
 int posix_spawnattr_setflags(posix_spawnattr_t *, short);
 int posix_spawnattr_setpgroup(posix_spawnattr_t *, pid_t);
+int posix_spawnattr_setschedparam(posix_spawnattr_t *__RESTRICT, const struct sched_param *__RESTRICT);
+int posix_spawnattr_setschedpolicy(posix_spawnattr_t *, int);
 int posix_spawnattr_setsigdefault(posix_spawnattr_t *__RESTRICT, const sigset_t *__RESTRICT);
 int posix_spawnattr_setsigmask(posix_spawnattr_t *__RESTRICT, const sigset_t *__RESTRICT);
 __END_DECLS

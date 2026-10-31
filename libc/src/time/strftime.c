@@ -9,66 +9,23 @@
 #include <stdint.h>
 #include "time_impl.h"
 #include "locale_impl.h"
+#include "era.h"
 
 struct out { char *s; size_t n, max; const struct __lcat *t; int depth, alt; };
 
-/* LC_TIME elements */
-enum { T_ABDAY = 0, T_DAY = 7, T_ABMON = 14, T_MON = 26, T_AM = 38, T_PM = 39, T_DTFMT = 40,
-       T_DFMT = 41, T_TFMT = 42, T_TFMTAMPM = 43, T_ERA_DFMT = 46, T_ALTDIGITS = 47,
-       T_ERA_DTFMT = 48, T_ERA_TFMT = 49, T_ERA_N = 50, T_ERA_ENTRIES = 51,
-       T_ALTMON = 111, T_ABALTMON = 135 };
-
-/* the era of a date (glibc's binary entries: direction, offset, the
- * start and end dates as year - 1900, month, day; the name and the
- * format, aligned, then their wide forms) */
-struct era { int32_t dir, offset, start[3], stop[3]; const char *name, *format; };
-
-static int le(const int32_t *a, const int32_t *b)
+static int era_of(const struct out *o, const struct tm *tm, struct __era *e)
 {
-	return a[0] < b[0] || (a[0] == b[0] && (a[1] < b[1] || (a[1] == b[1] && a[2] <= b[2])));
-}
-
-static int era_of(const struct out *o, const struct tm *tm, struct era *e)
-{
-	const struct __lcat *t = o->t;
-	uint32_t n, i;
-	const char *p;
+	unsigned i, n = __era_count(o->t);
 	int32_t d[3];
-	if (t->n <= T_ERA_ENTRIES || !t->elem[T_ERA_N] || !(p = t->elem[T_ERA_ENTRIES])) return 0;
-	memcpy(&n, t->elem[T_ERA_N], 4);
 	d[0] = tm->tm_year; d[1] = tm->tm_mon; d[2] = tm->tm_mday;
 	for (i = 0; i < n; i++) {
-		const char *base = p;
-		memcpy(&e->dir, p, 4);
-		memcpy(&e->offset, p + 4, 4);
-		memcpy(e->start, p + 8, 12);
-		memcpy(e->stop, p + 20, 12);
-		p += 32;
-		e->name = p;
-		p += strlen(p) + 1;
-		e->format = p;
-		p += strlen(p) + 1;
-		p += 3 - ((p - base + 3) & 3);
-		p += 4 * (wcslen((const wchar_t *)(const void *)p) + 1);
-		p += 4 * (wcslen((const wchar_t *)(const void *)p) + 1);
-		if ((le(e->start, d) && le(d, e->stop)) || (le(e->stop, d) && le(d, e->start))) return 1;
+		__era_get(o->t, i, e);
+		if (__era_has(e, d)) return 1;
 	}
 	return 0;
 }
 
-/* the alternative digits for v in 0..99, or 0 */
-static const char *alt_digit(const struct out *o, long long v)
-{
-	const struct __lcat *t = o->t;
-	const char *p, *lim = 0;
-	if (v < 0 || v >= 100 || t->n <= T_ALTDIGITS || !(p = t->elem[T_ALTDIGITS]) || !*p) return 0;
-	if (t->n > T_ERA_DTFMT && t->elem[T_ERA_DTFMT] > p) lim = t->elem[T_ERA_DTFMT];
-	for (; v; v--) {
-		p += strlen(p) + 1;
-		if (lim && p >= lim) return 0;
-	}
-	return *p ? p : 0;
-}
+static const char *alt_digit(const struct out *o, long long v) { return __alt_digit(o->t, v); }
 
 static const char *item(struct out *o, unsigned idx, unsigned alt)
 {
@@ -174,7 +131,7 @@ static void conv(struct out *o, char c, char flag, int width, int mod, const str
 {
 	long long y = tm->tm_year + 1900LL, wy;
 	int h12 = tm->tm_hour % 12 ? tm->tm_hour % 12 : 12;
-	struct era e;
+	struct __era e;
 	const char *ef;
 	o->alt = mod == 'O';
 	switch (c) {
@@ -245,8 +202,7 @@ static void conv(struct out *o, char c, char flag, int width, int mod, const str
 	case 'y':
 		if (mod == 'E' && era_of(o, tm, &e)) {
 			/* the years from the start, counted in the era's direction */
-			int dir = (le(e.start, e.stop) ? 1 : -1) * (e.dir == '+' ? 1 : -1);
-			num(o, e.offset + (long long)(tm->tm_year - e.start[0]) * dir, 2, '0');
+			num(o, e.offset + (long long)(tm->tm_year - e.start[0]) * e.dir, 2, '0');
 			break;
 		}
 		num(o, (y % 100 + 100) % 100, 2, '0');

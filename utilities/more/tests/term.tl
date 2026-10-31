@@ -248,12 +248,12 @@ check("-s squeezes", text(r, 3) == ["a", "", "b"], screen(r));
 quit(r);
 
 /* a pipe that does not end is paged as it arrives */
-r = Run([], {shell: "yes | \"$U\"", env: {U: MORE}});
-check("yes | more: first screen", text(r, 9) == repeat(["y"], 9), screen(r));
+r = Run([], {shell: "while :; do echo y; done | \"$U\"", env: {U: MORE}});
+check("endless pipe | more: first screen", text(r, 9) == repeat(["y"], 9), screen(r));
 key(r, " ");
-check("yes | more: forward", text(r, 9) == repeat(["y"], 9) && !("END" in prompt(r)));
+check("endless pipe | more: forward", text(r, 9) == repeat(["y"], 9) && !("END" in prompt(r)));
 key(r, "q");
-check("yes | more: q", done(r));
+check("endless pipe | more: q", done(r));
 tkill(r.t);
 
 /* -p and -t */

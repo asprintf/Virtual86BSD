@@ -9,7 +9,7 @@
  * Both shells are run under one name (a symbolic link, written as "sh" in
  * the transcripts), so that argv[0] does not differ.
  */
-include "pyrepr.tl";
+include "quote.tl";
 
 var SESSIONS = [
     ["echo hi\n", "if true\n", "then echo yes\n", "fi\n"],
@@ -80,9 +80,9 @@ func session(sh, inputs, wait) {
     return gsub(out, "\\[[0-9]+\\] [0-9]+", "[N] PID");
 }
 
-/* the session as Python's repr shows its list; ^D was given as bytes */
+/* the session as a list of quoted strings; ^D was given as bytes */
 func showinputs(inp) {
-    return "[" + join(apply(inp, func (s) { return s == "\004" ? pybytes(s) : pyrepr(s); }), ", ") + "]";
+    return "[" + join(apply(inp, func (s) { return s == "\004" ? quotedbytes(s) : quoted(s); }), ", ") + "]";
 }
 
 if (len(argv) != 2) {
@@ -104,8 +104,8 @@ for (var inp : SESSIONS) {
             continue;
         diffs++;
         print("DIFF", showinputs(inp));
-        print("  old:", pybytes(a));
-        print("  new:", pybytes(b));
+        print("  old:", quotedbytes(a));
+        print("  new:", quotedbytes(b));
     }
 }
 printf("pty: %d sessions, %d differences\n", len(SESSIONS), diffs);

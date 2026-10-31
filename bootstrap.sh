@@ -3,14 +3,12 @@
 # utilities and C library of this package, compiled by themselves, in a
 # directory that can be entered with chroot (see chroot.sh).
 #
-# Usage: sh bootstrap.sh [-s] [-k] [-w workdir] [root]
+# Usage: sh bootstrap.sh [-k] [-w workdir] [root]
 #
 #   root        the system to make (default: root/ beside this script); it
 #               is made afresh
 #   -w workdir  where the stages are built (default: work/ beside this script)
 #   -k          keep workdir afterwards (default: removed when all went well)
-#   -s          also libc.so, the shared C library and dynamic linker; it
-#               needs gcc and binutils' ld, which the rest does not
 #
 # What is needed: a POSIX system with a C compiler (CC, default cc: C11),
 # make and ar, on x86-64 Linux.  On Ubuntu: build-essential.  Nothing is
@@ -23,7 +21,8 @@
 #            its own assembler and link editor), make, ar, yacc and lex.
 #
 #   stage 1  Those tools build everything: the C library (libc/, with c17
-#            and make), then every utility against it (c17 among them),
+#            and make: libc.a, and libc.so, which is also the dynamic
+#            linker), then every utility against it (c17 among them),
 #            installed into workdir/stage1/root/usr.  From here on no
 #            program of the host compiles anything.
 #
@@ -50,18 +49,17 @@
 #
 # Time: a few minutes for all of it (c17 is quick; most of it is make
 # and the shell).  Programs in the system are linked statically
-# (c17 links Shall's libc.a); with -s, "c17 -B dynamic" links with
-# /usr/lib/libc.so.
+# (c17 links Shall's libc.a); "c17 -B dynamic" links with
+# /usr/lib/libc.so, and "c17 -G" makes shared libraries.
 
-usage() { echo "usage: sh bootstrap.sh [-s] [-k] [-w workdir] [root]" >&2; exit 2; }
+usage() { echo "usage: sh bootstrap.sh [-k] [-w workdir] [root]" >&2; exit 2; }
 
 here=$(pwd)
 cd "$(dirname "$0")" || exit 2
 SRC=$(pwd)
-shared=false keep=false work=$SRC/work
-while getopts skw: opt; do
+keep=false work=$SRC/work
+while getopts kw: opt; do
 	case $opt in
-	s) shared=true ;;
 	k) keep=true ;;
 	w) work=$OPTARG ;;
 	*) usage ;;
@@ -85,6 +83,17 @@ command -v "${cc%% *}" >/dev/null 2>&1 || { echo "bootstrap: no C compiler $cc (
 command -v "$MAKE" >/dev/null 2>&1 || { echo "bootstrap: no $MAKE" >&2; exit 1; }
 case $(uname -m) in x86_64|amd64) ;; *) echo "bootstrap: x86-64 only (this is $(uname -m))" >&2; exit 1 ;; esac
 
+# A root with file systems mounted in it (chroot.sh while inside, or what a
+# killed chroot.sh left) is not removed: rm would empty the host's /dev
+# through it.  df -P names the mount point of each directory.
+for d in "$root" "$root/dev" "$root/dev/pts" "$root/proc" "$root/sys"; do
+	[ -d "$d" ] || continue
+	m=$(df -P "$d" 2>/dev/null | awk 'NR == 2 { print $NF }')
+	if [ -n "$m" ] && [ "$m" = "$(cd "$d" && pwd -P)" ] && [ "$d" != "$root" ]; then
+		echo "bootstrap: $d is a mount point: leave chroot.sh, or umount it, first" >&2
+		exit 1
+	fi
+done
 rm -rf "$work" "$root"
 mkdir -p "$work" "$root" || exit 1
 : > "$log"
@@ -105,9 +114,11 @@ hostmk() {
 GENERATED='awk/awk.tab.c awk/awk.tab.h awk/lex.c bc/bc.tab.c bc/bc.tab.h bc/scan.c
 	sh/sh.tab.c sh/sh.tab.h sh/arith.tab.c sh/arith.tab.h sh/arith_scan.c'
 
-# copy SRCDIR DEST: a fresh copy of the sources
+# copy SRCDIR DEST: a fresh copy of the sources (without objects and
+# archives built there by some other compiler)
 copy() {
 	mkdir -p "$(dirname "$2")" && cp -pR "$SRC/$1" "$2" || fail "copying $1"
+	find "$2" \( -name "*.o" -o -name "*.a" \) -type f -exec rm -f {} + || fail "cleaning $1"
 }
 
 # ---------------------------------------------------------------- stage 0
@@ -185,15 +196,6 @@ done < "$work/files"
 say "check: $same files identical, $differ different"
 [ "$differ" = 0 ] || echo "bootstrap: stage 1 and stage 2 differ: see $log" >&2
 
-# ---------------------------------------------------------------- libc.so
-if $shared; then
-	say "libc.so: with gcc (c17 makes no shared objects)"
-	copy libc "$work/shared/libc"
-	(cd "$work/shared/libc" && "$MAKE" &&
-	 cp build/gcc/lib/libc.so build/gcc/lib/Scrt1.o build/gcc/lib/rcrt1.o "$root/usr/lib/") \
-		>> "$log" 2>&1 || fail "libc.so"
-fi
-
 # ---------------------------------------------------------------- system
 say "system: /etc, /dev, /proc, /tmp ... and the sources in /usr/src/shall"
 (
@@ -207,10 +209,30 @@ mkdir -p "$root/usr/src/shall"
 for d in README.md HOWTO-lua.md LICENSE bootstrap.sh chroot.sh system libc utilities; do
 	cp -pR "$SRC/$d" "$root/usr/src/shall/" || fail "copying the sources"
 done
+find "$root/usr/src/shall" \( -name "*.o" -o -name "*.a" \) -type f -exec rm -f {} +
 # with the HTML edition of the standard beside the sources: man's pages
 if [ -d "$SRC/susv5-html" ] && [ -f "$SRC/utilities/man/Makefile" ]; then
 	mkdir -p "$root/usr/share" && cp -pR "$SRC/susv5-html" "$root/usr/share/"
 fi
+# the host's time zone database, for TZ=Area/City (the C library reads
+# /usr/share/zoneinfo; without it only POSIX TZ strings such as CET-1CEST
+# work); ZONEINFO names another copy
+zi=${ZONEINFO:-/usr/share/zoneinfo}
+if [ -d "$zi" ]; then
+	mkdir -p "$root/usr/share" && cp -pRL "$zi" "$root/usr/share/zoneinfo" 2>/dev/null ||
+		say "warning: $zi not copied completely"
+	[ -f "$root/usr/share/zoneinfo/UTC" ] && [ ! -e "$root/etc/localtime" ] &&
+		{ [ -f /etc/localtime ] && cp -L /etc/localtime "$root/etc/localtime" ||
+		  cp "$root/usr/share/zoneinfo/UTC" "$root/etc/localtime"; }
+fi
+# and its terminfo database, for tput, more, vi and ex (TERMINFO names
+# another directory)
+for ti in ${TERMINFO:-/usr/share/terminfo /lib/terminfo}; do
+	if [ -d "$ti" ]; then
+		mkdir -p "$root/usr/share/terminfo" && cp -pRL "$ti/." "$root/usr/share/terminfo" 2>/dev/null ||
+			say "warning: $ti not copied completely"
+	fi
+done
 
 $keep || [ "$differ" != 0 ] || { rm -rf "$work"; log=; }
 end=$(date +%s 2>/dev/null)

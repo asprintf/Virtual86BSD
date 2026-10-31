@@ -15,6 +15,7 @@ build the library without any other tool:
     make                     # with gcc: build/gcc/lib/{libc.a,crt1.o,crti.o,crtn.o},
                              #   libc.so (also the dynamic linker), Scrt1.o, rcrt1.o
     make CCNAME=c17          # with c17 (on PATH), which also assembles the .s files
+                             #   and links libc.so (c17 -G)
     make check               # namespace check, header checks, tests
     make CCNAME=c17 check
     make sysroot             # build/<cc>/sysroot (include/, lib/), for C17_LIBC=
@@ -37,6 +38,7 @@ library's.  Executables are static unless `LIBC_LINK` says otherwise:
     LIBC_LINK=dynamic tools/libc-cc c17 -o prog prog.c     # (c17: not position-independent)
     LIBC_LINK=static-pie tools/libc-cc gcc -o prog prog.c
     tools/libc-cc gcc -shared -fPIC -o libx.so x.c          # a shared object
+    tools/libc-cc c17 -G -o libx.so x.c                     # (c17)
 
 `libc.so` is its own program interpreter (PT_INTERP names it), and run
 as a command it runs a program: `build/gcc/lib/libc.so prog args`.
@@ -188,7 +190,7 @@ compiler.
   * stdlib: `realpath` (symlinks, loops, dangling links), `mkstemp`/`mkostemp`/`mkdtemp`, `system`, `getsubopt`, pseudo-terminals.
   * Directories (`readdir`, `telldir`/`seekdir`, `posix_getdents`), the user accounting database (when it can be created), `getlogin`.
   * Locales: setlocale names, locale objects, `uselocale`, the `_l` forms, catalogs and message objects (made by the test), plurals, codeset conversion, wide streams, `open_wmemstream`, `wcsftime`, `swprintf`, UTF-16.
-  * Regular expressions: the POSIX rules for subexpressions, minimal repetition, back-references, `REG_STARTEND`, long subjects.
+  * Regular expressions: the POSIX rules for subexpressions, minimal repetition, back-references, `REG_STARTEND`, long subjects; multi-character collating elements (`[.ch.]`, `[=ch=]`) in regcomp and fnmatch, in xx_XX (`s_collsym`).
   * `setjmp`/`sigsetjmp`, `posix_spawn` with file actions and attributes, `wordexp`, `nftw`, `fnmatch` with case folding.
   * Processes and signals: fork/exec/wait, `sigaction` with `SA_SIGINFO`, masks, `sigqueue`, `sigwaitinfo`/`sigtimedwait`, `alarm`/`pause`, `sig2str` round trips, `sysconf`/`confstr`, poll/select, mmap, `shm_open`.
 * The same tests run linked dynamically (`LIBC_LINK=dynamic sh run.sh gcc`,

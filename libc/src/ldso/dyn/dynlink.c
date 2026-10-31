@@ -22,9 +22,9 @@
  * with initial-exec TLS references cannot be dlopen'ed.  Run directly,
  * "libc.so program args..." loads and runs the program.
  *
- * Only built with gcc (c17 makes no shared objects), with
- * -Bsymbolic-functions: calls inside libc.so bind to libc.so, data
- * references go through the GOT, so a program's copy relocations work. */
+ * Built by gcc with -Bsymbolic-functions, or by c17 -G (which binds the
+ * same way): calls inside libc.so bind to libc.so, data references go
+ * through the GOT, so a program's copy relocations work. */
 #define _GNU_SOURCE 1
 #include <dlfcn.h>
 #include <errno.h>

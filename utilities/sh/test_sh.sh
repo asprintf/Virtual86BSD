@@ -43,5 +43,13 @@ $cc -o "$TLBIN" ../testlib/tl.c || { echo "cannot compile ../testlib/tl.c"; exit
 suite regression '"$TLBIN" tests/regress.tl'
 suite terminal '"$TLBIN" tests/pty_test.tl'
 
+# kill as a utility of its own (kill.sh, installed as kill: XCU 1.6)
+sleep 30 & kp=$!
+if ./sh kill.sh -s TERM "$kp" && ! wait "$kp" && [ "$(./sh kill.sh -l 15)" = TERM ]; then
+    pass=$((pass + 1)); echo "  kill.sh: ok"
+else
+    fail=$((fail + 1)); echo "  kill.sh: FAILED"; kill "$kp" 2>/dev/null
+fi
+
 echo "sh: $pass passed, $fail failed"
 [ "$fail" = 0 ]

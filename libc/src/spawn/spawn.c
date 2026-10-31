@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <sched.h>
 #include <sys/wait.h>
 #include "spawn_impl.h"
 #include "syscall.h"
@@ -49,6 +50,12 @@ static _Noreturn void child(int ep, const char *path, int usepath, const posix_s
 	}
 	if ((fl & POSIX_SPAWN_SETSID) && setsid() < 0) goto fail;
 	if ((fl & POSIX_SPAWN_SETPGROUP) && setpgid(0, at->__pgrp) < 0) goto fail;
+	if (fl & (POSIX_SPAWN_SETSCHEDULER | POSIX_SPAWN_SETSCHEDPARAM)) {
+		struct sched_param sp = { .sched_priority = at->__prio };
+		if (fl & POSIX_SPAWN_SETSCHEDULER) {
+			if (sched_setscheduler(0, at->__policy, &sp) < 0) goto fail;
+		} else if (sched_setparam(0, &sp) < 0) goto fail;
+	}
 	if ((fl & POSIX_SPAWN_RESETIDS) && (setgid(getgid()) < 0 || setuid(getuid()) < 0)) goto fail;
 	if (fa) for (a = fa->__head; a; a = a->next) {
 		switch (a->op) {

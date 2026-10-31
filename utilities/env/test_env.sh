@@ -46,8 +46,9 @@ t "not found" "" 127 "$U" no_such_utility_here
 t "not found, a pathname" "" 127 "$U" ./no_such_file
 # a directory in PATH that cannot be searched does not make it 126
 $root || t "not found past an unsearchable directory: 127" "" 127 sh -c 'mkdir -p nd && chmod 0 nd && PATH=$PWD/nd:$PATH "$1" no_such_utility_here' sh "$U"
-mkdir bin; printf '#!%s\necho script "$@"\n' "$SH" > bin/s1; chmod 755 bin/s1
-printf 'echo plain "$@"\n' > bin/s2; chmod 755 bin/s2
+# the scripts find echo by the PATH of the tests (echo need not be a built-in)
+mkdir bin; printf '#!%s\nPATH=%s\necho script "$@"\n' "$SH" "$PATH" > bin/s1; chmod 755 bin/s1
+printf 'PATH=%s\necho plain "$@"\n' "$PATH" > bin/s2; chmod 755 bin/s2
 : > bin/noexec; chmod 644 bin/noexec
 t "PATH from an assignment" "script x" 0 "$U" PATH="$T/bin" s1 x
 t "PATH: a later entry" "script" 0 "$U" PATH="/nonexistent:$T/bin" s1

@@ -14,6 +14,14 @@ int getpriority(int which, id_t who)
 	return 20 - (int)r;   /* the kernel returns 20 - nice */
 }
 
-int setpriority(int which, id_t who, int prio) { return (int)__sys3(SYS_setpriority, which, who, prio); }
+long __setnice(int);
+
+int setpriority(int which, id_t who, int prio)
+{
+	/* the process itself: every thread (Linux has a nice value per thread) */
+	if (which == PRIO_PROCESS && (!who || who == (id_t)__syscall0(SYS_getpid)))
+		return (int)__syscall_ret((unsigned long)__setnice(prio));
+	return (int)__sys3(SYS_setpriority, which, who, prio);
+}
 
 clock_t times(struct tms *t) { return (clock_t)__syscall1(SYS_times, t); }

@@ -157,7 +157,7 @@ static bool attr_noreturn;
 /* Attributes of the objects and functions being declared: they apply to
    the declarators that follow them in the declaration. */
 static struct {
-  bool weak, used;
+  bool weak, used, tls_ie;
   char *alias, *visibility, *section;
   int ctor, dtor;
 } gattr;
@@ -198,6 +198,8 @@ static void apply_gattr(Obj *v) {
     v->alias = gattr.alias;
   if (gattr.visibility)
     v->visibility = gattr.visibility;
+  if (gattr.tls_ie)
+    v->tls_ie = true;
   if (gattr.section)
     v->section = gattr.section;
   if (gattr.ctor)
@@ -243,6 +245,16 @@ Token *skip_attributes(Token *tok) {
               strcmp(v, "internal"))
             error_tok(tok, "unknown visibility '%s'", v);
           gattr.visibility = strcmp(v, "default") ? v : NULL;
+          continue;
+        }
+        if (depth == 0 && attr_is(tok, "tls_model")) {
+          /* initial-exec (or local-exec): the initial-exec sequence even
+             with -G; the dynamic models are the default */
+          char *m = attr_string(&tok, tok->next, "tls_model");
+          if (strcmp(m, "global-dynamic") && strcmp(m, "local-dynamic") &&
+              strcmp(m, "initial-exec") && strcmp(m, "local-exec"))
+            error_tok(tok, "unknown TLS model '%s'", m);
+          gattr.tls_ie = !strcmp(m, "initial-exec") || !strcmp(m, "local-exec");
           continue;
         }
         if (depth == 0 && attr_is(tok, "constructor")) {

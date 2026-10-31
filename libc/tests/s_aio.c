@@ -67,6 +67,16 @@ static void basic(int fd)
 	CHECK(aio_error(&fs) == 0);
 	errno = 0;
 	CHECK(aio_fsync(12345, &fs) == -1 && errno == EINVAL);
+	fs.aio_fildes = -1;
+	errno = 0;
+	CHECK(aio_fsync(O_SYNC, &fs) == -1 && errno == EBADF);
+	fs.aio_fildes = fd;
+	/* aio_reqprio and aio_offset do not apply to aio_fsync() */
+	fs.aio_reqprio = -1;
+	fs.aio_offset = -1;
+	CHECK(aio_fsync(O_SYNC, &fs) == 0);
+	waitfor(&fs);
+	CHECK(aio_error(&fs) == 0);
 	memset(&rd, 0, sizeof rd);
 	rd.aio_fildes = fd; rd.aio_buf = r; rd.aio_nbytes = sizeof r; rd.aio_offset = 0;
 	CHECK(aio_read(&rd) == 0);
@@ -81,7 +91,9 @@ static void basic(int fd)
 	/* errors */
 	rd.aio_fildes = -1;
 	errno = 0;
-	CHECK(aio_read(&rd) == -1 && errno == EBADF);
+	CHECK(aio_read(&rd) == 0);	/* EBADF arrives through aio_error() */
+	waitfor(&rd);
+	CHECK(aio_error(&rd) == EBADF && aio_return(&rd) == -1);
 	rd.aio_fildes = fd;
 	rd.aio_offset = -1;
 	errno = 0;
@@ -247,6 +259,13 @@ static void listio(int fd)
 	for (i = 0; i < 4; i++)
 		if (i != 2)
 			CHECK(aio_error(&cb[i]) == 0 && aio_return(&cb[i]) == 100);
+	/* LIO_NOWAIT: a bad descriptor fails alone; the list still completes */
+	cb[4].aio_lio_opcode = LIO_READ;
+	CHECK(lio_listio(LIO_NOWAIT, list, 6, &sev) == 0);
+	CHECK(sigwaitinfo(&set, &si) == SIGRTMIN + 2);
+	CHECK(aio_error(&cb[0]) == 0 && aio_return(&cb[0]) == 100);
+	CHECK(aio_error(&cb[3]) == 0 && aio_return(&cb[3]) == 100);
+	CHECK(aio_error(&cb[4]) == EBADF && aio_return(&cb[4]) == -1);
 	errno = 0;
 	CHECK(lio_listio(7, list, 4, 0) == -1 && errno == EINVAL);
 	/* nothing to do: notification at once */

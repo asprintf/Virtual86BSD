@@ -1,6 +1,6 @@
 /*
- * ref.tl - the lines of the encoding of FILE, as Python's binascii (with
- * ` for spaces) and base64 write them, for the tests of uuencode
+ * ref.tl - the lines of the encoding of FILE, as the historical uuencode
+ * (with ` for spaces) and base64 (RFC 4648) write them, for the tests of uuencode
  *
  *     tl ref.tl uu|b64 FILE
  */

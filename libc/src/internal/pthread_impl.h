@@ -64,6 +64,10 @@ struct __pthread {
 	const char *dlerror;          /* <dlfcn.h>: the pending error message */
 	unsigned long *dtv_static;    /* the dtv in the TLS area (dlopen: dtv may be another) */
 	char *dlerror_buf;            /* libc.so: the last formatted message (malloc) */
+	/* PTHREAD_PRIO_PROTECT: how many mutexes of each ceiling (1-99) the
+	 * thread holds, the highest, and its own priority while raised */
+	int pp_max, pp_base;
+	unsigned short pp_count[100];
 };
 
 enum { DT_EXITED = 0, DT_EXITING, DT_JOINABLE, DT_DETACHED };
@@ -100,14 +104,20 @@ struct __pthread *__get_tp(void);
 
 /* mutexes (int __i[10], void *__p[5]) */
 #define _m_type  __i[0]   /* type 0-1 (normal, recursive, errorcheck), 4 robust,
-                           * 8 inconsistent, 128 process-shared */
+                           * 8 inconsistent, 16/32/64 protocol (below),
+                           * 128 process-shared, ceiling << 16 */
 #define _m_lock  __i[1]   /* 0, or owner tid | FUTEX_WAITERS; NOTRECOVERABLE */
 #define _m_count __i[2]   /* recursion */
 #define _m_prev  __p[2]   /* robust list */
 #define _m_next  __p[3]
 #define __M_ROBUST 4
 #define __M_INCONSISTENT 8
+#define __M_PI 16         /* PTHREAD_PRIO_INHERIT: the kernel's PI futexes */
+#define __M_PP 32         /* PTHREAD_PRIO_PROTECT; the ceiling in bits 16-23 */
+#define __M_PI_NOTREC 64  /* a robust PI mutex made unrecoverable (the kernel
+                           * owns its lock word while contended) */
 #define __M_SHARED 128
+#define __M_CEIL(t) (((unsigned)(t) >> 16) & 255)
 #define __M_NOTRECOVERABLE 0x3fffffff
 #define FUTEX_WAITERS 0x80000000u
 #define FUTEX_OWNER_DIED 0x40000000

@@ -32,6 +32,21 @@ int main(void)
 	CHECK(mkdir(dir, 0777) == -1 && errno == EEXIST);
 	CHECK(stat(dir, &sa) == 0 && S_ISDIR(sa.st_mode) && (sa.st_mode & 0777) == 0755);
 	CHECK(chdir(dir) == 0);
+	/* pwrite: at the offset even with O_APPEND (Linux: from 6.9) */
+	fd = open("ap", O_RDWR | O_CREAT | O_TRUNC | O_APPEND, 0644);
+	CHECK(fd >= 0 && write(fd, "abcdef", 6) == 6 && pwrite(fd, "XY", 2, 1) == 2);
+	memset(buf, 0, 8);
+	CHECK(pread(fd, buf, 7, 0) == 6 && !strcmp(buf, "aXYdef") && lseek(fd, 0, SEEK_CUR) == 6);
+	CHECK(write(fd, "!", 1) == 1 && pread(fd, buf, 7, 0) == 7 && buf[6] == 0x21);
+	close(fd);
+	CHECK(unlink("ap") == 0);
+	/* O_EXEC: execute permission (even for root, some x bit) */
+	CHECK((fd = open("nx", O_WRONLY | O_CREAT | O_TRUNC, 0644)) >= 0 && close(fd) == 0);
+	errno = 0;
+	CHECK(open("nx", O_EXEC) == -1 && errno == EACCES);
+	CHECK(chmod("nx", 0755) == 0 && (fd = open("nx", O_EXEC)) >= 0 && close(fd) == 0);
+	CHECK((fd = open(".", O_SEARCH)) >= 0 && close(fd) == 0);
+	CHECK(unlink("nx") == 0);
 	CHECK(getcwd(buf, sizeof buf) && !strcmp(buf, dir));
 	CHECK(getcwd(buf, 3) == 0 && errno == ERANGE);
 	p = getcwd(0, 0); CHECK(p && !strcmp(p, dir)); free(p);

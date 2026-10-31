@@ -15,7 +15,7 @@ mkdirs(PTYDIR);
 /* sh -i on a new terminal (of no size); its output from buf(t) on */
 func Term(args, env) {
     if (env == nil)
-        env = {PS1: "$ ", HOME: PTYDIR, TERM: "dumb"};
+        env = {PS1: "$ ", HOME: PTYDIR, TERM: "dumb", ENV: ""};   /* no profile of the system */
     return {t: term([SH] + args, {rows: 0, cols: 0, env: env}), mark: 0};
 }
 
@@ -226,14 +226,14 @@ func t_notify() {
     var t = Term(["-i"]);
     readfor(t, 0.5);
     send(t, "set -b\n");
-    send(t, "sleep 0.5 &\n", 1.5);
-    check("set -b asynchronous notification", expect(t, "Done[[:space:]]+sleep 0.5"), buf(t));
+    send(t, "sleep 1 &\n", 2.5);   /* POSIX sleep: whole seconds */
+    check("set -b asynchronous notification", expect(t, "Done[[:space:]]+sleep 1"), buf(t));
     close_term(t);
 }
 
 func t_mail() {
     writefile(PTYDIR + "/mbox", "");
-    var t = Term(["-i"], {PS1: "$ ", HOME: PTYDIR, MAIL: PTYDIR + "/mbox", MAILCHECK: "0"});
+    var t = Term(["-i"], {PS1: "$ ", HOME: PTYDIR, MAIL: PTYDIR + "/mbox", MAILCHECK: "0", ENV: ""});
     readfor(t, 0.5);
     sleep(1.1);
     appendfile(PTYDIR + "/mbox", "From x\n");

@@ -39,6 +39,8 @@ func interrupt_printing(d) {
 func interrupt_input(d) {
     writefile(d + "/f", "one\n");
     var s = ed(["-s", "f"], d);
+    send(s, "=\n");    /* ed is ready: its signal handling set up */
+    expect(s, "\n1\r?\n");
     send(s, "a\ntyped text\n");
     sleep(0.2);
     sendsig(s, SIGINT);
@@ -54,7 +56,8 @@ func interrupt_input(d) {
 func interrupt_global(d) {
     big(d, 400000);
     var s = ed(["-s", "f"], d);
-    sleep(0.3);
+    send(s, "=\n");    /* the file is read */
+    expect(s, "\n400000\r?\n");
     send(s, "g/line/s/a/A/\n");
     sleep(0.15);
     sendsig(s, SIGINT);
@@ -77,7 +80,8 @@ func hangup_saves(d) {
     writefile(d + "/f", "original\n");
     var s = ed(["-s", "f"], d);
     send(s, "a\nadded\n.\n");
-    sleep(0.2);
+    send(s, "$=\n");   /* the lines are in the buffer */
+    expect(s, "\n2\r?\n");
     sendsig(s, SIGHUP);
     wait(s);
     var t = readfile(d + "/ed.hup");
@@ -88,7 +92,8 @@ func hangup_saves(d) {
 func hangup_unmodified(d) {
     writefile(d + "/f", "original\n");
     var s = ed(["-s", "f"], d);
-    sleep(0.2);
+    send(s, "=\n");    /* ed is ready */
+    expect(s, "\n1\r?\n");
     sendsig(s, SIGHUP);
     wait(s);
     verify(!exists(d + "/ed.hup"), "ed.hup written");
@@ -101,9 +106,11 @@ func hangup_home(d) {
     chmod(sub, 0555);
     /* ed in the directory it cannot write */
     var s = session([ED, "-s", "f"], {cwd: sub, env: {HOME: d}});
-    sleep(0.2);
+    send(s, "=\n");    /* ed is ready */
+    expect(s, "\n1\r?\n");
     send(s, "a\nmore\n.\n");
-    sleep(0.2);
+    send(s, "$=\n");   /* the lines are in the buffer */
+    expect(s, "\n2\r?\n");
     sendsig(s, SIGHUP);
     wait(s);
     chmod(sub, 0755);
@@ -117,7 +124,8 @@ func hangup_home(d) {
 func error_flushes_typeahead(d) {
     writefile(d + "/f", "one\ntwo\n");
     var s = ed(["-s", "f"], d);
-    sleep(0.2);
+    send(s, "=\n");    /* ed is ready */
+    expect(s, "\n2\r?\n");
     /* an error, then input already typed: it is discarded */
     send(s, "nonsense\n1p\n");
     expect(s, "\\?");
@@ -132,7 +140,8 @@ func error_flushes_typeahead(d) {
 func quit_ignored(d) {
     writefile(d + "/f", "one\n");
     var s = ed(["-s", "f"], d);
-    sleep(0.2);
+    send(s, "=\n");    /* ed is ready */
+    expect(s, "\n1\r?\n");
     sendsig(s, SIGQUIT);
     send(s, "p\n");
     expect(s, "one");

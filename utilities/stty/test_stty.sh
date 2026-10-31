@@ -17,6 +17,8 @@ ok() {
 done_tests() { echo "$1: $pass passed, $fail failed"; [ "$fail" = 0 ]; }
 U=${U:-$PWD/stty}
 T=${TMPDIR:-/tmp}/test_stty.$$
+# only ERE: the parts of the input that match (as grep -o, which is not POSIX)
+ONLY=$(cd ../testlib && pwd)/only.sh; export ONLY
 mkdir -m 700 "$T" || exit 2
 trap 'chmod -R u+rwx "$T" 2>/dev/null; rm -rf "$T" "$T.tl"' EXIT
 # tl: the test language, built here (../testlib/tl.c; ../testlib/tl.md)
@@ -27,7 +29,7 @@ $cc -o "$T.tl" "$TL/tl.c" || { echo "cannot compile ../testlib/tl.c"; exit 2; }
 TLBIN=$T.tl; export TLBIN
 tl() { "$TLBIN" "$@"; }
 # ptyrun FDS COMMAND...: COMMAND with the descriptors FDS on a terminal (../testlib/ptyrun.tl)
-ptyrun() { "$TLBIN" "$TL/ptyrun.tl" "$@"; }
+ptyrun() { PTYRUN_INPUT=${PTYRUN_INPUT-} PTYRUN_WAIT=${PTYRUN_WAIT-} "$TLBIN" "$TL/ptyrun.tl" "$@"; }   # (assignments before a function call need not be exported)
 cd "$T" || exit 2
 export LC_ALL=C
 root=false; [ "$(id -u)" = 0 ] && root=true
@@ -47,8 +49,8 @@ m() {
 t "not a terminal" "" 1 "$U" < /dev/null
 t "not a terminal: -a" "" 1 "$U" -a < /dev/null
 t "-a: the speed" "yes" 0 on sh -c '"$1" -a | grep -E "^speed [0-9]+ baud;" >/dev/null && echo yes' sh "$U"
-t "-a: the control characters" "intr = ^C;${nl}quit = ^\;${nl}erase = ^?;${nl}kill = ^U;${nl}eof = ^D;${nl}eol = <undef>;${nl}start = ^Q;${nl}stop = ^S;${nl}susp = ^Z;" 0 on sh -c '"$1" sane; "$1" -a | grep -o -E "(intr|quit|erase|kill|eof|eol|start|stop|susp) = [^;]*;"' sh "$U"
-t "-a: min and time" "min = 1;${nl}time = 0;" 0 on sh -c '"$1" -a | grep -o -E "(min|time) = [0-9]+;"' sh "$U"
+t "-a: the control characters" "intr = ^C;${nl}quit = ^\;${nl}erase = ^?;${nl}kill = ^U;${nl}eof = ^D;${nl}eol = <undef>;${nl}start = ^Q;${nl}stop = ^S;${nl}susp = ^Z;" 0 on sh -c '"$1" sane; "$1" -a | sh "$ONLY" "(intr|quit|erase|kill|eof|eol|start|stop|susp) = [^;]*;"' sh "$U"
+t "-a: min and time" "min = 1;${nl}time = 0;" 0 on sh -c '"$1" -a | sh "$ONLY" "(min|time) = [0-9]+;"' sh "$U"
 all="parenb parodd cs. hupcl cstopb cread clocal ignbrk brkint ignpar parmrk inpck istrip inlcr igncr icrnl ixon ixany ixoff opost onlcr ocrnl onocr onlret ofill ofdel cr. nl. tab. bs. ff. vt. isig icanon iexten echo echoe echok echonl noflsh tostop"
 t "-a: every mode" "" 0 on sh -c '"$1" -a | tr " " "\n" | sed "s/^-//" > a; for x in $2; do grep -x "$x" a >/dev/null || echo "missing $x"; done' sh "$U" "$all"
 t "-a: as the system's stty finds the modes" "same" 0 on sh -c '"$1" -a | tr " " "\n" | grep -v "[=;]" | grep . | sort > a; stty -a | tr " " "\n" | grep -v "[=;]" | grep . | sort > b; comm -23 a b | grep . || echo same' sh "$U"
@@ -71,25 +73,25 @@ m "hup" -hupcl hup -- hupcl
 m "-hup" hupcl -hup -- -hupcl
 m "several at once, in order" echo -echo icanon -- -echo icanon
 # the control characters
-t "a control character: ^A" "intr = ^A;" 0 on sh -c '"$1" intr ^A; stty -a | grep -o "intr = [^;]*;"' sh "$U"
-t "a control character: ^a (lower case)" "kill = ^A;" 0 on sh -c '"$1" kill ^a; stty -a | grep -o "kill = [^;]*;"' sh "$U"
+t "a control character: ^A" "intr = ^A;" 0 on sh -c '"$1" intr ^A; stty -a | sh "$ONLY" "intr = [^;]*;"' sh "$U"
+t "a control character: ^a (lower case)" "kill = ^A;" 0 on sh -c '"$1" kill ^a; stty -a | sh "$ONLY" "kill = [^;]*;"' sh "$U"
 t "a control character: one character" "erase = x;" 0 on sh -c '"$1" erase x; stty -a | tr ";" "\n" | sed "s/^ *//" | grep -x "erase = .*" | sed "s/\$/;/"' sh "$U"
-t "a control character: ^?" "eof = ^?;" 0 on sh -c '"$1" eof ^?; stty -a | grep -o "eof = [^;]*;"' sh "$U"
-t "a control character: ^[" "quit = ^[;" 0 on sh -c '"$1" quit "^["; stty -a | grep -o "quit = [^;]*;"' sh "$U"
-t "a control character: ^\\ ^] ^^ ^_" "eol = ^_;${nl}start = ^\;${nl}stop = ^];${nl}susp = ^^;" 0 on sh -c '"$1" start "^\\" stop "^]" susp "^^" eol "^_"; stty -a | grep -o -E "(start|stop|susp|eol) = [^;]*;"' sh "$U"
-t "a control character: undef" "intr = <undef>;" 0 on sh -c '"$1" intr undef; stty -a | grep -o "intr = [^;]*;"' sh "$U"
-t "a control character: ^-" "kill = <undef>;" 0 on sh -c '"$1" kill ^-; stty -a | grep -o "kill = [^;]*;"' sh "$U"
-t "a control character, as this stty writes it" "intr = ^A;${nl}erase = x;${nl}kill = <undef>;" 0 on sh -c '"$1" intr ^A erase x kill undef; "$1" -a | grep -o -E "(intr|erase|kill) = [^;]*;"' sh "$U"
-t "min and time" "min = 5;${nl}time = 7;" 0 on sh -c '"$1" -icanon min 5 time 7; stty -a | grep -o -E "(min|time) = [0-9]+;"' sh "$U"
+t "a control character: ^?" "eof = ^?;" 0 on sh -c '"$1" eof ^?; stty -a | sh "$ONLY" "eof = [^;]*;"' sh "$U"
+t "a control character: ^[" "quit = ^[;" 0 on sh -c '"$1" quit "^["; stty -a | sh "$ONLY" "quit = [^;]*;"' sh "$U"
+t "a control character: ^\\ ^] ^^ ^_" "eol = ^_;${nl}start = ^\;${nl}stop = ^];${nl}susp = ^^;" 0 on sh -c '"$1" start "^\\" stop "^]" susp "^^" eol "^_"; stty -a | sh "$ONLY" "(start|stop|susp|eol) = [^;]*;"' sh "$U"
+t "a control character: undef" "intr = <undef>;" 0 on sh -c '"$1" intr undef; stty -a | sh "$ONLY" "intr = [^;]*;"' sh "$U"
+t "a control character: ^-" "kill = <undef>;" 0 on sh -c '"$1" kill ^-; stty -a | sh "$ONLY" "kill = [^;]*;"' sh "$U"
+t "a control character, as this stty writes it" "intr = ^A;${nl}erase = x;${nl}kill = <undef>;" 0 on sh -c '"$1" intr ^A erase x kill undef; "$1" -a | sh "$ONLY" "(intr|erase|kill) = [^;]*;"' sh "$U"
+t "min and time" "min = 5;${nl}time = 7;" 0 on sh -c '"$1" -icanon min 5 time 7; stty -a | sh "$ONLY" "(min|time) = [0-9]+;"' sh "$U"
 # speeds
-t "a speed" "speed 9600 baud;" 0 on sh -c '"$1" 9600; stty -a | grep -o "speed [0-9]* baud;"' sh "$U"
-t "ospeed" "speed 2400 baud;" 0 on sh -c '"$1" ospeed 2400 ispeed 2400; stty -a | grep -o "speed [0-9]* baud;"' sh "$U"
+t "a speed" "speed 9600 baud;" 0 on sh -c '"$1" 9600; stty -a | sh "$ONLY" "speed [0-9]* baud;"' sh "$U"
+t "ospeed" "speed 2400 baud;" 0 on sh -c '"$1" ospeed 2400 ispeed 2400; stty -a | sh "$ONLY" "speed [0-9]* baud;"' sh "$U"
 t "a speed, as this stty writes it" "speed 4800 baud;" 0 on sh -c '"$1" 4800; "$1" | sed 1q' sh "$U"
 t "not a speed" "" 1 on "$U" 12345
 # the combination modes
 t "raw: as the standard defines it" "erase = <undef>;${nl}kill = <undef>;${nl}intr = <undef>;${nl}quit = <undef>;${nl}eof = <undef>;${nl}eol = <undef>;${nl}cs8${nl}-inpck${nl}-opost${nl}icanon" 0 on sh -c '"$1" inpck raw; for x in erase kill intr quit eof eol; do stty -a | tr ";" "\n" | sed "s/^ *//" | grep "^$x ="; done | sed "s/\$/;/"; stty -a | tr " " "\n" | grep -x -e -opost -e -inpck -e cs8 -e icanon' sh "$U"
 t "-raw: back" "intr = ^C;${nl}erase = ^?;${nl}opost" 0 on sh -c '"$1" raw; "$1" -raw; stty -a | tr ";" "\n" | sed "s/^ *//" | grep -E -x "(erase|intr) = .*" | sed "s/\$/;/"; stty -a | tr " " "\n" | grep -x opost' sh "$U"
-t "cooked: as -raw" "eof = ^D;" 0 on sh -c '"$1" raw cooked; stty -a | grep -o "eof = [^;]*;"' sh "$U"
+t "cooked: as -raw" "eof = ^D;" 0 on sh -c '"$1" raw cooked; stty -a | sh "$ONLY" "eof = [^;]*;"' sh "$U"
 m "nl: -icrnl" nl -- -icrnl
 m "-nl: icrnl -inlcr -igncr" inlcr igncr nl -nl -- icrnl -inlcr -igncr
 t "ek" "erase = ^?;${nl}kill = ^U;" 0 on sh -c '"$1" erase x kill y ek; stty -a | tr ";" "\n" | sed "s/^ *//" | grep -E -x "(erase|kill) = .*" | sed "s/\$/;/"' sh "$U"
@@ -107,7 +109,7 @@ t "saved settings that are not valid" "" 1 on "$U" stty1:1:2:3
 t "rows and cols, size" "30 100" 0 on sh -c '"$1" rows 30 cols 100; "$1" size' sh "$U"
 t "rows and cols: the system's stty" "30 100" 0 on sh -c '"$1" rows 30 cols 100; stty size' sh "$U"
 t "size: rows and columns" "40 90" 0 on sh -c 'stty rows 40 cols 90; "$1" size' sh "$U"
-t "-a: the window size" "rows 40; columns 90;" 0 on sh -c 'stty rows 40 cols 90; "$1" -a | grep -o "rows [0-9]*; columns [0-9]*;"' sh "$U"
+t "-a: the window size" "rows 40; columns 90;" 0 on sh -c 'stty rows 40 cols 90; "$1" -a | sh "$ONLY" "rows [0-9]*; columns [0-9]*;"' sh "$U"
 # errors: nothing is set
 t "an unknown operand" "" 1 on "$U" nosuchmode
 t "an unknown operand: nothing set" "icrnl -echo" 0 on sh -c '"$1" -echo; "$1" -icrnl nosuchmode; stty -a | tr " " "\n" | grep -x -e -echo -e icrnl -e -icrnl | tr "\n" " " | sed "s/ \$//"' sh "$U"

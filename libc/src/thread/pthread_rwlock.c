@@ -11,6 +11,7 @@
 #define WAITING ((int)0x80000000)
 #define L(rw) (&(rw)->__vi[0])
 #define PRIV(rw) (!(rw)->_rw_shared)
+#define OWNER(rw) (&(rw)->__vi[3])  /* tid of the write owner, for EDEADLK */
 
 int pthread_rwlock_init(pthread_rwlock_t *__RESTRICT rw, const pthread_rwlockattr_t *__RESTRICT a)
 {
@@ -36,6 +37,8 @@ static int sleep_on(pthread_rwlock_t *rw, int v, clockid_t clk, const struct tim
 static int rdlock(pthread_rwlock_t *rw, clockid_t clk, const struct timespec *at, int try)
 {
 	int v, n, r;
+	if (!try && *OWNER(rw) == __pthread_self()->tid)
+		return EDEADLK;
 	for (;;) {
 		v = *L(rw);
 		n = v & WR;
@@ -56,11 +59,15 @@ static int rdlock(pthread_rwlock_t *rw, clockid_t clk, const struct timespec *at
 static int wrlock(pthread_rwlock_t *rw, clockid_t clk, const struct timespec *at, int try)
 {
 	int v, r;
+	if (!try && *OWNER(rw) == __pthread_self()->tid)
+		return EDEADLK;
 	for (;;) {
 		v = *L(rw);
 		if (!(v & WR)) {
-			if (a_cas(L(rw), v, v | WR) == v)
+			if (a_cas(L(rw), v, v | WR) == v) {
+				*OWNER(rw) = __pthread_self()->tid;
 				return 0;
+			}
 			continue;
 		}
 		if (try)
@@ -105,6 +112,8 @@ int pthread_rwlock_unlock(pthread_rwlock_t *rw)
 		if (!n)
 			return EPERM;
 		new = n == WR || n == 1 ? 0 : v - 1;
+		if (n == WR)
+			*OWNER(rw) = 0;
 	} while (a_cas(L(rw), v, new) != v);
 	if (!new && ((v & WAITING) || rw->_rw_waiters))
 		__wake(L(rw), -1, PRIV(rw));

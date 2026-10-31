@@ -18,6 +18,8 @@ int getentropy(void *buf, size_t len)
 	return 0;
 }
 
+long __setnice(int);
+
 int nice(int inc)
 {
 	long prio = 20 - __syscall2(SYS_getpriority, PRIO_PROCESS, 0); /* kernel returns 20-nice */
@@ -26,7 +28,7 @@ int nice(int inc)
 	prio += inc;
 	if (prio > 19) prio = 19;
 	if (prio < -20) prio = -20;
-	if (__syscall3(SYS_setpriority, PRIO_PROCESS, 0, prio) < 0) {
+	if (__setnice((int)prio) < 0) {   /* every thread: see __setxid.c */
 		errno = EPERM;  /* POSIX: EPERM for a refused increase */
 		return -1;
 	}

@@ -31,6 +31,21 @@
  *  - Sections that do not occupy memory are kept (concatenated by name)
  *    unless -s: debugging information then still works.  .eh_frame,
  *    .comment and .note sections are discarded.
+ *  - A shared library (c17 -G) is position-independent (ET_DYN at 0).  Its
+ *    functions bind to itself (as with ld's -Bsymbolic-functions), and so
+ *    do symbols of hidden or internal visibility and those of c17's
+ *    run-time support (LinkOptions.hide_from), which are not exported;
+ *    its other variables are reached through the GOT and exported, so a
+ *    program may copy them.  Absolute addresses in its data become
+ *    R_X86_64_RELATIVE relocations, or R_X86_64_64 against a symbol bound
+ *    elsewhere; GOT entries likewise (R_X86_64_GLOB_DAT); calls of
+ *    functions it does not define go through PLT entries.  Undefined
+ *    symbols are left to the dynamic linker.  Thread-local variables keep
+ *    the general-dynamic model (a GOT pair: R_X86_64_DTPMOD64 and
+ *    R_X86_64_DTPOFF64), so the library can be loaded by dlopen; the
+ *    initial-exec model (R_X86_64_TPOFF64) is kept too.  An
+ *    ENTRY(symbol) line in a linker script gives it an entry point (a C
+ *    library that is also the dynamic linker).
  */
 #include "c17.h"
 #include "elf.h"
@@ -90,6 +105,8 @@ struct GSym {
   int dynidx;             /* in .dynsym, or 0 */
   int vna;                /* the version needed (vernaux index), or 0 */
   int iplt;               /* an indirect function's PLT entry, or -1 */
+  int vis;                /* the most constraining visibility seen (STV_*) */
+  int gd;                 /* -G: its general-dynamic GOT pair, or -1 */
 };
 
 typedef struct DynLib {
@@ -121,6 +138,7 @@ struct ObjFile {
   GSym **gsyms;           /* per symbol index; NULL for locals */
   bool included;
   bool parsed;
+  bool hide;              /* -G: its definitions are not exported */
 };
 
 struct OutSec {
@@ -151,6 +169,8 @@ static int nouts;
 static bool failed;
 static GSym **got_syms;
 static int ngot;
+static GSym **gd_syms;       /* -G: GOT pairs after the GOT entries */
+static int ngd;
 static OutSec *got_sec;
 static OutSec *bss_sec;
 static uint64_t tls_start, tls_end, tls_align = 1, tls_filesz;
@@ -164,6 +184,9 @@ static OutSec *plt_sec, *gotplt_sec, *dynbss_sec, *dynamic_sec, *dsohandle_sec;
 static GSym **iplt_syms;
 static int niplt;
 static OutSec *iplt_sec, *igot_sec, *rela_iplt_sec;
+static bool shared;          /* -G: a shared library */
+static bool reading_hidden;  /* the input being read is c17's run-time support */
+static uint64_t base_addr;
 
 static void lerror(char *fmt, ...) PRINTF(1, 2);
 static void lerror(char *fmt, ...) {
@@ -207,6 +230,7 @@ static GSym *get_gsym(char *name) {
     s->got = -1;
     s->plt = -1;
     s->iplt = -1;
+    s->gd = -1;
     hashmap_put(&gsyms, name, s);
     gsym_list = xrealloc(gsym_list, sizeof(GSym *) * (ngsyms + 1));
     gsym_list[ngsyms++] = s;
@@ -357,6 +381,13 @@ static void include_object(ObjFile *o) {
     o->gsyms[i] = g;
     int shndx = sym_shndx(o, i);
     int type = sym_type(o, i);
+    /* visibility: the most constraining (internal, hidden, protected) */
+    static const int rank[4] = {0, 3, 2, 1};
+    int vis = sym_ent(o, i)[5] & 3;
+    if (o->hide && shndx != SHN_UNDEF)
+      vis = STV_HIDDEN;
+    if (rank[vis] > rank[g->vis])
+      g->vis = vis;
     if (shndx == SHN_UNDEF) {
       if (bind == STB_WEAK)
         g->weak_ref = true;
@@ -472,6 +503,7 @@ static Archive *read_archive(char *path, unsigned char *buf, size_t len) {
     }
     if (mname) {
       ObjFile *o = xcalloc(1, sizeof(ObjFile));
+      o->hide = reading_hidden;
       o->name = format("%s(%s)", path, mname);
       o->buf = mdata;
       o->len = msize;
@@ -666,6 +698,20 @@ static void read_script(LinkOptions *opts, char *path, char *text, bool group, i
       as_needed_depth = depth_paren + 1;
       continue;
     }
+    if (!strcmp(word, "ENTRY")) {
+      /* ENTRY ( symbol ): the entry point */
+      while (*p && (isspace((unsigned char)*p) || *p == '('))
+        p++;
+      char *e = p;
+      while (*p && !isspace((unsigned char)*p) && *p != ')')
+        p++;
+      opts->entry = xstrndup(e, p - e);
+      while (*p && *p != ')')
+        p++;
+      if (*p)
+        p++;
+      continue;
+    }
     if (!strcmp(word, "OUTPUT_FORMAT") || !strcmp(word, "OUTPUT_ARCH") ||
         !strcmp(word, "SEARCH_DIR")) {
       /* skip its parenthesised argument */
@@ -716,6 +762,7 @@ static void add_input(LinkOptions *opts, char *path, char *name, bool group, boo
       return;
     }
     ObjFile *o = xcalloc(1, sizeof(ObjFile));
+    o->hide = reading_hidden;
     o->name = name;
     o->buf = buf;
     o->len = len;
@@ -730,7 +777,7 @@ static void add_input(LinkOptions *opts, char *path, char *name, bool group, boo
       text = false;
   if (text && depth < 8) {
     char *t = xstrndup((char *)buf, len);
-    if (strstr(t, "GROUP") || strstr(t, "INPUT")) {
+    if (strstr(t, "GROUP") || strstr(t, "INPUT") || strstr(t, "ENTRY")) {
       read_script(opts, path, t, group, depth);
       return;
     }
@@ -928,6 +975,15 @@ static void scan_got(void) {
         uint64_t info = rd64(re + 8);
         int type = (uint32_t)info;
         int symi = info >> 32;
+        if (shared && type == R_X86_64_TLSGD) {
+          GSym *g = got_key(o, symi);
+          if (g->gd < 0) {
+            g->gd = ngd++;
+            gd_syms = xrealloc(gd_syms, sizeof(GSym *) * ngd);
+            gd_syms[ngd - 1] = g;
+          }
+          continue;
+        }
         bool gd = type == R_X86_64_TLSGD && o->gsyms[symi] && o->gsyms[symi]->imported;
         if (type != R_X86_64_GOTPCREL && type != R_X86_64_GOTPCRELX &&
             type != R_X86_64_REX_GOTPCRELX && type != R_X86_64_GOTTPOFF &&
@@ -1011,9 +1067,117 @@ static bool is_func_sym(GSym *g) {
          (g->type == STT_NOTYPE && g->size == 0);
 }
 
-/* Does the GOT entry of g get its value from the dynamic linker? */
+/* Symbols the link defines (with the addresses of the output) */
+static char *linker_syms[] = {"__init_array_start", "__init_array_end",
+                              "__fini_array_start", "__fini_array_end",
+                              "__preinit_array_start", "__preinit_array_end",
+                              "_etext", "etext", "_edata", "edata", "_end", "end",
+                              "__bss_start", "__ehdr_start", "__executable_start",
+                              "_GLOBAL_OFFSET_TABLE_", "_DYNAMIC", "__dso_handle",
+                              "__rela_iplt_start", "__rela_iplt_end", NULL};
+
+static bool is_linker_name(char *name) {
+  for (int k = 0; linker_syms[k]; k++)
+    if (!strcmp(name, linker_syms[k]))
+      return true;
+  return startswith(name, "__start_") || startswith(name, "__stop_");
+}
+
+/* Does a reference to g bind to the output itself?  In a shared library:
+   calls of its functions (call), its symbols of other than default
+   visibility (hidden, internal, protected), c17's run-time support (made
+   hidden), and the symbols the link defines; not its other variables,
+   which a program may copy, nor the addresses of its functions, which a
+   program may have made canonical (a PLT entry), nor what it does not
+   define. */
+static bool binds_to_self(GSym *g, bool call) {
+  if (g->imported)
+    return false;
+  if (!g->defined && !g->common)
+    return is_linker_name(g->name) || !shared;
+  if (!shared)
+    return true;
+  return g->vis != STV_DEFAULT || g->linker_defined || g->bind == STB_LOCAL ||
+         (call && is_func_sym(g));
+}
+
+static bool binds_locally(GSym *g) { return binds_to_self(g, false); }
+
+/* An address that needs no relocation: an absolute symbol */
+static bool is_constant(ObjFile *o, int symi, GSym *g) {
+  if (g)
+    return g->defined && g->is_abs && !g->linker_defined && !is_linker_name(g->name);
+  return symi && sym_shndx(o, symi) == SHN_ABS;
+}
+
+/* -G: the dynamic relocations of the data (R_X86_64_64): relative, or
+   against a symbol bound elsewhere */
+typedef struct {
+  InSec *s;
+  uint64_t r;       /* index in s->rela */
+  GSym *sym;        /* NULL: relative */
+} DataRel;
+static DataRel *data_rels;
+static int ndata_rels, nrelative;
+
+static void scan_shared(void) {
+  data_rels = NULL;
+  ndata_rels = nrelative = 0;
+  for (int k = 0; k < nobjs; k++) {
+    ObjFile *o = objs[k];
+    for (int i = 0; i < o->nsecs; i++) {
+      InSec *s = &o->secs[i];
+      if (!s->out || !s->rela || !(s->flags & SHF_ALLOC))
+        continue;
+      for (uint64_t r = 0; r < s->nrela; r++) {
+        unsigned char *re = s->rela + r * RELA_SIZE;
+        uint64_t info = rd64(re + 8);
+        int type = (uint32_t)info, symi = info >> 32;
+        GSym *g = symi ? o->gsyms[symi] : NULL;
+        char *sname = symi ? sym_name(o, symi) : "";
+        bool local = !g || binds_to_self(g, type != R_X86_64_64);
+        switch (type) {
+        case R_X86_64_64:
+          if (is_constant(o, symi, g))
+            break;
+          data_rels = xrealloc(data_rels, sizeof(DataRel) * (ndata_rels + 1));
+          data_rels[ndata_rels++] = (DataRel){s, r, local ? NULL : g};
+          if (local)
+            nrelative++;
+          break;
+        case R_X86_64_32: case R_X86_64_32S: case R_X86_64_16: case R_X86_64_8:
+          if (!is_constant(o, symi, g))
+            lerror("%s: an absolute address of '%s' in %s: not in a shared library "
+                   "(compile it with -G)", o->name, *sname ? sname : "(section)", s->name);
+          break;
+        case R_X86_64_PC32: case R_X86_64_PC64: case R_X86_64_PC16: case R_X86_64_PC8:
+          if (!local)
+            lerror("%s: '%s' used directly (not through the GOT) in %s: not in a shared "
+                   "library (compile it with -G)", o->name, sname, s->name);
+          break;
+        case R_X86_64_TPOFF32: case R_X86_64_TPOFF64: case R_X86_64_DTPOFF32:
+        case R_X86_64_DTPOFF64: case R_X86_64_TLSLD:
+          lerror("%s: the thread-local variable '%s' in a model a shared library cannot use "
+                 "(compile it with -G)", o->name, sname);
+          break;
+        }
+      }
+    }
+  }
+}
+
+/* Does the GOT entry of g get the value of a symbol from the dynamic
+   linker? */
 static bool got_dynamic(GSym *g) {
+  if (shared)
+    return !binds_locally(g);
   return g->imported && !g->copied && !g->copy_of && !g->canonical;
+}
+
+/* -G: does the GOT entry of g need a dynamic relocation at all (all but
+   absolute values)? */
+static bool got_reloc(GSym *g) {
+  return got_dynamic(g) || g->got_tp || !(g->is_abs && !g->linker_defined);
 }
 
 /* Decides how each imported symbol is reached: a PLT entry for
@@ -1024,6 +1188,10 @@ static void scan_imports(void) {
     if (g->dso && !g->defined && !g->common && (g->referenced || g->weak_ref)) {
       g->imported = true;
       g->dso->needed = true;
+    } else if (shared && !g->dso && !g->defined && !g->common &&
+               (g->referenced || g->weak_ref) && !is_linker_name(g->name) &&
+               g->name[0] != '\001') {
+      g->imported = true;  /* left to the dynamic linker */
     }
   }
   for (int k = 0; k < nobjs; k++) {
@@ -1045,7 +1213,14 @@ static void scan_imports(void) {
         case R_X86_64_PC16: case R_X86_64_PC8:
           if (g->type == STT_TLS) {
             lerror("%s: the thread-local variable '%s' of %s used as an address", o->name,
-                   g->name, g->dso->soname);
+                   g->name, g->dso ? g->dso->soname : "another object");
+          } else if (shared) {
+            /* calls through the PLT; addresses in data: R_X86_64_64 */
+            if (type == R_X86_64_PLT32 && g->plt < 0) {
+              g->plt = nplt++;
+              plt_syms = xrealloc(plt_syms, sizeof(GSym *) * nplt);
+              plt_syms[nplt - 1] = g;
+            }
           } else if (is_func_sym(g)) {
             if (g->plt < 0) {
               g->plt = nplt++;
@@ -1061,8 +1236,10 @@ static void scan_imports(void) {
           }
           break;
         case R_X86_64_TPOFF32: case R_X86_64_TPOFF64:
-          lerror("%s: the thread-local variable '%s' of %s with the local-exec model "
-                 "(compile it with the initial-exec model)", o->name, g->name, g->dso->soname);
+          if (!shared)  /* (scan_shared reports it) */
+            lerror("%s: the thread-local variable '%s' of %s with the local-exec model "
+                   "(compile it with the initial-exec model)", o->name, g->name,
+                   g->dso ? g->dso->soname : "another object");
           break;
         }
       }
@@ -1070,6 +1247,8 @@ static void scan_imports(void) {
   }
   /* the aliases of copied variables (environ, __environ) move with them */
   int nprimary = ncopy;
+  if (shared)
+    return;
   for (int c = 0; c < nprimary; c++) {
     GSym *g = copy_syms[c];
     DynLib *d = g->dso;
@@ -1159,7 +1338,7 @@ static OutSec *find_out(char *name);
 /* The sections of a dynamic executable, sized; filled by fill_dynamic */
 static int ndynamic_entries;
 static int nrela_dyn;
-static uint32_t runpath_off;
+static uint32_t runpath_off, soname_off;
 
 static void make_dynamic_sections(LinkOptions *opts) {
   dynstr = (Buf){0};
@@ -1185,8 +1364,9 @@ static void make_dynamic_sections(LinkOptions *opts) {
   /* the dynamic symbols */
   for (int i = 0; i < ngsyms; i++) {
     GSym *g = gsym_list[i];
-    bool exported = g->dso_ref && (g->defined || g->common) && g->bind != STB_LOCAL &&
-                    g->name[0] != '\001' && !g->imported;
+    bool exported = (g->dso_ref || shared) && (g->defined || g->common) &&
+                    g->bind != STB_LOCAL && g->name[0] != '\001' && !g->imported &&
+                    !g->linker_defined && (g->vis == STV_DEFAULT || g->vis == STV_PROTECTED);
     if (!g->imported && !g->copied && !g->copy_of && !exported)
       continue;
     dyn_syms = xrealloc(dyn_syms, sizeof(GSym *) * (ndyn + 1));
@@ -1217,15 +1397,18 @@ static void make_dynamic_sections(LinkOptions *opts) {
         nverneed_libs++;
         break;
       }
-  /* GOT entries filled at load time */
-  nrela_dyn = ncopy;
+  /* GOT entries filled at load time; -G: also the data's relocations */
+  nrela_dyn = ncopy + ndata_rels + 2 * ngd;
   for (int i = 0; i < ngot; i++)
-    if (got_dynamic(got_syms[i]))
+    if (shared ? got_reloc(got_syms[i]) : got_dynamic(got_syms[i]))
       nrela_dyn++;
 
   int nbucket = ndyn / 2 + 1;
   OutSec *o;
-  o = synth(".interp", SHT_PROGBITS, SHF_ALLOC, 1, strlen(opts->interp) + 1);
+  if (!shared)
+    synth(".interp", SHT_PROGBITS, SHF_ALLOC, 1, strlen(opts->interp) + 1);
+  else
+    soname_off = dynstr_add(opts->soname);
   o = synth(".hash", SHT_HASH, SHF_ALLOC, 8, 4 * (2 + nbucket + ndyn + 1));
   o->link_name = ".dynsym";
   o->entsize = 4;
@@ -1279,7 +1462,7 @@ static void make_dynamic_sections(LinkOptions *opts) {
   n += 2;  /* DT_INIT, DT_FINI (if defined) */
   n += 6;  /* the arrays */
   n += 5;  /* hash, strtab, symtab, strsz, syment */
-  n += 1;  /* debug */
+  n += 1;  /* debug, or (-G) soname */
   n += nplt ? 4 : 0;
   n += nrela_dyn ? 3 : 0;
   n += nverneeds ? 3 : 0;
@@ -1305,8 +1488,8 @@ static unsigned char *put_rela(unsigned char *p, uint64_t off, int type, int sym
 
 /* Fills the dynamic sections, once addresses are known */
 static void fill_dynamic(LinkOptions *opts) {
-  OutSec *o = find_out(".interp");
-  memcpy(o->data, opts->interp, strlen(opts->interp) + 1);
+  if (!shared)
+    memcpy(find_out(".interp")->data, opts->interp, strlen(opts->interp) + 1);
   memcpy(find_out(".dynstr")->data, dynstr.buf, dynstr.len);
 
   unsigned char *y = find_out(".dynsym")->data + SYM_SIZE;
@@ -1322,6 +1505,8 @@ static void fill_dynamic(LinkOptions *opts) {
         size = g->copy_of->size;
     } else if (g->imported) {
       bind = g->referenced ? STB_GLOBAL : STB_WEAK;
+      if (type == STT_GNU_IFUNC)
+        type = STT_FUNC;  /* (glibc's strchr ...): resolved by its own library */
       shndx = SHN_UNDEF;
       value = g->canonical ? gsym_addr(g) : 0;
       size = 0;
@@ -1386,7 +1571,53 @@ static void fill_dynamic(LinkOptions *opts) {
     }
   }
 
-  if (nrela_dyn) {
+  if (nrela_dyn && shared) {
+    /* the relative relocations first (the C library's dynamic linker
+       applies those of itself before anything else) */
+    unsigned char *p = find_out(".rela.dyn")->data;
+    for (int pass = 0; pass < 2; pass++) {
+      for (int i = 0; i < ndata_rels; i++) {
+        DataRel *d = &data_rels[i];
+        if ((d->sym == NULL) != (pass == 0))
+          continue;
+        unsigned char *re = d->s->rela + d->r * RELA_SIZE;
+        uint64_t info = rd64(re + 8);
+        int64_t A = (int64_t)rd64(re + 16);
+        uint64_t where = sec_addr(d->s) + rd64(re);
+        GSym *g;
+        uint64_t S = local_sym_addr(d->s->obj, info >> 32, &g);
+        if (d->sym)
+          p = put_rela(p, where, R_X86_64_64, d->sym->dynidx, A);
+        else
+          p = put_rela(p, where, R_X86_64_RELATIVE, 0, (int64_t)S + A);
+      }
+      for (int i = 0; i < ngot; i++) {
+        GSym *g = got_syms[i];
+        uint64_t where = got_sec->addr + 8 * (uint64_t)i;
+        if (!got_reloc(g))
+          continue;
+        bool rel = !got_dynamic(g) && !g->got_tp;
+        if (rel != (pass == 0))
+          continue;
+        if (rel)
+          p = put_rela(p, where, R_X86_64_RELATIVE, 0, (int64_t)gsym_addr(g));
+        else if (g->got_tp)  /* in its own TLS block, or another object's */
+          p = put_rela(p, where, R_X86_64_TPOFF64, got_dynamic(g) ? g->dynidx : 0,
+                       got_dynamic(g) ? 0 : (int64_t)(gsym_addr(g) - tls_start));
+        else
+          p = put_rela(p, where, R_X86_64_GLOB_DAT, g->dynidx, 0);
+      }
+      for (int i = 0; i < ngd && pass == 1; i++) {
+        /* the module and the offset in its TLS block */
+        GSym *g = gd_syms[i];
+        uint64_t where = got_sec->addr + 8 * ((uint64_t)ngot + 2 * (uint64_t)i);
+        bool own = binds_locally(g);
+        p = put_rela(p, where, R_X86_64_DTPMOD64, own ? 0 : g->dynidx, 0);
+        p = put_rela(p, where + 8, R_X86_64_DTPOFF64, own ? 0 : g->dynidx,
+                     own ? (int64_t)(gsym_addr(g) - tls_start) : 0);
+      }
+    }
+  } else if (nrela_dyn) {
     unsigned char *p = find_out(".rela.dyn")->data;
     for (int i = 0; i < ncopy; i++)
       p = put_rela(p, gsym_addr(copy_syms[i]), R_X86_64_COPY, copy_syms[i]->dynidx, 0);
@@ -1443,7 +1674,10 @@ static void fill_dynamic(LinkOptions *opts) {
   dyn_entry(&d, DT_SYMTAB, find_out(".dynsym")->addr);
   dyn_entry(&d, DT_STRSZ, dynstr.len);
   dyn_entry(&d, DT_SYMENT, SYM_SIZE);
-  dyn_entry(&d, DT_DEBUG, 0);
+  if (shared)
+    dyn_entry(&d, DT_SONAME, soname_off);
+  else
+    dyn_entry(&d, DT_DEBUG, 0);
   if (nplt) {
     dyn_entry(&d, DT_PLTGOT, gotplt_sec->addr);
     dyn_entry(&d, DT_PLTRELSZ, (uint64_t)RELA_SIZE * nplt);
@@ -1531,7 +1765,12 @@ static void apply_relocs(InSec *s) {
       break;
     case R_X86_64_SIZE32: v = (g ? g->size : sym_size(o, symi)) + A; size = 4; break;
     case R_X86_64_SIZE64: v = (g ? g->size : sym_size(o, symi)) + A; size = 8; break;
-    case R_X86_64_TLSGD: {
+    case R_X86_64_TLSGD:
+      if (shared) {  /* the GOT pair; __tls_get_addr is called */
+        v = gotaddr + 8 * ((uint64_t)ngot + 2 * (uint64_t)got_key(o, symi)->gd) + A - P;
+        size = 4;
+        break;
+      } {
       /* 66 48 8d 3d <x@tlsgd> 66 66 48 e8 <__tls_get_addr@plt>
          -> mov %fs:0,%rax; lea x@tpoff(%rax),%rax
          or, for a variable of a shared object (initial-exec),
@@ -1627,10 +1866,14 @@ int link_executable(LinkOptions *opts) {
   failed = false;
   got_syms = NULL;
   ngot = 0;
+  gd_syms = NULL;
+  ngd = 0;
   got_sec = bss_sec = NULL;
   has_tls = false;
   tls_align = 1;
-  dynamic = opts->interp != NULL;
+  shared = opts->shared;
+  dynamic = opts->interp != NULL || shared;
+  base_addr = shared ? 0 : BASE_ADDR;
   dlibs = NULL;
   ndlibs = 0;
   plt_syms = copy_syms = dyn_syms = NULL;
@@ -1640,17 +1883,30 @@ int link_executable(LinkOptions *opts) {
   niplt = 0;
   iplt_sec = igot_sec = rela_iplt_sec = NULL;
 
-  char *entry = opts->entry ? opts->entry : "_start";
-  GSym *eg = get_gsym(entry);
-  eg->referenced = true;
+  /* the entry point: _start, or (a shared library: none) what a linker
+     script names */
+  char *entry = opts->entry ? opts->entry : shared ? NULL : "_start";
+  GSym *eg = NULL;
+  if (entry) {
+    eg = get_gsym(entry);
+    eg->referenced = true;
+  }
 
   /* Read the inputs in order */
   group_ars = NULL;
   ngroup_ars = 0;
-  for (int i = 0; i < opts->ninputs; i++)
+  for (int i = 0; i < opts->ninputs; i++) {
+    reading_hidden = shared && opts->hide_from >= 0 && i >= opts->hide_from;
     add_input(opts, opts->inputs[i],
               opts->names && opts->names[i] ? opts->names[i] : opts->inputs[i],
               i >= opts->group_start, false, 0);
+  }
+  reading_hidden = false;
+  if (opts->entry && (!entry || strcmp(entry, opts->entry))) {  /* ENTRY ( ... ) */
+    entry = opts->entry;
+    eg = get_gsym(entry);
+    eg->referenced = true;
+  }
   for (bool changed = ngroup_ars > 1; changed;) {
     changed = false;
     for (int i = 0; i < ngroup_ars; i++)
@@ -1660,26 +1916,20 @@ int link_executable(LinkOptions *opts) {
   if (failed)
     return 1;
 
-  /* Undefined symbols */
-  static char *linker_syms[] = {"__init_array_start", "__init_array_end",
-                                "__fini_array_start", "__fini_array_end",
-                                "__preinit_array_start", "__preinit_array_end",
-                                "_etext", "etext", "_edata", "edata", "_end", "end",
-                                "__bss_start", "__ehdr_start", "__executable_start",
-                                "_GLOBAL_OFFSET_TABLE_", "_DYNAMIC", "__dso_handle",
-                                "__rela_iplt_start", "__rela_iplt_end", NULL};
+  /* Undefined symbols (a shared library imports them) */
   for (int i = 0; i < ngsyms; i++) {
     GSym *g = gsym_list[i];
     if (g->defined || g->common || g->dso || !g->referenced)
       continue;
-    bool special = false;
-    for (int k = 0; linker_syms[k]; k++)
-      if (!strcmp(g->name, linker_syms[k]))
-        special = true;
-    if (startswith(g->name, "__start_") || startswith(g->name, "__stop_"))
-      special = true;  /* checked when the sections are known */
-    if (special)
+    if (is_linker_name(g->name))
+      continue;  /* __start_/__stop_ checked when the sections are known */
+    if (shared && g != eg) {
+      if (g->vis != STV_DEFAULT)
+        lerror("undefined symbol '%s' of %s visibility (first referenced in %s)", g->name,
+               g->vis == STV_PROTECTED ? "protected" : "hidden",
+               g->first_ref ? g->first_ref->name : "?");
       continue;
+    }
     if (g == eg)
       lerror("entry symbol '%s' is not defined", entry);
     else
@@ -1740,11 +1990,13 @@ int link_executable(LinkOptions *opts) {
 
   if (dynamic)
     scan_imports();
+  if (shared)
+    scan_shared();
   scan_ifuncs();
   if (failed)
     return 1;
   scan_got();
-  if (ngot) {
+  if (ngot || ngd) {
     got_sec = get_out(".got", NULL);
     got_sec->flags = SHF_ALLOC | SHF_WRITE;
     got_sec->seg = 2;
@@ -1781,7 +2033,7 @@ int link_executable(LinkOptions *opts) {
       off += s->size;
     }
     if (o == got_sec)
-      off = 8 * (uint64_t)ngot;
+      off = 8 * ((uint64_t)ngot + 2 * (uint64_t)ngd);
     if (o == bss_sec) {
       for (int k = 0; k < ngsyms; k++) {
         GSym *g = gsym_list[k];
@@ -1810,14 +2062,15 @@ int link_executable(LinkOptions *opts) {
   for (int i = 0; i < nouts; i++)
     if (outs[i]->flags & SHF_TLS)
       has_tls = true;
-  /* + PT_GNU_STACK; PT_PHDR, PT_INTERP and PT_DYNAMIC if dynamic */
-  int nphdr = nseg_used + 1 + (has_tls ? 1 : 0) + (dynamic ? 3 : 0);
+  /* + PT_GNU_STACK; PT_PHDR, PT_INTERP and PT_DYNAMIC if dynamic (a
+     shared library: PT_DYNAMIC only) */
+  int nphdr = nseg_used + 1 + (has_tls ? 1 : 0) + (dynamic ? (shared ? 1 : 3) : 0);
 
   uint64_t seg_vaddr[3] = {0}, seg_off[3] = {0}, seg_filesz[3] = {0}, seg_memsz[3] = {0};
-  uint64_t addr = BASE_ADDR, off = 0;
+  uint64_t addr = base_addr, off = 0;
   off = EHDR_SIZE + (uint64_t)nphdr * PHDR_SIZE;
   addr += off;
-  seg_vaddr[0] = BASE_ADDR;
+  seg_vaddr[0] = base_addr;
   seg_off[0] = 0;
   int cur_seg = 0;
   bool tls_started = false;
@@ -1919,8 +2172,8 @@ int link_executable(LinkOptions *opts) {
   define_linker_sym("end", end, NULL);
   o = find_out(".bss");
   define_linker_sym("__bss_start", o ? o->addr : edata, NULL);
-  define_linker_sym("__ehdr_start", BASE_ADDR, NULL);
-  define_linker_sym("__executable_start", BASE_ADDR, NULL);
+  define_linker_sym("__ehdr_start", base_addr, NULL);
+  define_linker_sym("__executable_start", base_addr, NULL);
   define_linker_sym("_GLOBAL_OFFSET_TABLE_",
                     gotplt_sec ? gotplt_sec->addr : got_sec ? got_sec->addr : 0, NULL);
   /* _DYNAMIC: undefined (0) in a static executable */
@@ -2175,10 +2428,10 @@ int link_executable(LinkOptions *opts) {
   h[4] = 2;
   h[5] = 1;
   h[6] = 1;
-  wr16(h + 16, ET_EXEC);
+  wr16(h + 16, shared ? ET_DYN : ET_EXEC);
   wr16(h + 18, EM_X86_64);
   wr32(h + 20, 1);
-  wr64(h + 24, gsym_addr(eg));
+  wr64(h + 24, eg ? gsym_addr(eg) : 0);
   wr64(h + 32, EHDR_SIZE);
   wr64(h + 40, shoff);
   wr32(h + 48, 0);
@@ -2189,7 +2442,7 @@ int link_executable(LinkOptions *opts) {
   wr16(h + 60, nshdr);
   wr16(h + 62, nshdr - 1);
   unsigned char *ph = h + EHDR_SIZE;
-  if (dynamic) {
+  if (dynamic && !shared) {
     wr32(ph, PT_PHDR);
     wr32(ph + 4, PF_R);
     wr64(ph + 8, EHDR_SIZE);

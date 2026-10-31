@@ -28,7 +28,7 @@ c() {
         dd if=$_f "$@" > o2 2> e2; echo $? >> e2
         grep -v 'copied' e2 > e2a
         if cmp -s o1 o2 && cmp -s e1 e2a; then pass=$((pass+1))
-        else fail=$((fail+1)); echo "FAIL $_n ($_f): $*"; diff e1 e2a | sed 's/^/  /' | head -6; fi
+        else fail=$((fail+1)); echo "FAIL $_n ($_f): $*"; diff e1 e2a | sed 's/^/  /' | head -n 6; fi
     done
 }
 c "default" 

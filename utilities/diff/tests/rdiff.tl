@@ -62,7 +62,7 @@ func count(out) {
     return n;
 }
 
-/* a list of options as Python writes it */
+/* a list of options as ['...', '...'] */
 func plist(l) {
     return "[" + join(apply(l, func (o) { return "'" + o + "'"; }), ", ") + "]";
 }

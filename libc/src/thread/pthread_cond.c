@@ -9,6 +9,10 @@
  * that every signal advances, and every signal wakes all waiters (a
  * spurious wakeup, as POSIX allows).
  *
+ * A signaled waiter never touches the condition variable again, and
+ * pthread_cond_destroy() waits for process-shared waiters still leaving,
+ * so destroying one right after a broadcast is safe.
+ *
  * Waiting is a cancellation point; cancellation acts only after the
  * mutex is reacquired, and a signal consumed by a cancelled waiter is
  * passed on. */
@@ -20,6 +24,7 @@
 #include "lock.h"
 
 #define __C_SHARED 0x100
+#define DESTROYING ((int)0x80000000)
 
 struct waiter {
 	struct waiter *prev, *next;
@@ -39,7 +44,17 @@ int __pthread_cond_init(pthread_cond_t *__RESTRICT c, const pthread_condattr_t *
 
 int __pthread_cond_destroy(pthread_cond_t *c)
 {
-	(void)c;
+	/* Process-shared waiters still reading the condition variable after
+	   a broadcast are waited for (bit 31 of the count asks the last one
+	   to wake us).  Process-private waiters that were signaled never
+	   touch it again. */
+	int v;
+	if (c->_c_flags & __C_SHARED)
+		while ((v = c->_c_waiters) & 0x7fffffff) {
+			if (!(v & DESTROYING) && a_cas(&c->__vi[7], v, v | DESTROYING) != v)
+				continue;
+			__wait(&c->__vi[7], v | DESTROYING, 0);
+		}
 	return 0;
 }
 
@@ -132,24 +147,30 @@ static int cond_wait(pthread_cond_t *__RESTRICT c, pthread_mutex_t *__RESTRICT m
 	if (shared) {
 		do e = __timedwait_cp(&c->__vi[6], seq, clk, at, 0);
 		while (c->_c_seq == seq && (e == 0 || e == EINTR));
-		a_dec(&c->__vi[7]);
 		if (c->_c_seq != seq)
 			e = 0;
+		/* the last access to *c, which may be destroyed from here on */
+		if (a_fetch_add(&c->__vi[7], -1) == (DESTROYING | 1))
+			__wake(&c->__vi[7], 1, 0);
 	} else {
 		while (!w.state) {
 			e = __timedwait_cp(&w.state, 0, clk, at, 1);
 			if (e == ETIMEDOUT || e == ECANCELED || e == EINVAL)
 				break;
 		}
-		LOCK(&c->__vi[4]);
-		if (!w.state)
-			unqueue(c, &w);
-		else {
+		/* A signaled waiter must not touch *c again: it may already be
+		   destroyed (it is safe to destroy one right after a broadcast) */
+		if (!w.state) {
+			LOCK(&c->__vi[4]);
+			if (!w.state)
+				unqueue(c, &w);
+			UNLOCK(&c->__vi[4]);
+		}
+		if (w.state) {
 			consumed = e == ECANCELED;
 			if (!consumed)
 				e = 0;
 		}
-		UNLOCK(&c->__vi[4]);
 	}
 
 	r = __pthread_mutex_lock(m);

@@ -3294,8 +3294,8 @@ static void json_into(Str *b, Value v, int indent, int level)
     }
 }
 
-/* json(v[, indent]): v in JSON (keys sorted, non-ASCII escaped, as Python's
-   json.dumps(v, indent=indent, sort_keys=True)) */
+/* json(v[, indent]): v in JSON (keys sorted, non-ASCII escaped as \uXXXX,
+   separators ", " and ": "; with an indent, one item per line) */
 static Value b_json(Value *a, int n)
 {
     Str *b = buf_new();
@@ -5648,7 +5648,7 @@ static Value b_strptime(Value *a, int n)
     return tm_map(&tm);
 }
 
-/* -- binary data: pack and unpack, as Python's struct -- */
+/* -- binary data: pack and unpack by a format of sizes and byte order -- */
 
 static int pack_size(char c)
 {

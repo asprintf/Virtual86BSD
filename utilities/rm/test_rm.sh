@@ -17,6 +17,8 @@ ok() {
 done_tests() { echo "$1: $pass passed, $fail failed"; [ "$fail" = 0 ]; }
 U=${U:-$PWD/rm}
 T=${TMPDIR:-/tmp}/test_rm.$$
+# only ERE: the parts of the input that match (as grep -o, which is not POSIX)
+ONLY=$(cd ../testlib && pwd)/only.sh; export ONLY
 mkdir -m 700 "$T" || exit 2
 trap 'chmod -R u+rwx "$T" 2>/dev/null; rm -rf "$T"' EXIT
 cd "$T" || exit 2
@@ -108,7 +110,7 @@ ok "-ri: the directory kept" test -d d -a ! -e d/x
 t "-ri: empty directory, one prompt" "1" 0 sh -c 'echo y | "$1" -ri d 2>&1 | grep -c "?"' sh "$U"
 ok "-ri empty: gone" test ! -e d
 mkdir d; echo x > d/x
-t "-ri: three prompts" "3" 0 sh -c 'printf "y\ny\ny\n" | "$1" -ri d 2>&1 | grep -o "?" | wc -l | tr -d " "' sh "$U"
+t "-ri: three prompts" "3" 0 sh -c 'printf "y\ny\ny\n" | "$1" -ri d 2>&1 | sh "$ONLY" "[?]" | wc -l | tr -d " "' sh "$U"
 ok "-ri all yes: gone" test ! -e d
 mkdir d
 t "-di" "" 0 sh -c 'echo y | "$1" -di d' sh "$U"

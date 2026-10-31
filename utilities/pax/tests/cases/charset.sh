@@ -14,7 +14,7 @@ echo "-- writing in the C locale: bytes outside ASCII are BINARY"
 LC_ALL=C $PAX -w -x pax -f wc.pax w; hdrs wc.pax | grep -E 'hdrcharset|path='
 
 echo "-- -o hdrcharset:=BINARY: the names as they are"
-LC_ALL=$U $PAX -w -x pax -o hdrcharset:=BINARY -f wb.pax w/caf*; hdrs wb.pax | grep -E 'hdrcharset|path=' | sort | uniq -c
+LC_ALL=$U $PAX -w -x pax -o hdrcharset:=BINARY -f wb.pax w/caf*; hdrs wb.pax | grep -E 'hdrcharset|path=' | sort | uniq -c | sed 's/^ *//'
 
 mkpax utf8.pax 'path=caf\xc3\xa9' x
 mkpax raw.pax 'path=caf\xe9' x

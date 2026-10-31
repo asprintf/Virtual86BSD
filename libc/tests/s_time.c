@@ -1,6 +1,9 @@
 /* <time.h> behaviour that has no glibc reference: POSIX.1-2024 strftime
- * flags, getdate, timers and clocks. */
+ * flags, getdate, timers and clocks; strptime's E and O modifiers where
+ * glibc fails (no eras or alternative digits: the plain conversions). */
 #include <time.h>
+#include <locale.h>
+#include <langinfo.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,6 +24,15 @@ static int sf(const char *fmt, int year, const char *want)
 	strftime(buf, sizeof buf, fmt, &tm);
 	if (strcmp(buf, want)) { os("strftime "); os(fmt); os(" -> "); os(buf); os(" want "); os(want); onl(); return 0; }
 	return 1;
+}
+
+/* strptime of all of in: the year (tm_year), or -9999 */
+static int py(const char *f, const char *in, struct tm *tm)
+{
+	char *e;
+	memset(tm, 0, sizeof *tm);
+	e = strptime(in, f, tm);
+	return e && !*e ? tm->tm_year : -9999;
 }
 
 int main(void)
@@ -138,6 +150,36 @@ int main(void)
 	CHECK(timer_create(CLOCK_REALTIME, &sev, &tid) == 0 && timer_delete(tid) == 0);
 	sev.sigev_notify = 99;
 	CHECK(timer_create(CLOCK_REALTIME, &sev, &tid) == -1 && errno == EINVAL);
+
+	/* E and O without eras or alternative digits: as without them */
+	{
+		struct tm tm;
+		CHECK(py("%Ey", "68", &tm) == 168 && py("%Ey", "69", &tm) == 69);
+		CHECK(py("%EC%Ey", "1868", &tm) == -32 && py("%Ey %EC", "68 18", &tm) == -32);
+		CHECK(py("%EY", "2024", &tm) == 124 && py("%EC", "19", &tm) == 0);
+		CHECK(py("%Ex", "12/31/99", &tm) == 99 && tm.tm_mon == 11 && tm.tm_mday == 31);
+		CHECK(py("%Od %Om %OH %OM %OS %Oy", "23 10 21 07 09 05", &tm) == 105 &&
+		      tm.tm_mday == 23 && tm.tm_mon == 9 && tm.tm_hour == 21 && tm.tm_min == 7 && tm.tm_sec == 9);
+		CHECK(py("%Ow %OI %Oe", "5 09 7", &tm) == 0 && tm.tm_wday == 5 && tm.tm_hour == 9 && tm.tm_mday == 7);
+		/* eras of ja_JP and th_TH, if run.sh made them (a UTF-8 name
+		 * without data would be C.UTF-8) */
+		if (setlocale(LC_ALL, "ja_JP.UTF-8") && *nl_langinfo(ERA)) {
+			CHECK(py("%EY", "平成元年", &tm) == 89);              /* the era's own format, %EC元年 */
+			CHECK(py("%EY", "令和6年", &tm) == 124);
+			CHECK(py("%EC%Ey年", "昭和64年", &tm) == 89);         /* its last year, 1989 */
+			CHECK(py("%EC%Ey年", "昭和65年", &tm) == -9999);      /* after its end */
+			CHECK(py("%EC", "大正", &tm) == 13);   /* the start of the first entry of that name (glibc too) */
+			CHECK(py("%Ex", "平成31年04月30日", &tm) == 119 && tm.tm_mon == 3 && tm.tm_mday == 30);
+			CHECK(py("%Od日%OH時", "二十三日九時", &tm) == 0 && tm.tm_mday == 23 && tm.tm_hour == 9);
+			CHECK(py("%Om", "十二", &tm) == 0 && tm.tm_mon == 11);  /* the longest: not 十 */
+			CHECK(py("%Od", "23", &tm) == 0 && tm.tm_mday == 23);   /* ASCII digits too */
+		}
+		if (setlocale(LC_ALL, "th_TH.UTF-8") && *nl_langinfo(ERA)) {
+			CHECK(py("%EC %Ey", "พ.ศ. 2567", &tm) == 124);
+			CHECK(py("%EY", "พ.ศ. 2443", &tm) == 0);
+		}
+		setlocale(LC_ALL, "C");
+	}
 
 	os(failures ? "time FAILED\n" : "time ok\n");
 	oflush();

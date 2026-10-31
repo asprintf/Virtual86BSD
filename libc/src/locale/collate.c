@@ -466,21 +466,27 @@ oom:
 #undef PUT
 }
 
-/* the first-level weights of one character (wide: a code point; else a
- * byte), with its rule; 0 if it has no element of its own */
-static int primary(const struct __lcat *c, int wide, uint32_t x, int32_t *t, size_t *at, size_t *len)
+/* the first-level weights of the collating element x[0..n) (wide: code
+ * points; else bytes), with its rule; 0 if it is not one element */
+static int primary(const struct __lcat *c, int wide, const uint32_t *x, size_t n,
+                   int32_t *t, size_t *at, size_t *len)
 {
-	size_t end = wide ? c->nweightwc : c->nweightmb;
+	size_t end = wide ? c->nweightwc : c->nweightmb, i;
+	if (!n || n > 255) return 0;
 	if (wide) {
-		wchar_t s[2] = { (wchar_t)x, 0 };
+		wchar_t s[256];
 		const wchar_t *p = s;
+		for (i = 0; i < n; i++) s[i] = (wchar_t)x[i];
+		s[n] = 0;
 		*t = find_wc(c, &p);
-		if (p != s + 1) return 0;
+		if (p != s + n) return 0;
 	} else {
-		unsigned char s[2] = { (unsigned char)x, 0 };
+		unsigned char s[256];
 		const unsigned char *p = s;
+		for (i = 0; i < n; i++) s[i] = (unsigned char)x[i];
+		s[n] = 0;
 		*t = find_mb(c, &p);
-		if (p != s + 1) return 0;
+		if (p != s + n) return 0;
 	}
 	if (!*t) return 0;
 	*at = (size_t)(*t & 0xffffff);
@@ -491,12 +497,13 @@ static int primary(const struct __lcat *c, int wide, uint32_t x, int32_t *t, siz
 
 /* x and y are of one equivalence class: the same first-level weights
  * (as glibc's regex decides it); without collation rules, x == y */
-int __coll_equiv(const struct __lcat *c, int wide, uint32_t x, uint32_t y)
+int __coll_equivs(const struct __lcat *c, int wide, const uint32_t *x, size_t nx,
+                  const uint32_t *y, size_t ny)
 {
 	int32_t tx, ty;
 	size_t ax, lx, ay, ly, i;
-	if (x == y) return 1;
-	if (!c->nrules || !primary(c, wide, x, &tx, &ax, &lx) || !primary(c, wide, y, &ty, &ay, &ly))
+	if (nx == ny && !memcmp(x, y, nx * sizeof *x)) return 1;
+	if (!c->nrules || !primary(c, wide, x, nx, &tx, &ax, &lx) || !primary(c, wide, y, ny, &ty, &ay, &ly))
 		return 0;
 	if (lx != ly || (tx >> 24) != (ty >> 24)) return 0;
 	for (i = 1; i <= lx; i++)
@@ -505,13 +512,75 @@ int __coll_equiv(const struct __lcat *c, int wide, uint32_t x, uint32_t y)
 	return 1;
 }
 
+int __coll_equiv(const struct __lcat *c, int wide, uint32_t x, uint32_t y)
+{
+	return __coll_equivs(c, wide, &x, 1, &y, 1);
+}
+
 /* a character (wide: a code point; else a byte) with a collating element
  * of its own (glibc's regcomp refuses an equivalence class of another) */
 int __coll_valid(const struct __lcat *c, int wide, uint32_t x)
 {
 	int32_t t;
 	size_t at, len;
-	return !c->nrules || primary(c, wide, x, &t, &at, &len);
+	return !c->nrules || primary(c, wide, &x, 1, &t, &at, &len);
+}
+
+/* ---- multi-character collating elements ---- */
+
+int __coll_me_next(const struct __lcat *c, size_t *pos, struct __coll_me *e)
+{
+	const unsigned char *x = c->symbextra;
+	size_t i = *pos, n = c->nsymbextra;
+	if (!c->nrules || !x) return 0;
+	/* [len][name] [len][bytes] pad to 4, seqmb, nwcs, wcs, seqwc */
+	if (i >= n || (i += 1 + (size_t)x[i]) >= n) return 0;
+	e->nmbs = x[i];
+	e->mbs = x + i + 1;
+	i = (i + 1 + e->nmbs + 3) & ~(size_t)3;
+	if (i + 8 > n) return 0;
+	e->seqmb = (uint32_t)rd32(x + i);
+	e->nwcs = (uint32_t)rd32(x + i + 4);
+	if (e->nwcs > 255 || i + 12 + 4 * e->nwcs > n) return 0;
+	e->wcs = x + i + 8;
+	e->seqwc = (uint32_t)rd32(x + i + 8 + 4 * e->nwcs);
+	*pos = i + 12 + 4 * e->nwcs;
+	return 1;
+}
+
+size_t __coll_me_units(const struct __coll_me *e, int wide, uint32_t *u)
+{
+	size_t i;
+	if (wide)
+		for (i = 0; i < e->nwcs; i++) u[i] = (uint32_t)rd32(e->wcs + 4 * i);
+	else
+		for (i = 0; i < e->nmbs; i++) u[i] = e->mbs[i];
+	return wide ? e->nwcs : e->nmbs;
+}
+
+/* the multi-character element x[0..n), or 0 */
+static int me_find(const struct __lcat *c, int wide, const uint32_t *x, size_t n, struct __coll_me *e)
+{
+	uint32_t u[256];
+	size_t pos = 0;
+	while (__coll_me_next(c, &pos, e))
+		if (__coll_me_units(e, wide, u) == n && !memcmp(u, x, n * sizeof *x))
+			return 1;
+	return 0;
+}
+
+int __coll_valids(const struct __lcat *c, int wide, const uint32_t *x, size_t n)
+{
+	struct __coll_me e;
+	if (n == 1) return __coll_valid(c, wide, *x);
+	return n && me_find(c, wide, x, n, &e);
+}
+
+uint32_t __coll_seqs(const struct __lcat *c, int wide, const uint32_t *x, size_t n)
+{
+	struct __coll_me e;
+	if (n == 1) return __coll_seq(c, wide, *x);
+	return n && me_find(c, wide, x, n, &e) ? e.seqwc : ~0u;
 }
 
 /* The collation sequence of a character (wide: a code point; else a

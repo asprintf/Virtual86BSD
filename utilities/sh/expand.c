@@ -5,6 +5,7 @@
  */
 #include "sh.h"
 #include <dirent.h>
+#include <fnmatch.h>
 #include <pwd.h>
 
 int cmdsub_status_set, cmdsub_status;
@@ -715,175 +716,13 @@ static char *buf_literal(XBuf *b)
 /* pattern matching                                                   */
 /* ------------------------------------------------------------------ */
 
-static size_t getwc_at(const char *s, wchar_t *wc)
-{
-    mbstate_t st;
-    size_t k;
-    if (!*s) { *wc = 0; return 0; }
-    if ((unsigned char)*s < 0x80) { *wc = (unsigned char)*s; return 1; }
-    memset(&st, 0, sizeof st);
-    k = mbrtowc(wc, s, strlen(s), &st);
-    if (k == (size_t)-1 || k == (size_t)-2 || k == 0) {
-        *wc = (unsigned char)*s;
-        return 1;
-    }
-    return k;
-}
-
-static int wc_coll(wchar_t a, wchar_t b)
-{
-    wchar_t x[2] = { a, 0 }, y[2] = { b, 0 };
-    return wcscoll(x, y);
-}
-
-/*
- * Match a bracket expression at p (just after '['), against wc.
- * Returns the pointer after ']' or NULL if p does not start a valid
- * bracket expression.  *matched receives the result.
- */
-static const char *match_bracket(const char *p, wchar_t wc, int *matched, int pathname)
-{
-    int neg = 0, ok = 0, first = 1;
-    if (*p == '!' || *p == '^') {
-        neg = 1;
-        p++;
-    }
-    for (;;) {
-        wchar_t lo, hi;
-        size_t k;
-        if (!*p)
-            return NULL;
-        if (*p == ']' && !first)
-            break;
-        first = 0;
-        if (pathname && *p == '/')
-            return NULL;
-        if (p[0] == '[' && (p[1] == ':' || p[1] == '.' || p[1] == '=')) {
-            char d = p[1];
-            const char *q = p + 2, *e = q;
-            while (*e && !(e[0] == d && e[1] == ']'))
-                e++;
-            if (!*e)
-                return NULL;
-            if (d == ':') {
-                char cls[32];
-                size_t n = (size_t)(e - q);
-                if (n >= sizeof cls) n = sizeof cls - 1;
-                memcpy(cls, q, n);
-                cls[n] = 0;
-                {
-                    wctype_t t = wctype(cls);
-                    if (t && iswctype((wint_t)wc, t))
-                        ok = 1;
-                }
-                p = e + 2;
-                continue;
-            }
-            getwc_at(q, &lo);
-            p = e + 2;
-            goto range;
-        }
-        if (*p == '\\' && p[1])
-            p++;
-        k = getwc_at(p, &lo);
-        p += k;
-range:
-        if (p[0] == '-' && p[1] && p[1] != ']') {
-            p++;
-            if (p[0] == '[' && (p[1] == '.' || p[1] == '=')) {
-                char d = p[1];
-                const char *q = p + 2, *e = q;
-                while (*e && !(e[0] == d && e[1] == ']'))
-                    e++;
-                if (!*e)
-                    return NULL;
-                getwc_at(q, &hi);
-                p = e + 2;
-            } else {
-                if (*p == '\\' && p[1])
-                    p++;
-                p += getwc_at(p, &hi);
-            }
-            if (wc_coll(lo, wc) <= 0 && wc_coll(wc, hi) <= 0)
-                ok = 1;
-        } else if (lo == wc)
-            ok = 1;
-    }
-    *matched = ok ^ neg;
-    return p + 1;
-}
-
+/* The pattern matching notation (XCU 2.14) is the C library's fnmatch():
+ * patterns here are backslash-escaped, as fnmatch() takes them without
+ * FNM_NOESCAPE; bracket expressions with classes, equivalence classes
+ * and collating symbols (multi-character ones too) follow the locale. */
 static int pmatch(const char *pat, const char *s, int pathname, int period)
 {
-    const char *star_p = NULL, *star_s = NULL;
-    const char *start = s;
-    for (;;) {
-        if (!*pat) {
-            if (!*s)
-                return 1;
-            goto backtrack;
-        }
-        if (*pat == '*') {
-            if (period && s == start && *s == '.')
-                return 0;
-            while (*pat == '*')
-                pat++;
-            star_p = pat;
-            star_s = s;
-            continue;
-        }
-        if (!*s)
-            return 0;
-        {
-            wchar_t wc;
-            size_t sk = getwc_at(s, &wc);
-            if (*pat == '?') {
-                if (pathname && *s == '/') goto backtrack;
-                if (period && s == start && *s == '.') return 0;
-                pat++;
-                s += sk;
-                continue;
-            }
-            if (*pat == '[') {
-                int m = 0;
-                const char *np = match_bracket(pat + 1, wc, &m, pathname);
-                if (np) {
-                    if (period && s == start && *s == '.')
-                        return 0;
-                    if (!m || (pathname && *s == '/'))
-                        goto backtrack;
-                    pat = np;
-                    s += sk;
-                    continue;
-                }
-                /* not a bracket expression: literal '[' */
-            }
-            {
-                const char *pp = pat;
-                wchar_t pc;
-                size_t pk;
-                if (*pp == '\\' && pp[1])
-                    pp++;
-                pk = getwc_at(pp, &pc);
-                if (pc != wc)
-                    goto backtrack;
-                pat = pp + pk;
-                s += sk;
-                continue;
-            }
-        }
-backtrack:
-        if (!star_p || !*star_s)
-            return 0;
-        if (pathname && *star_s == '/')
-            return 0;
-        {
-            wchar_t wc;
-            star_s += getwc_at(star_s, &wc);
-        }
-        pat = star_p;
-        s = star_s;
-    }
+    return fnmatch(pat, s, (pathname ? FNM_PATHNAME : 0) | (period ? FNM_PERIOD : 0)) == 0;
 }
 
 int pattern_match(const char *pat, const char *s)

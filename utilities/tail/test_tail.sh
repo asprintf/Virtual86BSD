@@ -47,7 +47,7 @@ t 'from a pipe, from the start' "$(nums 99999 100000)" 0 sh -c "cat $T/big | $U 
 t 'bytes from a pipe' '00' 0 sh -c "cat $T/big | $U -c 3"
 t 'a huge count' '100000' 0 sh -c "cat $T/big | $U -n 999999999999 | wc -l | tr -d ' '"
 t 'a huge byte count' '588895' 0 sh -c "cat $T/big | $U -c 99999999999 | wc -c | tr -d ' '"
-t '+N from the current offset' '3' 0 sh -c "{ read x; $U -n +2; } < $T/s | head -1"
+t '+N from the current offset' '3' 0 sh -c "{ read x; $U -n +2; } < $T/s | head -n 1"
 t '-r' "$(nums 20 1)" 0 $U -r $T/s
 t '-r -n 3' '20
 19

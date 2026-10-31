@@ -72,9 +72,10 @@ t "SIGINT: as inherited" "True" 0 sh -c 'trap "" INT; "$1" 5 "$TLBIN" -e "print(
 # the process group
 t "the utility is in timeout's process group, timeout leads it" "True" 0 "$U" 5 "$TLBIN" -e 'print(getpgrp() == getppid() ? "True" : "False");'
 t "-f: no new process group" "True" 0 sh -c 'p=$("$TLBIN" -e "print(getpgrp());"); "$1" -f 5 "$TLBIN" -e "print(getpgrp() == int(argv[0]) ? \"True\" : \"False\");" "$p"' sh "$U"
-t "the descendants get the signal" "gone" 0 sh -c '"$1" 0.5 sh -c "sleep 5 & echo \$! > pid; wait"; sleep 1; case $(ps -o stat= -p $(cat pid)) in ""|Z*) echo gone;; *) kill $(cat pid);; esac' sh "$U"
-t "-s KILL: the descendants get it too" "gone" 0 sh -c '"$1" -s KILL 0.5 sh -c "sleep 5 & echo \$! > pid; wait"; sleep 1; case $(ps -o stat= -p $(cat pid)) in ""|Z*) echo gone;; *) kill $(cat pid);; esac' sh "$U"
-t "-f: only the utility gets the signal" "there" 0 sh -c '"$1" -f 0.5 sh -c "sleep 5 & echo \$! > pid; wait"; sleep 1; case $(ps -o stat= -p $(cat pid)) in ""|Z*) ;; *) kill $(cat pid); echo there;; esac' sh "$U"
+# (a process that is gone may still be a zombie: "<defunct>" in its arguments)
+t "the descendants get the signal" "gone" 0 sh -c '"$1" 0.5 sh -c "sleep 5 & echo \$! > pid; wait"; sleep 1; case $(ps -o args= -p $(cat pid)) in ""|*defunct*) echo gone;; *) kill $(cat pid);; esac' sh "$U"
+t "-s KILL: the descendants get it too" "gone" 0 sh -c '"$1" -s KILL 0.5 sh -c "sleep 5 & echo \$! > pid; wait"; sleep 1; case $(ps -o args= -p $(cat pid)) in ""|*defunct*) echo gone;; *) kill $(cat pid);; esac' sh "$U"
+t "-f: only the utility gets the signal" "there" 0 sh -c '"$1" -f 0.5 sh -c "sleep 5 & echo \$! > pid; wait"; sleep 1; case $(ps -o args= -p $(cat pid)) in ""|*defunct*) ;; *) kill $(cat pid); echo there;; esac' sh "$U"
 t "-f: the time limit" "" 124 fast "$U" -f 0.3 sleep 5
 # a stopped utility gets SIGCONT
 t "a stopped utility: SIGCONT follows" "" 124 fast "$U" 0.3 sh -c 'kill -s STOP $$; sleep 5'

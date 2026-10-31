@@ -3,6 +3,7 @@
 #include <limits.h>
 #include <stdint.h>
 #include <pthread.h>
+#include <sched.h>
 #include <string.h>
 #include "pthread_impl.h"
 #include "libc.h"
@@ -82,6 +83,10 @@ int pthread_attr_getschedparam(const pthread_attr_t *__RESTRICT a, struct sched_
 
 int pthread_attr_setschedparam(pthread_attr_t *__RESTRICT a, const struct sched_param *__RESTRICT p)
 {
+	/* the priority must suit the policy set (glibc likewise) */
+	int pol = (int)(a->_a_sched >> 8), lo = sched_get_priority_min(pol), hi = sched_get_priority_max(pol);
+	if (lo != -1 && (p->sched_priority < lo || p->sched_priority > hi))
+		return EINVAL;
 	a->_a_prio = p->sched_priority;
 	return 0;
 }

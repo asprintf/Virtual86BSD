@@ -1,6 +1,6 @@
 /*
  * dec.tl - decodes the output of uuencode on the standard input,
- * independently of uudecode (as Python's binascii and base64 read it)
+ * independently of uudecode (historical uuencode and RFC 4648 base64)
  *
  *     tl dec.tl < FILE
  */

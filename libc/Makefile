@@ -2,7 +2,8 @@
 #
 #   make                  build with gcc: build/gcc/lib/{libc.a,crt1.o,crti.o,crtn.o},
 #                         and libc.so (also the dynamic linker), Scrt1.o, rcrt1.o
-#   make CCNAME=c17       build with c17 (on PATH), which also assembles
+#   make CCNAME=c17       build with c17 (on PATH), which also assembles, and
+#                         links libc.so (c17 -G)
 #   make check            namespace and header checks, then the tests
 #   make sysroot          build/<cc>/sysroot (include/, lib/) for C17_LIBC=
 #   make install          into $(DESTDIR)$(PREFIX)/include and $(DESTDIR)$(PREFIX)/lib
@@ -28,7 +29,7 @@ all: # (the default target; its prerequisites follow the includes)
 include rules.mk
 include config/$(CCNAME).mk
 
-# SHARED (config/gcc.mk): libc.so, Scrt1.o (PIE), rcrt1.o (static PIE)
+# SHARED (config/*.mk): libc.so, Scrt1.o (PIE), rcrt1.o (static PIE)
 all: $(B)/lib/libc.a $(CRT) $(EMPTY) $(SHARED)
 
 $(B)/lib/libc.a: $(OBJS) $(STATIC_OBJS)

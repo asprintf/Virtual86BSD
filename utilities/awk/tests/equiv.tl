@@ -16,7 +16,7 @@
  * parse is printed (AWK_AST_DUMP) instead of run.  Both binaries should be
  * called "awk", since messages start with the name.  The random programs
  * come from tl's random numbers: a seed does not give the programs that
- * equiv.py gave.  AWK_TEST_LC is the locale (C by default), AWK_GRID_FROM
+ * the first version gave.  AWK_TEST_LC is the locale (C by default), AWK_GRID_FROM
  * the first template of the grid, AWK_TEST_LOCPATH the LOCPATH of the
  * Latin-1 locale of the edge cases (they are not run in it without).
  */

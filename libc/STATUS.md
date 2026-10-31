@@ -63,7 +63,9 @@ Known differences from glibc that the differential tests exclude (all
 cases where this library follows POSIX or glibc is inconsistent): TZ
 string precedence, DST rules before 1970 for TZ strings, `tzname` taken
 from the current rules, `%C` for years below 1000, `strftime` `+` flag,
-`mktime` after 2038 in some zones, the unseeded `rand48` state.
+`mktime` after 2038 in some zones, the unseeded `rand48` state,
+`strptime` with `%E`/`%O` in a locale without eras or alternative digits
+(the plain conversions here, as POSIX says; glibc fails).
 
 ## Stage 4: directories, users, patterns, processes
 
@@ -78,7 +80,7 @@ from the current rules, `%C` for years below 1000, `strftime` `+` flag,
 | `<glob.h>` | done | |
 | `<wordexp.h>` | done | the expansions are done by `/bin/sh` |
 | `<ftw.h>` | done | `nftw` (POSIX.1-2024 dropped `ftw`); at most three descriptors at a time |
-| `<spawn.h>` | done except the `[PS]` scheduling attributes | they come with `<sched.h>` |
+| `<spawn.h>` | done | incl. the `[PS]` scheduling attributes (`POSIX_SPAWN_SETSCHEDULER`, `POSIX_SPAWN_SETSCHEDPARAM`): applied in the child before the file actions; an error is returned as `sched_setscheduler`/`sched_setparam` would |
 | `<setjmp.h>` | done | |
 | `<libgen.h>` | done | |
 
@@ -136,6 +138,89 @@ expressions (glibc's C.utf8: an error); `strfmon` with `+` fails when both
 signs are empty, as POSIX requires (in the POSIX locale); C.UTF-8 has no
 `combining` class and no transliterations.
 
+## Stage 16: option groups, and where Linux departs from POSIX
+
+* `_XOPEN_CRYPT`, `_XOPEN_REALTIME` and `_XOPEN_REALTIME_THREADS` are 1
+  (in `<unistd.h>` and from sysconf): crypt/encrypt/setkey were done, every
+  option the Realtime group requires is (prioritized I/O is optional for
+  it), and the mutex protocols completed the Realtime Threads group.
+* `nice()` and `setpriority(PRIO_PROCESS, 0 or getpid(), ...)` set the
+  nice value of the process, as POSIX has it: Linux keeps one per thread,
+  so the library sets it in every thread, under the thread-list lock
+  (`__setnice`, beside `__setxid`).  For another process the kernel still
+  changes only its first thread.  Test in `s_thread`.
+* `pwrite()` writes at its offset also when the descriptor has `O_APPEND`
+  (POSIX), by `pwritev2()` with `RWF_NOAPPEND` (Linux 6.9 and later;
+  before that the kernel appends).  `aio_write()` still appends with
+  `O_APPEND`, as POSIX requires of it.
+* `O_EXEC` and `O_SEARCH` are Linux's `O_PATH`, which opens without
+  looking at permissions; `open()` now checks execute (search) permission
+  by the effective IDs on the file it opened (`faccessat2`, Linux 5.8) and
+  fails with `EACCES`.  Tests in `s_files`.
+
+## Stage 15: multi-character collating elements
+
+A locale's `collating-element` entries (`<ch> from "<c><h>"`) are read
+from `LC_COLLATE` (glibc's element 15: each element's bytes, wide
+characters and collation sequence), and bracket expressions of regcomp()
+and fnmatch() match them:
+
+* `[[.ch.]]` matches "ch"; a name that is not a collating element of the
+  locale is `REG_ECOLLATE` (fnmatch: the `[` is an ordinary character).
+* `[[=x=]]` also matches the elements of x's equivalence class (the same
+  first-level weights), and `[[=ch=]]` is valid when "ch" is an element.
+* Range expressions and non-matching lists match single characters only;
+  `[.ch.]` may be a range end point (its collation sequence).
+* An element is an alternative to the characters of the set, so the
+  longest match may take either: `[[.ch.]c]h` matches both "ch" and "chh";
+  fnmatch tries both too.
+
+Where POSIX leaves this open (ranges, non-matching lists), glibc's regex
+matches elements as well, by rules of its own: in UTF-8 locales `[^a]`
+matches "ch" but `[^c]` does not, in single-byte locales neither does.
+glibc's own locales define some 870 elements (decomposed letters such as
+"l·"), so with that `[^a]` and `[a-z]` would match two-character
+sequences in grep.  Where POSIX is definite, glibc departs: `[[=ch=]]`
+never matches, `[[.ch.]]` with `REG_ICASE` is `REG_ECOLLATE`, and its
+fnmatch does not backtrack (`[[.ch.]c]h` does not match "ch") and lets
+`[[.ch.]-d]` match "a".  `tests/s_collsym.c` (self-checking) covers
+both functions in xx_XX (UTF-8 and ISO-8859-1), whose `collate.def` has
+the contraction; the differential tests still agree with glibc.
+Single-byte locales with collation rules now take range bounds from the
+wide collation sequence, as glibc (elements have no other).
+
+## Stage 14: the Open POSIX Test Suite
+
+The conformance tests of the Open POSIX Test Suite (LTP's
+`testcases/open_posix_testsuite`, 1873 tests) were built against this
+library (static, gcc) and run; every test that did not pass was run
+against glibc as well.
+
+* 118 do not build (glibc: 28).  The 96 more are all for interfaces that
+  POSIX.1-2024 removed (`gettimeofday`, `sighold`/`sigset`/`sigpause`/`sigignore`/`sigrelse`,
+  `siginterrupt`, `setitimer`, `ctime_r`/`asctime_r`, `setpgrp`,
+  `<ucontext.h>`) or that are not POSIX (`cpu_set_t`, `RLIMIT_MEMLOCK`,
+  `<sys/param.h>`, `<features.h>`, `PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP`).
+* Of the 1755 that build, 1650 passed at first.  17 failed here and
+  passed with glibc; fixed since:
+  * `aio_fsync` rejected `aio_reqprio` (which does not apply to it);
+  * an invalid descriptor is now reported through `aio_error()` (`EBADF`),
+    as glibc does, rather than by `aio_read`/`aio_write`/`lio_listio` at
+    once: one bad request in a `LIO_NOWAIT` list no longer fails the call;
+  * a woken waiter touched the condition variable again, so destroying
+    one right after `pthread_cond_broadcast()` (which POSIX allows) could
+    hang; process-shared ones are now waited for by `pthread_cond_destroy()`;
+  * `pthread_rwlock_wrlock`/`rdlock` by the thread holding the write lock:
+    `EDEADLK` (was a deadlock);
+  * `pthread_attr_setschedparam`: `EINVAL` for a priority outside the
+    policy's range;
+  * `sem_unlink`, `shm_unlink`: `EACCES`, not `EPERM` (the sticky `/dev/shm`).
+* The other 8 are not bugs: `aio_cancel` cancelling a request in progress
+  (implementation-defined; musl too), `_SC_PRIORITIZED_IO` unsupported
+  (the tests report UNTESTED), and `pthread_cancel`/`pthread_detach`/`pthread_join`
+  on a thread already joined (undefined behaviour since POSIX.1-2008 TC1;
+  glibc happens to keep the memory).
+
 ## Stage 13: the shared library and the dynamic linker
 
 `make` (gcc) now also builds `libc.so`, `Scrt1.o` (PIE start file) and
@@ -183,9 +268,24 @@ sources of one name.  `make install` (PREFIX, DESTDIR) is new.
 Limits: `libc.so` exports its internal (reserved) names too; malloc
 cannot be replaced by the program (calls inside libc.so bind to libc.so's
 own); no lazy binding; no symbol versioning (an object built against
-glibc does not load: it needs libc.so.6); text relocations are refused;
-c17 cannot build `libc.so` (no `-G`, no position-independent code), so
-the shared library needs gcc and binutils' ld.
+glibc does not load: it needs libc.so.6); text relocations are refused.
+
+Later: c17 builds `libc.so` too (`make CCNAME=c17`).  c17 gained `-G`:
+position-independent code (data and function addresses through the GOT,
+calls through the PLT, except symbols of hidden visibility; general-
+dynamic TLS, or initial-exec with `tls_model`), and shared libraries
+from its link editor: functions bind to the library itself (as ld's
+`-Bsymbolic-functions`), variables and function addresses stay
+preemptible (a program's copy relocations and canonical PLT entries),
+c17's run-time support is linked in hidden, an `ENTRY(_dlstart)` line in
+`tools/libc.so.lds` gives the entry point.  All objects are
+position-independent with either compiler, for libc.a and libc.so
+alike.  The suite now runs in nine ways: static (gcc, c17, both crossed),
+dynamic (gcc and c17 programs, each on the libc.so of either compiler),
+static PIE; `tests/dl/` is built by the compiler under test.
+`rcrt1.s` uses named local labels (c17's assembler takes one-digit
+numeric ones only); `dlsym` needs `__builtin_return_address`, which c17
+now has.
 
 ## Stage 12: multibyte locale codesets
 
@@ -204,6 +304,7 @@ has `cs == CS_MB` and the codec in `mbkind`.
 | `swprintf` | done | the format and the output through UTF-8: every wide character passes, as in glibc (before: only those of the locale's codeset); the locale's wide decimal point and separator |
 | wide scanf | done | an engine of its own: characters, not bytes, for widths, `%c`, `%[` (wide scan sets) and `%n` |
 | `strftime` | done | eras (`%EC`, `%Ey`, `%EY`, `%Ec`, `%Ex`, `%EX`) and alternative digits (`%O`), as glibc |
+| `strptime` | done | eras and alternative digits too (src/time/era.c, shared with `strftime`): `%EY` tries each era's own format with that era fixed (so `平成元年`), `%EC` the longest era name, `%Ey` up to 4 digits counted in the era's direction and checked against its length, `%O` the longest alternative digits or else ASCII digits; identical to glibc for 588 round trips in ja_JP (3 codesets) and th_TH. Without eras or alternative digits they are the plain conversions, as POSIX says (glibc fails there: `%Ey` of "68", `%Od %Om`) |
 | `strfmon` | done | the placement of symbol, sign and separators as glibc (stdlib/strfmon_l.c), incl. the alignment with `#` |
 | `strcoll`, `wcscoll` | done | glibc's algorithm (see stage 11) |
 
@@ -222,7 +323,7 @@ digits for years before 1000 (glibc: one, `"3"`).
 | Interface | State | Notes |
 |---|---|---|
 | `strcoll`, `strxfrm`, `wcscoll`, `wcsxfrm` and the `_l` forms | done | by the locale's `LC_COLLATE` file (glibc's format, as glibc's and the POSIX utilities' localedef write it): contractions (`ch`), expansions (`ß` as `ss`), ignored characters, any number of levels, `backward`, `position`; results identical to glibc's in every case of `tests/t_collate.c` (strxfrm bytes and wide units, strcoll signs, orders); C, POSIX and C.UTF-8: code point order |
-| regex, `fnmatch` | partial | equivalence classes `[=x=]` by the first-level weights, as glibc; ranges by the collation sequence in a locale with rules (as glibc, stage 12); `[.x.]` of more than one character is not supported |
+| regex, `fnmatch` | done | equivalence classes `[=x=]` by the first-level weights, as glibc; ranges by the collation sequence in a locale with rules (as glibc, stage 12); multi-character collating elements (`[.ch.]`, stage 15) |
 
 `src/locale/collate.c`: the string is cut into collating elements by the
 multibyte (or, for wide strings, the 3-level) table; each element's
@@ -317,7 +418,7 @@ DNS server of the test's own on 127.0.0.1:53 (tests/s_net.c).
 
 | Header | State | Notes |
 |---|---|---|
-| `<pthread.h>` | done | all of POSIX.1-2024 but priority inheritance/protection (`PTHREAD_PRIO_INHERIT`/`PROTECT`: `ENOTSUP`, as `<unistd.h>` says); robust and process-shared mutexes, condition variables, rwlocks and barriers; the `clock` variants; `pthread_atfork` |
+| `<pthread.h>` | done | all of POSIX.1-2024: robust and process-shared mutexes, also with priority inheritance or protection (see below), condition variables, rwlocks and barriers; the `clock` variants; `pthread_atfork` |
 | `<semaphore.h>` | done | unnamed (also process-shared) and named (`/dev/shm/sem.NAME`; reopening returns the same address); `sem_clockwait` |
 | `<sched.h>` | done | `sched_setscheduler` returns the former policy (POSIX; Linux and glibc return 0) |
 | `<threads.h>` | done | C11 threads on the same implementation; `thrd_t` is `pthread_t` |
@@ -341,6 +442,27 @@ leaves the child with one thread. The public `pthread_` names of objects
 the C11 functions use are weak aliases, so `<threads.h>` stays within
 the ISO C namespace. Default stack 2 MiB (reserved lazily), guard one
 page.
+
+Mutex protocols (after stage 13).  `PTHREAD_PRIO_INHERIT` uses the
+kernel's PI futexes, whose lock word is the one above: uncontended a
+compare-and-swap, contended `FUTEX_LOCK_PI` (`FUTEX_LOCK_PI2` for
+`CLOCK_MONOTONIC` timeouts), which queues the waiters by priority and
+lends the owner the highest of theirs.  Robust PI mutexes are marked in
+the robust list (bit 0 of the pointer), so the kernel hands them to a
+waiter when the owner dies; since the kernel owns the word of a
+contended PI mutex, "not recoverable" is a flag in the mutex.
+`PTHREAD_PRIO_PROTECT` keeps the ordinary word; the thread counts the
+ceilings it holds and, if it is `SCHED_FIFO` or `SCHED_RR`, runs at the
+highest of them while above its own priority (a ceiling below its own
+priority: `EINVAL`).  `SCHED_OTHER` threads have no priorities on Linux,
+so they are not raised; their locks succeed (glibc's fail with
+`EINVAL`).  `pthread_mutex_setprioceiling` takes the mutex without its
+protocol; a waiter that gets the mutex after a change takes on the new
+ceiling.  Tested in `tests/s_prio.c`, which reads the effective priority
+from `/proc` (boosts by inheritance and by ceilings; skipped where
+real-time threads are not allowed).  Found on the way: `trylock` of an
+error-checking or robust mutex by its owner returned `EDEADLK`; POSIX
+says `EBUSY` ("including the current thread").
 
 Tested by tests/s_thread.c (self-checking): creation, detaching,
 stacks, TLS, errno, all mutex kinds incl. robust ones whose owner thread
@@ -394,13 +516,32 @@ first in the search.
 
 All headers of POSIX.1-2024 exist, and the POSIX utilities and c17 run on this library (stage 10).
 
-Done through stage 13 (shared library, dynamic linker, static PIE).  Possible next steps: symbol visibility and versioning for libc.so; c17 producing position-independent code and shared objects (`-G`), so that the whole system builds without gcc; bcrypt/yescrypt; strptime's `%E`/`%O`.
+Done through stage 16 (shared library, dynamic linker, static PIE, libc.so built by c17 as well; the Open POSIX Test Suite; multi-character collating elements; option groups; the nice value, pwrite and O_EXEC/O_SEARCH made to conform on Linux).  Possible next steps: symbol visibility and versioning for libc.so; bcrypt/yescrypt.
 
 ## Open items
 
 * libc.so exports its internal (reserved) names; malloc is not interposable (calls inside libc.so bind to it).
-* libc.so is built by gcc only (c17 has no `-G` and no PIC).
 * `crypt`: bcrypt and yescrypt are missing.
-* regex and fnmatch: no multi-character `[.x.]`.
-* strptime: no `%E` (era) and `%O` (alternative digits) input.
+* Priority ceilings: a thread that changes its own priority while holding `PTHREAD_PRIO_PROTECT` mutexes is not re-raised until it takes or releases one, and `pthread_getschedparam` reports the raised priority.
 * A locale with a charmap of its own: bytes 0x80-0xff convert to wide characters as in the POSIX locale (the file does not say which characters they are), so wide case mappings of them do not apply.
+
+Where Linux itself stands between this library and POSIX (what a kernel
+of Shall's own would settle):
+
+* `O_CLOFORK`/`FD_CLOFORK` are emulated (a table the library keeps):
+  not atomic against a `fork()` in another thread between `open()` and the
+  table entry, and invisible to descriptors passed by other means.
+* Credentials and the nice value are kept per thread by Linux; set*id and
+  `nice()`/`setpriority()` of the process itself reach every thread through
+  the library (signals for set*id, so not atomically), but `setpriority()`
+  and the `sched_*` functions on another process change only one of its
+  threads.
+* `pwrite()` at its offset with `O_APPEND` needs Linux 6.9, the
+  `O_EXEC`/`O_SEARCH` permission check Linux 5.8 (`faccessat2`).
+* Access times: Linux's default mount option `relatime` updates them less
+  often than POSIX asks (`strictatime` does as POSIX says).
+* Options not offered: `_POSIX_SPORADIC_SERVER` and
+  `_POSIX_THREAD_SPORADIC_SERVER` (no such scheduling policy in Linux),
+  `_POSIX_TYPED_MEMORY_OBJECTS` (no such memory in Linux),
+  `_POSIX_PRIORITIZED_IO` (possible in the library, with the aio threads'
+  priorities), the 32-bit programming environments, and `fort77`.

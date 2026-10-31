@@ -20,7 +20,7 @@ if [ ! -d "$loc" ] && command -v localedef >/dev/null 2>&1; then
 	mkdir -p "$loc"
 	for spec in nl_NL:UTF-8 de_DE:ISO-8859-1 tr_TR:UTF-8 ru_RU:KOI8-R \
 	    ja_JP:EUC-JP ja_JP:SHIFT_JIS ko_KR:EUC-KR zh_CN:GB18030 zh_CN:GBK \
-	    zh_CN:GB2312 zh_TW:BIG5; do
+	    zh_CN:GB2312 zh_TW:BIG5 ja_JP:UTF-8 th_TH:UTF-8; do
 		l=${spec%%:*} c=${spec#*:}
 		# (SHIFT_JIS gives warnings, and status 1, and a usable locale)
 		localedef -f "$c" -i "$l" "$PWD/$loc/$l.$c" >/dev/null 2>&1 ||
@@ -34,16 +34,22 @@ fi
 TEST_LOCALES=$(ls "$loc" 2>/dev/null | tr '\n' ' ')
 LOCPATH=$PWD/$loc
 export TEST_LOCALES LOCPATH
-# linked dynamically: shared objects for s_dlopen (made by gcc: c17 makes none)
+# linked dynamically: shared objects for s_dlopen, by the same compiler
 unset TEST_DL_DIR
 if [ "$LIBC_LINK" = dynamic ]; then
 	mkdir -p "$out/dl"
 	for s in dl/*.c; do
 		o=$(basename "$s" .c)
-		extra=
-		[ "$o" = dlb ] && extra="-L$out/dl -ldla -Wl,-rpath,\$ORIGIN"
-		LIBC_LINK= ../tools/libc-cc gcc -shared -fPIC -O2 -w -o "$out/dl/lib$o.so" "$s" $extra ||
-			echo "$s: build failed"
+		case $ccname in
+		c17*)
+			extra=
+			[ "$o" = dlb ] && extra="-L $out/dl -l dla -R \$ORIGIN"
+			$cc -G -o "$out/dl/lib$o.so" "$s" $extra;;
+		*)
+			extra=
+			[ "$o" = dlb ] && extra="-L$out/dl -ldla -Wl,-rpath,\$ORIGIN"
+			LIBC_LINK= $cc -shared -fPIC -O2 -w -o "$out/dl/lib$o.so" "$s" $extra;;
+		esac || echo "$s: build failed"
 	done
 	TEST_DL_DIR=$PWD/$out/dl
 	export TEST_DL_DIR

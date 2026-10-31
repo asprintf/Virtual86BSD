@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <string.h>
+#include <sys/resource.h>
 #include "pthread_impl.h"
 #include "libc.h"
 #include "syscall.h"
@@ -56,4 +57,23 @@ long __setxid(long nr, long a, long b, long c)
 	}
 	__tl_unlock();
 	return __syscall_ret((unsigned long)r);
+}
+
+/* The nice value of the process (setpriority PRIO_PROCESS of itself,
+ * nice()): Linux keeps one per thread, POSIX one per process, so every
+ * thread gets it.  The calling thread first, for the error; the others
+ * cannot fail then (all share the credentials and limits). */
+long __setnice(int prio)
+{
+	struct __pthread *self = __pthread_self(), *t;
+	long r;
+	if (!__libc.threads_minus_1)
+		return __syscall3(SYS_setpriority, PRIO_PROCESS, self->tid, prio);
+	__tl_lock();
+	r = __syscall3(SYS_setpriority, PRIO_PROCESS, self->tid, prio);
+	if (r >= 0)
+		for (t = self->next; t != self; t = t->next)
+			__syscall3(SYS_setpriority, PRIO_PROCESS, t->tid, prio);
+	__tl_unlock();
+	return r;
 }

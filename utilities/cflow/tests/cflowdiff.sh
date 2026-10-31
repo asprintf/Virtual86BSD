@@ -45,11 +45,11 @@ comm -12 "$T/un" "$T/gn" > "$T/both"
 keep() { awk -v n="$2" 'NR == FNR { k[$1] = 1; next } ($1 in k) && (n == 1 || ($2 in k))' "$T/both" "$1" | sort -u; }
 fail=0
 keep "$T/ud" 1 > "$T/a"; keep "$T/gd" 1 > "$T/b"
-cmp -s "$T/a" "$T/b" || { fail=1; echo "FAIL definitions"; diff "$T/a" "$T/b" | head -10; }
+cmp -s "$T/a" "$T/b" || { fail=1; echo "FAIL definitions"; diff "$T/a" "$T/b" | head -n 10; }
 keep "$T/ue" 2 > "$T/a"; keep "$T/ge" 2 > "$T/b"
 # calls GNU cflow finds and this one does not
 comm -13 "$T/a" "$T/b" > "$T/c"
-[ -s "$T/c" ] && { fail=1; echo "FAIL calls only GNU cflow finds:"; head -10 "$T/c"; }
+[ -s "$T/c" ] && { fail=1; echo "FAIL calls only GNU cflow finds:"; head -n 10 "$T/c"; }
 extra=$(comm -23 "$T/a" "$T/b" | wc -l | tr -d ' ')
 echo "cflowdiff: $(wc -l < "$T/both" | tr -d ' ') functions, $(wc -l < "$T/b" | tr -d ' ') calls: $([ $fail = 0 ] && echo the same || echo different) ($extra more found here)"
 [ $fail = 0 ]

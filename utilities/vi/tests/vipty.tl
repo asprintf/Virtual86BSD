@@ -135,8 +135,7 @@ func unlines(l) {
     return s;
 }
 
-/* bytes as the characters of ISO 8859-1, in UTF-8 (as Python's latin-1
-   decoding gives them) */
+/* bytes as the characters of ISO 8859-1, in UTF-8 (byte n is U+00nn) */
 func latin1(s) {
     if (!match(s, "[\x80-\xff]"))
         return s;

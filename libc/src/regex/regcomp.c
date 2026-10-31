@@ -110,112 +110,6 @@ static const struct { const char *name; int (*f)(int); } classes[] = {
 	{ "punct", ispunct }, { "space", isspace }, { "upper", isupper }, { "xdigit", isxdigit },
 };
 
-/* A collating element or equivalence class "[.x.]" / "[=x=]" at s (after
- * the "[."): one character in the POSIX locale. Returns it, or -1. */
-static int collelem(P *p, int d)
-{
-	const unsigned char *s = p->s;
-	int c;
-	if (!s[0]) { p->err = REG_EBRACK; return -1; }
-	c = s[0];
-	if (s[1] != d || s[2] != ']') {
-		const unsigned char *e = s;
-		while (*e && !(e[0] == d && e[1] == ']')) e++;
-		p->err = *e ? REG_ECOLLATE : REG_EBRACK;
-		return -1;
-	}
-	p->s = s + 3;
-	return c;
-}
-
-static struct re_node *bracket(P *p)
-{
-	unsigned char m[32];
-	int neg = 0, first = 1, c, d, k, i;
-	struct re_node *n;
-	memset(m, 0, sizeof m);
-	if (*p->s == '^') { neg = 1; p->s++; }
-	for (;;) {
-		const unsigned char *s = p->s;
-		if (!*s) { p->err = REG_EBRACK; return 0; }
-		if (*s == ']' && !first) { p->s++; break; }
-		first = 0;
-		if (s[0] == '[' && s[1] == ':') {
-			const unsigned char *e = s + 2;
-			size_t l;
-			while (*e && !(e[0] == ':' && e[1] == ']')) e++;
-			if (!*e) { p->err = REG_EBRACK; return 0; }
-			l = (size_t)(e - (s + 2));
-			for (i = 0; i < (int)(sizeof classes / sizeof *classes); i++)
-				if (strlen(classes[i].name) == l && !memcmp(classes[i].name, s + 2, l)) break;
-			if (i == (int)(sizeof classes / sizeof *classes)) { p->err = REG_ECTYPE; return 0; }
-			for (c = 0; c < 256; c++) if (classes[i].f(c)) setbit(m, c);
-			if ((p->flags & REG_ICASE) && (classes[i].f == isupper || classes[i].f == islower))
-				for (c = 0; c < 256; c++) if (isalpha(c)) setbit(m, c);
-			p->s = e + 2;
-			if (p->s[0] == '-' && p->s[1] != ']' && p->s[1]) { p->err = REG_ERANGE; return 0; }
-			continue;
-		}
-		if (s[0] == '[' && (s[1] == '.' || s[1] == '=')) {
-			int eq = s[1] == '=';
-			p->s = s + 2;
-			if ((c = collelem(p, s[1])) < 0) return 0;
-			if (eq) {
-				/* the characters of its equivalence class (LC_COLLATE) */
-				const struct __lcat *co = CURRENT_LOCALE->cat[LC_COLLATE];
-				if (!__coll_valid(co, 0, (uint32_t)c)) { p->err = REG_ECOLLATE; return 0; }
-				for (k = 0; k < 256; k++) if (__coll_equiv(co, 0, (uint32_t)c, (uint32_t)k)) setbit(m, k);
-				continue;
-			}
-		} else {
-			c = *s;
-			p->s = s + 1;
-		}
-		/* range? */
-		if (p->s[0] == '-' && p->s[1] && p->s[1] != ']') {
-			s = p->s + 1;
-			if (s[0] == '[' && s[1] == '.') {
-				p->s = s + 2;
-				if ((d = collelem(p, '.')) < 0) return 0;
-			} else if (s[0] == '[' && (s[1] == '=' || s[1] == ':')) {
-				p->err = REG_ERANGE;
-				return 0;
-			} else {
-				d = *s;
-				p->s = s + 1;
-			}
-			{
-				/* in a locale with collation rules, by the collation sequence
-				 * (as glibc); else by the bytes */
-				const struct __lcat *co = CURRENT_LOCALE->cat[LC_COLLATE];
-				if (co->nrules && co->collseqmb) {
-					uint32_t sc = __coll_seq(co, 0, (uint32_t)c), sd = __coll_seq(co, 0, (uint32_t)d), sk;
-					if (sc > sd) { p->err = REG_ERANGE; return 0; }
-					for (k = 0; k < 256; k++)
-						if ((sk = __coll_seq(co, 0, (uint32_t)k)) >= sc && sk <= sd) setbit(m, k);
-				} else {
-					if (d < c) { p->err = REG_ERANGE; return 0; }
-					for (k = c; k <= d; k++) setbit(m, k);
-				}
-			}
-		} else
-			setbit(m, c);
-	}
-	if (p->flags & REG_ICASE)
-		for (c = 0; c < 256; c++)
-			if (m[c >> 3] & (1 << (c & 7))) { setbit(m, tolower(c)); setbit(m, toupper(c)); }
-	if (neg) {
-		for (i = 0; i < 32; i++) m[i] = (unsigned char)~m[i];
-		if (p->flags & REG_NEWLINE) m['\n' >> 3] &= (unsigned char)~(1 << ('\n' & 7));
-	}
-	if ((k = newset(p)) < 0) return 0;
-	memcpy(p->g->sets[k], m, 32);
-	if (!(n = mk(p, &p->pa, N_SET, 0))) return 0;
-	n->val = k;
-	return n;
-}
-
-
 /* ---- UTF-8 locales: characters as byte sequences ----
  *
  * The matcher works on bytes. In a UTF-8 locale a character of the
@@ -481,44 +375,259 @@ static struct re_node *u8any(P *p)
 	return n;
 }
 
-/* one character of a bracket expression: a multibyte character, or a
- * collating element / equivalence class of one character */
-static int u8elem(P *p, uint32_t *c)
+/* ---- bracket expressions ----
+ *
+ * A bracket expression matches one character of a set, or one of the
+ * locale's multi-character collating elements ("ch"): those named by
+ * [.ch.] and those of an equivalence class [=x=] (the same first-level
+ * weights; glibc's regex never matches these).  Range expressions and
+ * non-matching lists match single characters only: POSIX leaves both
+ * open, and glibc's locales define hundreds of elements (decomposed
+ * letters), which "[^a]" or "[a-z]" would otherwise match as well
+ * (glibc's regex does so, by rules of its own).  An element becomes an
+ * alternative to the set: "[[.ch.]a]" is "(ch|[a])" as far as
+ * matching goes, so the longest match may take either. */
+
+typedef struct {
+	const struct __lcat *co;
+	int wide;                   /* units: code points (UTF-8 patterns) or bytes */
+	size_t n;                   /* the multi-character elements of the locale */
+	unsigned char *in;          /* those the bracket expression matches */
+} ME;
+
+static void me_init(ME *m, int wide)
 {
-	const unsigned char *s = p->s;
-	wchar_t wc;
-	mbstate_t st = { { 0, 0 } };
-	size_t l;
-	if (s[0] == '[' && (s[1] == '.' || s[1] == '=')) {
-		int d = s[1];
-		const unsigned char *e = s + 2;
-		while (*e && !(e[0] == d && e[1] == ']')) e++;
-		if (!*e) { p->err = REG_EBRACK; return -1; }
-		l = __mbrtowc_l(&wc, (const char *)s + 2, (size_t)(e - s - 2), &st, &__c_utf8_ctype);
-		if (l == (size_t)-1 || l == (size_t)-2 || (l && (size_t)(e - s - 2) != l) || e == s + 2) {
-			p->err = REG_ECOLLATE;
-			return -1;
-		}
-		*c = (uint32_t)wc;
-		p->s = e + 2;
-		return 0;
+	m->co = CURRENT_LOCALE->cat[LC_COLLATE];
+	m->wide = wide;
+	m->n = 0;
+	m->in = 0;
+}
+
+/* the elements equal to x[0..n) (how 0), of its equivalence class (1) */
+static int me_mark(P *p, ME *m, int how, const uint32_t *x, size_t n)
+{
+	struct __coll_me e;
+	uint32_t u[256];
+	size_t pos = 0, i, nu;
+	if (!m->in) {
+		/* the table of elements, made when first needed */
+		while (__coll_me_next(m->co, &pos, &e)) m->n++;
+		if (!m->n) return 0;
+		if (!(m->in = calloc(m->n, 1))) { p->err = REG_ESPACE; return -1; }
+		pos = 0;
 	}
-	l = __mbrtowc_l(&wc, (const char *)s, 4, &st, &__c_utf8_ctype);
-	if (l == (size_t)-1 || l == (size_t)-2 || !l) { *c = *s; p->s = s + 1; return 0; }
-	*c = (uint32_t)wc;
-	p->s = s + l;
+	for (i = 0; __coll_me_next(m->co, &pos, &e); i++) {
+		nu = __coll_me_units(&e, m->wide, u);
+		if (how ? __coll_equivs(m->co, m->wide, x, n, u, nu)
+		        : nu == n && !memcmp(u, x, n * sizeof *x))
+			m->in[i] = 1;
+	}
 	return 0;
 }
 
+/* one code point of a UTF-8 pattern as a node (with its case variants) */
+static struct re_node *u8cp(P *p, uint32_t c)
+{
+	WS w = { 0 };
+	struct re_node *n = 0;
+	if (!ws_add(p, &w, c, c) && (!(p->flags & REG_ICASE) || !ws_fold(p, &w)))
+		n = u8node(p, &w);
+	free(w.r);
+	return n;
+}
+
+/* the bracket expression: set, or (set | element | ...) */
+static struct re_node *me_finish(P *p, ME *m, int neg, struct re_node *set)
+{
+	struct __coll_me e;
+	struct re_node *n = 0, *s;
+	uint32_t u[256];
+	size_t pos = 0, i, j, nu, k = 0;
+	if (!m->in || neg) goto out;
+	for (i = 0; i < m->n; i++)
+		k += m->in[i];
+	if (!set || !k) goto out;
+	if (!(n = mk(p, &p->pa, N_ALT, (int)k + 1))) goto out;
+	n->kid[0] = set;
+	k = 1;
+	for (i = 0; __coll_me_next(m->co, &pos, &e); i++) {
+		if (!m->in[i]) continue;
+		nu = __coll_me_units(&e, m->wide, u);
+		if (!(s = mk(p, &p->pa, N_CAT, (int)nu))) { n = 0; goto out; }
+		for (j = 0; j < nu; j++) {
+			if (!(s->kid[j] = m->wide ? u8cp(p, u[j]) : lit(p, (int)u[j]))) { n = 0; goto out; }
+		}
+		if (!(n->kid[k++] = s)) { n = 0; goto out; }
+	}
+out:
+	free(m->in);
+	m->in = 0;
+	return k ? n : set;
+}
+
+/* "[.name.]" or "[=name=]" at p->s: its units (code points of a UTF-8
+ * pattern, else bytes) into u[256] */
+static int collname(P *p, int wide, uint32_t *u, size_t *n)
+{
+	const unsigned char *s = p->s, *e = s + 2;
+	int d = s[1];
+	while (*e && !(e[0] == d && e[1] == ']')) e++;
+	if (!*e) { p->err = REG_EBRACK; return -1; }
+	*n = 0;
+	for (s += 2; s < e; ) {
+		if (*n == 255) { p->err = REG_ECOLLATE; return -1; }
+		if (wide) {
+			wchar_t wc;
+			mbstate_t st = { { 0, 0 } };
+			size_t l = __mbrtowc_l(&wc, (const char *)s, (size_t)(e - s), &st, &__c_utf8_ctype);
+			if (l == (size_t)-1 || l == (size_t)-2 || !l) { p->err = REG_ECOLLATE; return -1; }
+			u[(*n)++] = (uint32_t)wc;
+			s += l;
+		} else
+			u[(*n)++] = *s++;
+	}
+	if (!*n) { p->err = REG_ECOLLATE; return -1; }
+	p->s = e + 2;
+	return 0;
+}
+
+/* a range end point or a single item: a character, or a collating symbol
+ * (one character, or a multi-character collating element of the locale) */
+static int brelem(P *p, ME *m, uint32_t *u, size_t *n)
+{
+	const unsigned char *s = p->s;
+	if (s[0] == '[' && s[1] == '.') {
+		if (collname(p, m->wide, u, n)) return -1;
+		if (*n > 1 && !__coll_valids(m->co, m->wide, u, *n)) { p->err = REG_ECOLLATE; return -1; }
+		return 0;
+	}
+	*n = 1;
+	if (m->wide) {
+		wchar_t wc;
+		mbstate_t st = { { 0, 0 } };
+		size_t l = __mbrtowc_l(&wc, (const char *)s, 4, &st, &__c_utf8_ctype);
+		if (l == (size_t)-1 || l == (size_t)-2 || !l) { *u = *s; p->s = s + 1; return 0; }
+		*u = (uint32_t)wc;
+		p->s = s + l;
+	} else {
+		*u = *s;
+		p->s = s + 1;
+	}
+	return 0;
+}
+
+/* the collation sequence of a byte (glibc: of its wide character, as for
+ * the multi-character elements, which have no other) */
+static uint32_t bseq(const struct __lcat *co, uint32_t k)
+{
+	wchar_t wc;
+	mbstate_t st = { { 0, 0 } };
+	unsigned char b = (unsigned char)k;
+	if (__mbrtowc_l(&wc, (const char *)&b, 1, &st, CURRENT_CTYPE) > 1) return ~0u;
+	return __coll_seq(co, 1, (uint32_t)wc);
+}
+
+static uint32_t nseq(const struct __lcat *co, const uint32_t *u, size_t n)
+{
+	return n == 1 ? bseq(co, *u) : __coll_seqs(co, 0, u, n);
+}
+
+/* a bracket expression in a locale of single bytes */
+static struct re_node *bracket(P *p)
+{
+	unsigned char m[32];
+	int neg = 0, first = 1, c, k, i;
+	uint32_t a[256], b[256];
+	size_t na, nb;
+	ME me;
+	struct re_node *n;
+	const struct __lcat *co = CURRENT_LOCALE->cat[LC_COLLATE];
+	memset(m, 0, sizeof m);
+	me_init(&me, 0);
+	if (*p->s == '^') { neg = 1; p->s++; }
+	for (;;) {
+		const unsigned char *s = p->s;
+		if (!*s) { p->err = REG_EBRACK; goto fail; }
+		if (*s == ']' && !first) { p->s++; break; }
+		first = 0;
+		if (s[0] == '[' && s[1] == ':') {
+			const unsigned char *e = s + 2;
+			size_t l;
+			while (*e && !(e[0] == ':' && e[1] == ']')) e++;
+			if (!*e) { p->err = REG_EBRACK; goto fail; }
+			l = (size_t)(e - (s + 2));
+			for (i = 0; i < (int)(sizeof classes / sizeof *classes); i++)
+				if (strlen(classes[i].name) == l && !memcmp(classes[i].name, s + 2, l)) break;
+			if (i == (int)(sizeof classes / sizeof *classes)) { p->err = REG_ECTYPE; goto fail; }
+			for (c = 0; c < 256; c++) if (classes[i].f(c)) setbit(m, c);
+			if ((p->flags & REG_ICASE) && (classes[i].f == isupper || classes[i].f == islower))
+				for (c = 0; c < 256; c++) if (isalpha(c)) setbit(m, c);
+			p->s = e + 2;
+			if (p->s[0] == '-' && p->s[1] != ']' && p->s[1]) { p->err = REG_ERANGE; goto fail; }
+			continue;
+		}
+		if (s[0] == '[' && s[1] == '=') {
+			/* the characters and elements of its equivalence class (LC_COLLATE) */
+			if (collname(p, 0, a, &na)) goto fail;
+			if (!__coll_valids(co, 0, a, na)) { p->err = REG_ECOLLATE; goto fail; }
+			for (k = 0; k < 256; k++) {
+				uint32_t x = (uint32_t)k;
+				if (__coll_equivs(co, 0, a, na, &x, 1)) setbit(m, k);
+			}
+			if (me_mark(p, &me, 1, a, na)) goto fail;
+			continue;
+		}
+		if (brelem(p, &me, a, &na)) goto fail;
+		if (p->s[0] == '-' && p->s[1] && p->s[1] != ']') {
+			p->s++;
+			if (p->s[0] == '[' && (p->s[1] == '=' || p->s[1] == ':')) { p->err = REG_ERANGE; goto fail; }
+			if (brelem(p, &me, b, &nb)) goto fail;
+			if (co->nrules && co->collseqwc) {
+				/* in a locale with collation rules, by the collation
+				 * sequence (as glibc); else by the bytes */
+				uint32_t sc = nseq(co, a, na), sd = nseq(co, b, nb), sk;
+				if (sc == ~0u || sd == ~0u) { p->err = REG_ECOLLATE; goto fail; }
+				if (sc > sd) { p->err = REG_ERANGE; goto fail; }
+				for (k = 0; k < 256; k++)
+					if ((sk = bseq(co, (uint32_t)k)) >= sc && sk <= sd) setbit(m, k);
+			} else {
+				if (b[0] < a[0]) { p->err = REG_ERANGE; goto fail; }
+				for (k = (int)a[0]; k <= (int)b[0]; k++) setbit(m, k);
+			}
+		} else if (na == 1)
+			setbit(m, (int)a[0]);
+		else
+			if (me_mark(p, &me, 0, a, na)) goto fail;
+	}
+	if (p->flags & REG_ICASE)
+		for (c = 0; c < 256; c++)
+			if (m[c >> 3] & (1 << (c & 7))) { setbit(m, tolower(c)); setbit(m, toupper(c)); }
+	if (neg) {
+		for (i = 0; i < 32; i++) m[i] = (unsigned char)~m[i];
+		if (p->flags & REG_NEWLINE) m['\n' >> 3] &= (unsigned char)~(1 << ('\n' & 7));
+	}
+	if ((k = newset(p)) < 0) goto fail;
+	memcpy(p->g->sets[k], m, 32);
+	if (!(n = mk(p, &p->pa, N_SET, 0))) goto fail;
+	n->val = k;
+	return me_finish(p, &me, neg, n);
+fail:
+	free(me.in);
+	return 0;
+}
+
+
+/* a bracket expression in a UTF-8 pattern */
 static struct re_node *u8bracket(P *p)
 {
-	static const char *const cls[] = { "alnum", "alpha", "blank", "cntrl", "digit", "graph",
-		"lower", "print", "punct", "space", "upper", "xdigit" };
-	const struct __lcat *ct = CURRENT_CTYPE;
+	const struct __lcat *ct = CURRENT_CTYPE, *co = CURRENT_LOCALE->cat[LC_COLLATE];
 	WS w = { 0 };
-	int neg = 0, first = 1, i;
-	uint32_t c, d;
+	int neg = 0, first = 1;
+	uint32_t a[256], b[256];
+	size_t na, nb;
+	ME me;
 	struct re_node *n;
+	me_init(&me, 1);
 	if (*p->s == '^') { neg = 1; p->s++; }
 	for (;;) {
 		const unsigned char *s = p->s;
@@ -555,9 +664,9 @@ static struct re_node *u8bracket(P *p)
 			continue;
 		}
 		if (s[0] == '[' && s[1] == '=') {
-			const struct __lcat *co = CURRENT_LOCALE->cat[LC_COLLATE];
-			if (u8elem(p, &c) || ws_add(p, &w, c, c)) goto fail;
-			if (!__coll_valid(co, 1, c)) { p->err = REG_ECOLLATE; goto fail; }
+			if (collname(p, 1, a, &na)) goto fail;
+			if (!__coll_valids(co, 1, a, na)) { p->err = REG_ECOLLATE; goto fail; }
+			if (na == 1 && ws_add(p, &w, a[0], a[0])) goto fail;
 			if (co->nrules) {
 				/* the characters of its equivalence class, as ranges */
 				/* (a block the table has no entries for is one class) */
@@ -565,34 +674,35 @@ static struct re_node *u8bracket(P *p)
 				for (x = 0; x < 0x110000; x = y + 1) {
 					y = co->tablewc ? __tab_run(co->tablewc, x) : x;
 					if (y > 0x10ffff) y = 0x10ffff;
-					if (__coll_equiv(co, 1, c, x) && ws_add(p, &w, x, y)) goto fail;
+					if (__coll_equivs(co, 1, a, na, &x, 1) && ws_add(p, &w, x, y)) goto fail;
 				}
+				if (me_mark(p, &me, 1, a, na)) goto fail;
 			}
 			continue;
 		}
-		if (u8elem(p, &c)) goto fail;
+		if (brelem(p, &me, a, &na)) goto fail;
 		if (p->s[0] == '-' && p->s[1] && p->s[1] != ']') {
 			p->s++;
 			if (p->s[0] == '[' && (p->s[1] == '=' || p->s[1] == ':')) { p->err = REG_ERANGE; goto fail; }
-			if (u8elem(p, &d)) goto fail;
-			{
-				/* in a locale with collation rules, by the collation sequence
-				 * of the characters (as glibc); else by code point */
-				const struct __lcat *co = CURRENT_LOCALE->cat[LC_COLLATE];
-				if (co->nrules && co->collseqwc) {
-					uint32_t sc = __coll_seq(co, 1, c), sd = __coll_seq(co, 1, d);
-					struct wsadd wa;
-					if (sc > sd) { p->err = REG_ERANGE; goto fail; }
-					wa.p = p; wa.w = &w;
-					if (__coll_seq_runs(co, sc, sd, ws_add_cb, &wa)) goto fail;
-				} else {
-					if (d < c) { p->err = REG_ERANGE; goto fail; }
-					if (ws_add(p, &w, c, d)) goto fail;
-				}
+			if (brelem(p, &me, b, &nb)) goto fail;
+			if (co->nrules && co->collseqwc) {
+				/* in a locale with collation rules, by the collation
+				 * sequence (as glibc); else by code point */
+				uint32_t sc = __coll_seqs(co, 1, a, na), sd = __coll_seqs(co, 1, b, nb);
+				struct wsadd wa;
+				if (sc == ~0u || sd == ~0u) { p->err = REG_ECOLLATE; goto fail; }
+				if (sc > sd) { p->err = REG_ERANGE; goto fail; }
+				wa.p = p; wa.w = &w;
+				if (__coll_seq_runs(co, sc, sd, ws_add_cb, &wa)) goto fail;
+			} else {
+				if (b[0] < a[0]) { p->err = REG_ERANGE; goto fail; }
+				if (ws_add(p, &w, a[0], b[0])) goto fail;
 			}
-		} else if (ws_add(p, &w, c, c)) goto fail;
+		} else if (na == 1) {
+			if (ws_add(p, &w, a[0], a[0])) goto fail;
+		} else
+			if (me_mark(p, &me, 0, a, na)) goto fail;
 	}
-	(void)i; (void)cls;
 	ws_norm(p, &w);
 	if ((p->flags & REG_ICASE) && ws_fold(p, &w)) goto fail;
 	if (neg) {
@@ -614,9 +724,10 @@ static struct re_node *u8bracket(P *p)
 	}
 	n = u8node(p, &w);
 	free(w.r);
-	return n;
+	return me_finish(p, &me, neg, n);
 fail:
 	free(w.r);
+	free(me.in);
 	return 0;
 }
 

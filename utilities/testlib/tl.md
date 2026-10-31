@@ -123,8 +123,8 @@ may be left out.
   characters of a second argument), `upper`, `lower`, `repeat(s, n)`.
 * `chr(byte)`, `ord(s)` (the first byte), `utf8(codepoint)`, `hex(s)`,
   `unhex(s)`, `base64(s)`, `unbase64(s)`, `sha256(s)` (hexadecimal).
-* `json(v[, indent])`: JSON with the keys sorted and only ASCII (the same
-  text as Python's `json.dumps(v, indent=indent, sort_keys=True)`);
+* `json(v[, indent])`: JSON with the keys sorted and only ASCII (the
+  separators `, ` and `: `, and with an indent one item per line);
   `unjson(text)`.
 * Regular expressions are POSIX extended ones: `match(s, re)` gives `[the
   match, group 1, ...]` or nil; `matchat(s, re)` gives `[start, end]`;

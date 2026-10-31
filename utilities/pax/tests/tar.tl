@@ -16,8 +16,8 @@
  *   tl tar.tl flip FILE OFFSET
  *       one bit of the byte at OFFSET changed
  *   tl tar.tl huge OUT | records OUT | global OUT
- *       the archives of the case read-records, made as Python's tarfile
- *       module makes them (its pax format): a header of a file of 9 GB
+ *       the archives of the case read-records, made as a common tar
+ *       library makes them (pax format): a header of a file of 9 GB
  *       with records for its size, uid and mtime; a member whose records
  *       change its path and delete its uname; members after a global
  *       header
@@ -114,7 +114,7 @@ func tarend(d) {
 /* ---- the headers of an archive ---- */
 
 /* bytes as UTF-8 text: what is not UTF-8 replaced by U+FFFD, each maximal
-   part of a sequence by one, as Python decodes with errors="replace" */
+   part of a sequence by one (the Unicode "maximal subpart" rule) */
 func utf8_replace(s) {
     var out = "", i = 0, n = len(s);
     while (i < n) {

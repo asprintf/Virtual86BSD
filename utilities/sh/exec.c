@@ -305,7 +305,9 @@ static int is_exec_file(const char *p)
 /* search PATH; returns stack string or NULL */
 static char *path_search(const char *name, const char *path)
 {
-    const char *p = path ? path : "";
+    /* PATH unset: the standard utilities' path (confstr(_CS_PATH)); POSIX
+       leaves the search implementation-defined */
+    const char *p = path ? path : command_default_path();
     StrBuf b;
     for (;;) {
         const char *e = strchr(p, ':');
@@ -452,8 +454,15 @@ void enter_subshell(int keep_traps)
 static pid_t do_fork(Job *j, int bg)
 {
     pid_t pid;
+    sigset_t all, old;
     flushall();
+    /* no signal before the child has set its dispositions (a SIGINT
+       sent at once to an asynchronous list must find it ignored) */
+    sigfillset(&all);
+    sigprocmask(SIG_BLOCK, &all, &old);
     pid = fork();
+    if (pid != 0)
+        sigprocmask(SIG_SETMASK, &old, NULL);
     if (pid < 0)
         sh_error("cannot fork: %s", strerror(errno));
     if (pid == 0) {
@@ -465,6 +474,11 @@ static pid_t do_fork(Job *j, int bg)
         }
         signals_child_reset(bg && !(j && j->jobctl));
         if (bg && !(j && j->jobctl)) {
+            /* an asynchronous list without job control: SIGINT and SIGQUIT
+               ignored, as if on entry (XCU 2.11), also for what it forks */
+            sig_ignored_at_entry[SIGINT] = sig_ignored_at_entry[SIGQUIT] = 1;
+        }
+        if (bg && !(j && j->jobctl)) {
             /* stdin of async lists without job control: /dev/null */
             int fd = open("/dev/null", O_RDONLY);
             if (fd >= 0 && fd != 0) {
@@ -473,6 +487,7 @@ static pid_t do_fork(Job *j, int bg)
             }
         }
         enter_subshell(0);
+        sigprocmask(SIG_SETMASK, &old, NULL);
         return 0;
     }
     if (j) {
@@ -585,7 +600,9 @@ static int call_function(Func *f, int argc, char **argv, char **as, int nas, Red
         raise_exc(exception);
     }
     handler = &jl;
-    set_assignments(as, nas, 0, &vs);
+    /* exported while the function runs (POSIX leaves it open; other shells
+       do so, and scripts expect "VAR=x f" to reach what f runs) */
+    set_assignments(as, nas, V_EXPORT, &vs);
     if (redirect(redir, 1) < 0) {
         handler = savedh;
         undo_redirects(depth);
@@ -894,17 +911,16 @@ void exec_external_path(const char *path, char **argv, char **envp)
 
 extern char *node_text(Node *n);
 
-static int eval_pipe(Node *n, int flags)
+/* fork the commands of the pipeline n into the job j (bg: as an
+ * asynchronous list); returns the process ID of the last one */
+static pid_t pipe_fork(Node *n, Job *j, int bg)
 {
     int i, nc = n->u.pipe.n, prev = -1, pfd[2];
-    Job *j = job_new(nc, 0);
-    j->pipefail = opts[O_PIPEFAIL];
-    j->cmd = node_text(n);
+    pid_t pid = 0;
     for (i = 0; i < nc; i++) {
-        pid_t pid;
         if (i < nc - 1 && pipe(pfd) < 0)
             sh_error("cannot create pipe: %s", strerror(errno));
-        pid = do_fork(j, 0);
+        pid = do_fork(j, bg);
         if (pid == 0) {
             if (prev >= 0) {
                 dup2(prev, 0);
@@ -927,18 +943,32 @@ static int eval_pipe(Node *n, int flags)
             prev = pfd[0];
         }
     }
+    return pid;
+}
+
+static int eval_pipe(Node *n, int flags)
+{
+    Job *j = job_new(n->u.pipe.n, 0);
+    j->pipefail = opts[O_PIPEFAIL];
+    j->cmd = node_text(n);
+    pipe_fork(n, j, 0);
     (void)flags;
     return job_wait(j);
 }
 
 static int eval_async(Node *n)
 {
-    Job *j = job_new(1, 1);
+    Node *a = n->u.un.a;
+    Job *j = job_new(a->type == N_PIPE ? a->u.pipe.n : 1, 1);
     pid_t pid;
-    j->cmd = node_text(n->u.un.a);
-    pid = do_fork(j, 1);
-    if (pid == 0) {
-        eval_tree(n->u.un.a, EV_EXIT);
+    j->cmd = node_text(a);
+    if (a->type == N_PIPE) {
+        /* the commands of a pipeline are children of this shell, so
+           that $! is the last of them (XCU 2.5.2) */
+        j->pipefail = opts[O_PIPEFAIL];
+        pid = pipe_fork(a, j, 1);
+    } else if ((pid = do_fork(j, 1)) == 0) {
+        eval_tree(a, EV_EXIT);
         exitshell(exitstatus);
     }
     last_bgpid = j->jobctl ? j->pgid : pid;

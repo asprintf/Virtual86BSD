@@ -27,16 +27,18 @@ $cc -o "$T.tl" "$TL/tl.c" || { echo "cannot compile ../testlib/tl.c"; exit 2; }
 TLBIN=$T.tl; export TLBIN
 tl() { "$TLBIN" "$@"; }
 # ptyrun FDS COMMAND...: COMMAND with the descriptors FDS on a terminal (../testlib/ptyrun.tl)
-ptyrun() { "$TLBIN" "$TL/ptyrun.tl" "$@"; }
+ptyrun() { PTYRUN_INPUT=${PTYRUN_INPUT-} PTYRUN_WAIT=${PTYRUN_WAIT-} "$TLBIN" "$TL/ptyrun.tl" "$@"; }   # (assignments before a function call need not be exported)
 cd "$T" || exit 2
 export LC_ALL=C TZ=UTC0
 root=false; [ "$(id -u)" = 0 ] && root=true
 nl='
 '
 # the database: a file of struct utmpx records made by tests/mkutx.c
-${CC:-cc} -o mkutx "$OLDPWD/tests/mkutx.c" 2>/dev/null || { echo "who: cannot compile tests/mkutx.c"; exit 2; }
+$cc -o mkutx "$OLDPWD/tests/mkutx.c" 2>/dev/null || { echo "who: cannot compile tests/mkutx.c"; exit 2; }
 mku() { ./mkutx > "$1"; }
-glibc=false; [ "$(uname -s)" = Linux ] && ldd --version 2>&1 | grep -qi -e glibc -e "gnu libc" && glibc=true
+# whether the C library keeps ut_exit (as lib/utx.c decides it)
+printf '#include <utmpx.h>\n#if !defined(__GLIBC__) && !defined(__UT_HOSTSIZE)\n#error no ut_exit\n#endif\nint main(void) { return 0; }\n' > probe.c
+glibc=false; $cc -o probe probe.c 2>/dev/null && glibc=true
 mkdir -p dev/pts
 : > dev/pts/0; chmod 620 dev/pts/0
 : > dev/pts/1; chmod 600 dev/pts/1

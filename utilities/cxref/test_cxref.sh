@@ -17,6 +17,8 @@ ok() {
 done_tests() { echo "$1: $pass passed, $fail failed"; [ "$fail" = 0 ]; }
 U=${U:-$PWD/cxref}
 T=${TMPDIR:-/tmp}/test_cxref.$$
+# only ERE: the parts of the input that match (as grep -o, which is not POSIX)
+ONLY=$(cd ../testlib && pwd)/only.sh; export ONLY
 mkdir -m 700 "$T" || exit 2
 trap 'chmod -R u+rwx "$T" 2>/dev/null; rm -rf "$T"' EXIT
 cd "$T" || exit 2
@@ -116,7 +118,7 @@ t "-o: the listing to a file" "$("$U" m.c)" 0 sh -c '"$1" -o out m.c && cat out'
 t "-o: nothing on the standard output" '' 0 "$U" -o out m.c
 t "the references wrapped to 80 columns" '0' 0 sh -c '"$1" w.c | awk "length > 80" | wc -l | tr -d " "' sh "$U"
 t "wrapped lines indented to the column of the references" '1' 0 sh -c '"$1" w.c | grep "^x .* f " | awk "{ print index(\$0, \$4) }" > c1; "$1" w.c | sed -n "/^x .* f /{n;p;}" | awk "{ match(\$0, /[0-9]/); print RSTART }" > c2; cmp -s c1 c2 && echo 1' sh "$U"
-t "all the references are there" '60' 0 sh -c '"$1" w.c | sed -n "/^x .* f /,\$p" | grep -o "[0-9][0-9]*" | wc -l | tr -d " "' sh "$U"
+t "all the references are there" '60' 0 sh -c '"$1" w.c | sed -n "/^x .* f /,\$p" | sh "$ONLY" "[0-9][0-9]*" | wc -l | tr -d " "' sh "$U"
 t "-w 60: no line wider" '0' 0 sh -c '"$1" -w 60 w.c | awk "length > 60" | wc -l | tr -d " "' sh "$U"
 t "-w 60: more lines than -w 80" 'yes' 0 sh -c 'a=$("$1" -w 60 w.c | wc -l); b=$("$1" w.c | wc -l); [ $a -gt $b ] && echo yes' sh "$U"
 t "-w less than 51: 80" "$("$U" -w 80 w.c)" 0 "$U" -w 30 w.c
@@ -124,7 +126,7 @@ t "-I: where headers are looked for; their symbols listed with their names" 'FRO
 t "a macro of a header used in the file" 'FROM_INC  i.c      --       2' 0 sh -c '"$1" -I inc i.c 2>/dev/null | grep "^FROM_INC .*i\\.c "' sh "$U"
 t "-D name=def" 'three     i.c      --       *4' 0 sh -c '"$1" -I inc -D DEF=3 i.c | grep "^three "' sh "$U"
 t "-U after -D" '' 1 sh -c '"$1" -I inc -D DEF=3 -U DEF i.c | grep "^three "' sh "$U"
-t "a file that cannot be read: status 1, the others listed" 'n.c' 1 sh -c '"$1" nosuch.c n.c 2>/dev/null > o; s=$?; head -1 o; exit $s' sh "$U"
+t "a file that cannot be read: status 1, the others listed" 'n.c' 1 sh -c '"$1" nosuch.c n.c 2>/dev/null > o; s=$?; head -n 1 o; exit $s' sh "$U"
 t "a file that cannot be read: a diagnostic" 'cxref: nosuch.c: No such file or directory' 1 sh -c '"$1" nosuch.c 2>&1 >/dev/null' sh "$U"
 t "no file: a usage error" '' 2 "$U"
 t "-w not a number: a usage error" '' 2 "$U" -w x m.c

@@ -1,8 +1,8 @@
 #### quoting basic
 echo 'single $x' "double $HOME" \$x a\ b "a\"b" 'it'\''s'
 #### dollar single quote
-echo $'a\tb\n' | od -c | head -2
-printf '%s\n' $'\x41\101\e' | od -c | head -1
+echo $'a\tb\n' | od -c | head -n 2
+printf '%s\n' $'\x41\101\e' | od -c | head -n 1
 #### field splitting
 x='a  b   c'; set -- $x; echo $#
 x=' a b '; set -- $x; echo "$#:$1:$2"
@@ -149,7 +149,7 @@ false && echo no || echo yes
 true || echo no && echo yes2
 false || false || echo three
 #### async and wait
-(sleep 0.1; echo bg) & wait; echo after
+(sleep 1; echo bg) & wait; echo after
 (exit 7) & wait $!; echo $?
 wait 999999; echo $?
 #### async pid
@@ -337,7 +337,7 @@ mkdir -p cdp/target; CDPATH=$PWD/cdp; cd target | sed 's#.*/cdp#CDP#'
 #### umask
 umask 027; umask; umask -S; umask u=rwx,g=rx,o=; umask
 #### echo escapes
-echo 'a\tb' | od -c | head -1; echo 'stop\cnot'
+echo 'a\tb' | od -c | head -n 1; echo 'stop\cnot'
 #### printf
 printf '%s|%5s|%-5s|%.2s\n' a b c defg
 printf '%d %i %o %x %X %u\n' 42 -7 8 255 255 3

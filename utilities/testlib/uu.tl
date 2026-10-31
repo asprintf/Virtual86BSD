@@ -1,6 +1,6 @@
 /*
  * uu.tl - the historical uuencode format, for the tests of uuencode and
- * uudecode (independent of them): as Python's binascii writes and reads it.
+ * uudecode (independent of them).
  */
 
 /* uu_line(d, backtick): one line (with its newline) for up to 45 bytes;

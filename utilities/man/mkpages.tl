@@ -23,7 +23,7 @@ var NBSP = "\302\240";
 var VOID = ["br", "img", "hr", "meta", "link", "basefont", "input", "col"];
 
 /* the character references of the pages; numbers 128 to 159 as Windows-1252
-   (as browsers, and Python's html.unescape, take them) */
+   (as browsers take them, per the HTML standard) */
 var ENTITIES = {amp: "&", lt: "<", gt: ">", quot: "\"", apos: "'", nbsp: NBSP, copy: "©", reg: "®",
                 trade: "™", mdash: "—", ndash: "–", hellip: "…", deg: "°", times: "×", divide: "÷",
                 para: "¶", sect: "§", middot: "·", laquo: "«", raquo: "»", lsquo: "‘", rsquo: "’",

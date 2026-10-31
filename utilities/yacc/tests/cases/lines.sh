@@ -11,7 +11,7 @@ int yylex(void) { return 0; }
 void yyerror(const char *s) { (void)s; }
 int main(void) { return yyparse(); }
 G
-$YACC g.y && grep '#line' y.tab.c | sed 's/^#line [0-9]* "y.tab.c"/#line N "y.tab.c"/' | sort | uniq -c
+$YACC g.y && grep '#line' y.tab.c | sed 's/^#line [0-9]* "y.tab.c"/#line N "y.tab.c"/' | sort | uniq -c | sed 's/^ *//'   # POSIX: "%d %s"; GNU pads
 $CC $CWARN -c y.tab.c || exit 1
 $YACC -l g.y && grep -c '#line' y.tab.c
 $CC $CWARN -c y.tab.c && echo compiled

@@ -163,5 +163,9 @@ int sem_unlink(const char *name)
 	char p[NAME_MAX + 16];
 	if (!path(name, p))
 		return -1;
-	return unlink(p);
+	if (unlink(p) == 0)
+		return 0;
+	if (errno == EPERM)
+		errno = EACCES;     /* the sticky /dev/shm: POSIX says EACCES */
+	return -1;
 }

@@ -14,7 +14,9 @@
  *     interp /lib64/ld-linux-x86-64.so.2
  *     needed libc.so.6
  *     runpath /opt/lib
+ *     soname libx.so
  *     symbol main FUNC GLOBAL .text 0x401130
+ *     dynsym counter OBJECT GLOBAL .data
  */
 
 var SHT = {0: "NULL", 1: "PROGBITS", 2: "SYMTAB", 3: "STRTAB", 4: "RELA", 5: "HASH",
@@ -68,9 +70,9 @@ func section(name) {
     eprintf("%s: no section %s\n", path, name);
     exit(1);
 }
-func symbols() {
+func symbols(t) {
     for (var s : secs)
-        if (s.type == 2) {
+        if (s.type == t) {
             var str = secs[s.link], res = [];
             for (var k = 0; k < s.size / 24; k++) {
                 var y = unpack("<IBBHQQ", d, s.off + 24 * k);
@@ -89,7 +91,7 @@ if (mode == "-x") {
 }
 if (mode == "-r") {
     var s = section(".rela" + which);
-    var syms = symbols();
+    var syms = symbols(2);
     for (var k = 0; k < s.size / 24; k++) {
         var r = unpack("<QQq", d, s.off + 24 * k);
         var y = syms[r[1] >> 32];
@@ -101,7 +103,7 @@ if (mode == "-r") {
 }
 
 print("type", get({1: "REL", 2: "EXEC", 3: "DYN"}, etype, sprintf("%d", etype)));
-if (etype == 2)
+if (etype == 2 || (etype == 3 && entry != 0))
     printf("entry 0x%x\n", entry);
 for (var s : secs) {
     if (s.type == 0)
@@ -132,14 +134,20 @@ for (var s : secs)
                 print("needed", cstr(d, str.off + e[1]));
             else if (e[0] == 29)
                 print("runpath", cstr(d, str.off + e[1]));
+            else if (e[0] == 14)
+                print("soname", cstr(d, str.off + e[1]));
             else if (e[0] == 0)
                 break;
         }
     }
-for (var y : symbols()) {
-    if (y.name == "" || y.type == 3 || y.type == 4)
-        continue;
-    var where = y.shndx == 0 ? "UND" : y.shndx == 0xfff1 ? "ABS" : y.shndx == 0xfff2 ? "COM" :
-                y.shndx < len(secs) ? secs[y.shndx].name : "?";
-    printf("symbol %s %s %s %s 0x%x\n", y.name, STT[y.type], STB[y.bind], where, y.value);
-}
+for (var t : [2, 11])
+    for (var y : symbols(t)) {
+        if (y.name == "" || y.type == 3 || y.type == 4)
+            continue;
+        var where = y.shndx == 0 ? "UND" : y.shndx == 0xfff1 ? "ABS" : y.shndx == 0xfff2 ? "COM" :
+                    y.shndx < len(secs) ? secs[y.shndx].name : "?";
+        if (t == 2)
+            printf("symbol %s %s %s %s 0x%x\n", y.name, STT[y.type], STB[y.bind], where, y.value);
+        else
+            printf("dynsym %s %s %s %s\n", y.name, get(STT, y.type, "?"), STB[y.bind], where);
+    }

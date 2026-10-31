@@ -141,18 +141,23 @@ static void emit_loc(Token *tok) {
 
 static char *sym(Obj *var) { return var->asm_name ? var->asm_name : var->name; }
 
+/* Is var defined in this shared object whatever happens: static, or of
+   hidden (or internal) visibility? */
+static bool is_local_def(Obj *var) {
+  return var->is_static || (var->visibility && (!strcmp(var->visibility, "hidden") ||
+                                                !strcmp(var->visibility, "internal")));
+}
+
 /* Does a reference to var need to go through the GOT? */
 static bool use_got(Obj *var) {
   if (!opt_pic)
     return false;
-  if (var->is_static)
-    return false;
-  return true;
+  return !is_local_def(var);
 }
 
 /* Computes the address of a TLS variable into %rax. */
 static void gen_tls_addr(Obj *var) {
-  if (opt_pic) {
+  if (opt_pic && !var->tls_ie) {
     if (var->is_static) {
       /* local-dynamic simplified as general dynamic */
     }
@@ -168,11 +173,12 @@ static void gen_tls_addr(Obj *var) {
       println("  add $8, %%rsp");
     return;
   }
-  if (var->is_static || var->is_definition) {
+  if (!opt_pic && (var->is_static || var->is_definition)) {
     println("  mov %%fs:0, %%rax");
     println("  lea %s@tpoff(%%rax), %%rax", sym(var));
     return;
   }
+  /* initial-exec (in a shared library also for its own variables) */
   println("  mov %s@gottpoff(%%rip), %%rax", sym(var));
   println("  add %%fs:0, %%rax");
 }
@@ -1737,7 +1743,7 @@ static void gen_funcall(Node *node) {
 
   if (direct) {
     println("  mov $%d, %%eax", fp);
-    if (opt_pic && !direct->is_static)
+    if (opt_pic && !is_local_def(direct))
       println("  call %s@PLT", sym(direct));
     else
       println("  call %s", sym(direct));
@@ -2186,6 +2192,13 @@ static void gen_expr(Node *node) {
       println("  mov %d(%%rdi), %%rdx", i);
       println("  mov %%rdx, %d(%%rax)", i);
     }
+    return;
+  case ND_FRAMEADDR:
+    println("  mov %%rbp, %%rax");
+    for (int64_t i = 0; i < node->val; i++)
+      println("  mov (%%rax), %%rax");
+    if (node->rmw_op)
+      println("  mov 8(%%rax), %%rax");
     return;
   case ND_ALLOCA: {
     if (node->var) {

@@ -249,7 +249,7 @@ var stats = {};
 for (var s : STATS)
     stats[s] = 0;
 
-/* the statistics as Python writes a dict */
+/* the statistics as {'name': count, ...} */
 func showstats() {
     return "{" + join(apply(STATS, func (s) { return sprintf("'%s': %d", s, stats[s]); }), ", ") + "}";
 }

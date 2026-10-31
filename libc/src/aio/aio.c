@@ -146,8 +146,9 @@ static void *worker(void *p)
 			ret = read(r->fd, (void *)cb->aio_buf, cb->aio_nbytes);
 		break;
 	case LIO_WRITE:
-		/* with O_APPEND the kernel's pwrite appends, as required */
-		ret = pwrite(r->fd, (const void *)cb->aio_buf, cb->aio_nbytes, cb->aio_offset);
+		/* with O_APPEND aio_write appends: the system call pwrite64 does
+		   (pwrite() itself keeps to the offset, as POSIX has it) */
+		ret = __syscall_ret((unsigned long)__syscall_cp4(SYS_pwrite64, r->fd, cb->aio_buf, cb->aio_nbytes, cb->aio_offset));
 		if (ret < 0 && errno == ESPIPE)
 			ret = write(r->fd, (const void *)cb->aio_buf, cb->aio_nbytes);
 		break;
@@ -186,12 +187,12 @@ static int submit(struct aiocb *cb, int op, struct lio *l)
 	unsigned long old;
 	int e;
 
-	if (__syscall2(SYS_fcntl, cb->aio_fildes, F_GETFD) < 0) {
-		errno = EBADF;
-		return -1;
-	}
-	if (cb->aio_reqprio < 0 || cb->aio_reqprio > AIO_PRIO_DELTA_MAX || !valid_sev(&cb->aio_sigevent)
-	    || (op <= LIO_WRITE && cb->aio_offset < 0)) {
+	/* A bad aio_fildes is reported through the error status (EBADF from
+	   the worker), so one bad request in a lio_listio() list does not
+	   stop the others (aio_fsync() checks it itself).  aio_reqprio and
+	   aio_offset do not apply to aio_fsync(). */
+	if (!valid_sev(&cb->aio_sigevent) || (op <= LIO_WRITE
+	    && (cb->aio_reqprio < 0 || cb->aio_reqprio > AIO_PRIO_DELTA_MAX || cb->aio_offset < 0))) {
 		errno = EINVAL;
 		return -1;
 	}
@@ -251,6 +252,12 @@ int aio_fsync(int op, struct aiocb *cb)
 {
 	if (op != O_SYNC && op != O_DSYNC) {
 		errno = EINVAL;
+		return -1;
+	}
+	/* aio_fsync() itself shall fail with EBADF (aio_read and aio_write
+	   may report it through the error status instead) */
+	if (__syscall2(SYS_fcntl, cb->aio_fildes, F_GETFD) < 0) {
+		errno = EBADF;
 		return -1;
 	}
 	return submit(cb, op == O_SYNC ? OP_FSYNC : OP_DSYNC, 0);

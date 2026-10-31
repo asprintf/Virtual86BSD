@@ -30,7 +30,7 @@ for f in "$@"; do
     if ! cmp -s "$T/a" "$T/b"; then
         fail=$((fail + 1))
         echo "FAIL $f"
-        diff "$T/a" "$T/b" | head -6
+        diff "$T/a" "$T/b" | head -n 6
     fi
 done
 echo "ctagsdiff: $n compared, $fail failed"

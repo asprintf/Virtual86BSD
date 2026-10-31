@@ -53,7 +53,7 @@ for f in $files; do
     cp "$f" "$T/u.$b"; cp "$f" "$T/g.$b"
     "$U" "$T/u.$b" || { bad "strip $f: status"; continue; }
     case $b in *.o|*.a) "$G" --strip-unneeded "$T/g.$b" 2>/dev/null ;; *) "$G" "$T/g.$b" 2>/dev/null ;; esac
-    [ "$(secs "$T/u.$b")" = "$(secs "$T/g.$b")" ] || { bad "sections $f"; diff "$T/u.$b" "$T/g.$b" >/dev/null; secs "$T/u.$b" > "$T/a"; secs "$T/g.$b" > "$T/c"; diff "$T/a" "$T/c" | head -6; }
+    [ "$(secs "$T/u.$b")" = "$(secs "$T/g.$b")" ] || { bad "sections $f"; diff "$T/u.$b" "$T/g.$b" >/dev/null; secs "$T/u.$b" > "$T/a"; secs "$T/g.$b" > "$T/c"; diff "$T/a" "$T/c" | head -n 6; }
     [ "$(nm -g -P "$T/u.$b" 2>&1 | sed "s|$T/[ug]\.||")" = "$(nm -g -P "$T/g.$b" 2>&1 | sed "s|$T/[ug]\.||")" ] || bad "global symbols $f"
     [ "$(nm -D -P "$T/u.$b" 2>&1 | sed "s|$T/[ug]\.||")" = "$(nm -D -P "$T/g.$b" 2>&1 | sed "s|$T/[ug]\.||")" ] || bad "dynamic symbols $f"
     case $b in

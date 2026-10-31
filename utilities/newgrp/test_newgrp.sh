@@ -74,7 +74,7 @@ if $root; then
     t "an unknown group: a diagnostic" "" 0 sh -c 'echo true | "$1" no_such_group_x9 2>&1 >/dev/null | grep -q .' sh "$U"
     # a user who is not root, with newgrp set-user-ID root (as if: the real
     # user ID nobody's, the effective root's): not a member, refused
-    t "set-user-ID root, not a member: refused" "yes" 0 sh -c '"$TLBIN" -e "setgroups([]) || exit(1); setresgid(65534, 65534, 65534) || exit(1); setresuid(65534, 0, 0) || exit(1); exec(argv); exit(1);" "$1" daemon < /dev/null 2>&1 | grep "not a member" >/dev/null && echo yes' sh "$U"
+    t "set-user-ID root, not a member: refused" "yes" 0 sh -c '"$TLBIN" -e "setgroups([]) || exit(1); setresgid(65534, 65534, 65534) || exit(1); setresuid(65534, 0, 0) || exit(1); exec(argv); exit(1);" "$1" root < /dev/null 2>&1 | grep "not a member" >/dev/null && echo yes' sh "$U"
 fi
 # usage, for any user
 t "two operands" "" 2 "$U" a b

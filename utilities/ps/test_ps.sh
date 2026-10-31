@@ -27,7 +27,7 @@ $cc -o "$T.tl" "$TL/tl.c" || { echo "cannot compile ../testlib/tl.c"; exit 2; }
 TLBIN=$T.tl; export TLBIN
 tl() { "$TLBIN" "$@"; }
 # ptyrun FDS COMMAND...: COMMAND with the descriptors FDS on a terminal (../testlib/ptyrun.tl)
-ptyrun() { "$TLBIN" "$TL/ptyrun.tl" "$@"; }
+ptyrun() { PTYRUN_INPUT=${PTYRUN_INPUT-} PTYRUN_WAIT=${PTYRUN_WAIT-} "$TLBIN" "$TL/ptyrun.tl" "$@"; }   # (assignments before a function call need not be exported)
 cd "$T" || exit 2
 export LC_ALL=C
 root=false; [ "$(id -u)" = 0 ] && root=true
@@ -106,7 +106,7 @@ t "several options: either" "$s1 $s2" 0 sh -c 'echo $("$1" -p $2 -g $3 -o pid=)'
 t "-n: ignored" "$s1" 0 sh -c '"$1" -n /nonexistent -p $2 -o pid= | sed "s/ //g"' sh "$U" $s1
 # terminals: on a pseudo-terminal of its own
 t "the default: this terminal's processes of this user" "yes" 0 sh -c '"$TLBIN" "$TL/ptyrun.tl" 012 sh -c "\"\$1\" > out; tty > tty" sh "$1"; t=$(sed "s,^/dev/,," tty); awk -v t=$t "NR > 1 && \$2 != t { bad = 1 } END { print (bad || NR < 3) ? \"no\" : \"yes\" }" out' sh "$U"
-t "the default: no other terminal" "" 1 sh -c '"$TLBIN" "$TL/ptyrun.tl" 012 "$1" | grep -w "$2"' sh "$U" $s1
+t "the default: no other terminal" "" 1 sh -c '"$TLBIN" "$TL/ptyrun.tl" 012 "$1" | grep -E "(^|[^0-9])$2([^0-9]|\$)"' sh "$U" $s1
 t "-t: a terminal by name" "yes" 0 sh -c '"$TLBIN" "$TL/ptyrun.tl" 012 sh -c "\"\$1\" -t \$(tty | sed s,^/dev/,,) -o tty= -o comm= > out" sh "$1"; grep "pts/[0-9]* *ps\$" out >/dev/null && echo yes' sh "$U"
 t "-t: a /dev/ name" "yes" 0 sh -c '"$TLBIN" "$TL/ptyrun.tl" 012 sh -c "\"\$1\" -t \$(tty) -o comm= > out" sh "$1"; grep -x ps out >/dev/null && echo yes' sh "$U"
 t "-t ?: no terminal" "yes" 0 sh -c '"$1" -t "?" -o pid= | sed "s/ //g" | grep -x $2 >/dev/null && echo yes' sh "$U" $s1

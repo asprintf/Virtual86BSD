@@ -113,5 +113,9 @@ typedef struct {
   char *interp;       /* dynamic linking: the dynamic linker; NULL: static */
   char **rpath;       /* -R directories */
   int nrpath;
+  bool shared;        /* -G: a shared library (ET_DYN) */
+  char *soname;       /* its DT_SONAME */
+  int hide_from;      /* -G: inputs from here on (c17's run-time support) are
+                         part of it but not exported; -1: none */
 } LinkOptions;
 int link_executable(LinkOptions *opts);

@@ -7,7 +7,7 @@
  * of MANPATH (separated by colons; empty ones are left out), else in the
  * directory compiled in (MAN_DIR, which make sets to $(PREFIX)/share/
  * posixutilities/man).  Each directory may have a summary database,
- * whatis, of lines "name - purpose".  mkpages.py makes both from the
+ * whatis, of lines "name - purpose".  mkpages.tl makes both from the
  * standard's HTML pages, for every standard utility: its synopsis,
  * options, operands, environment variables and exit status, and the rest
  * of its description.

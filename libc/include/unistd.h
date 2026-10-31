@@ -53,12 +53,12 @@
 #define _POSIX_THREAD_ATTR_STACKADDR    202405L
 #define _POSIX_THREAD_ATTR_STACKSIZE    202405L
 #define _POSIX_THREAD_CPUTIME           202405L
-#define _POSIX_THREAD_PRIO_INHERIT      (-1)
-#define _POSIX_THREAD_PRIO_PROTECT      (-1)
+#define _POSIX_THREAD_PRIO_INHERIT      202405L
+#define _POSIX_THREAD_PRIO_PROTECT      202405L
 #define _POSIX_THREAD_PRIORITY_SCHEDULING 202405L
 #define _POSIX_THREAD_PROCESS_SHARED    202405L
-#define _POSIX_THREAD_ROBUST_PRIO_INHERIT (-1)
-#define _POSIX_THREAD_ROBUST_PRIO_PROTECT (-1)
+#define _POSIX_THREAD_ROBUST_PRIO_INHERIT 202405L
+#define _POSIX_THREAD_ROBUST_PRIO_PROTECT 202405L
 #define _POSIX_THREAD_SAFE_FUNCTIONS    202405L
 #define _POSIX_THREAD_SPORADIC_SERVER   (-1)
 #define _POSIX_THREADS                  202405L
@@ -81,10 +81,10 @@
 #define _POSIX2_SW_DEV                  202405L
 #define _POSIX2_UPE                     202405L
 #if __XSI_VISIBLE
-#define _XOPEN_CRYPT                    (-1)
+#define _XOPEN_CRYPT                    1
 #define _XOPEN_ENH_I18N                 1
-#define _XOPEN_REALTIME                 (-1)
-#define _XOPEN_REALTIME_THREADS         (-1)
+#define _XOPEN_REALTIME                 1
+#define _XOPEN_REALTIME_THREADS         1
 #define _XOPEN_SHM                      1
 #define _XOPEN_UNIX                     1
 #define _XOPEN_UUCP                     1

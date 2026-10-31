@@ -20,7 +20,7 @@ func parse(path) {
     var cases = [], name = nil, buf = "";
     var pieces = split(text, "\n");
     for (var i = 0; i < len(pieces); i++) {
-        // the line with its newline, as Python reads it
+        // the line with its newline
         var line = pieces[i] + (i < len(pieces) - 1 ? "\n" : "");
         if (line == "")
             continue;
@@ -37,7 +37,7 @@ func parse(path) {
     return cases;
 }
 
-/* [stdout, exit status] and the standard error; a signal is -N, as Python gives it */
+/* [stdout, exit status] and the standard error; a signal is -N */
 func runsh(cmd, script, tmp) {
     var p = tmp + "/script.sh";
     writefile(p, script);
@@ -57,8 +57,8 @@ func fresh() {
     return WORK;
 }
 
-/* Python's repr of a list of strings */
-func pylist(l) {
+/* a list of strings: ['...', '...'] */
+func quotedlist(l) {
     return "[" + join(apply(l, func (s) { return "'" + s + "'"; }), ", ") + "]";
 }
 
@@ -98,7 +98,7 @@ for (var f : files) {
             printf("--- ours (rc=%d):\n%s", ours[1], ours[0]);
             if (oerr != "")
                 printf("--- ours stderr:\n%s", oerr);
-            printf("--- majority %s (rc=%d):\n%s", pylist(mk), majority[1], majority[0]);
+            printf("--- majority %s (rc=%d):\n%s", quotedlist(mk), majority[1], majority[0]);
         }
     }
 }

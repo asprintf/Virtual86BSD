@@ -28,8 +28,8 @@ c() {
     if [ $s1 = $s2 ] && cmp -s o1 o2 && { ! $e || cmp -s e1 e2; }; then pass=$((pass+1))
     else
         fail=$((fail+1)); echo "FAIL case $n (status $s1 and $s2):"; sed 's/^/  | /' in.$n
-        diff o1 o2 | cut -c 1-150 | sed 's/^/  /' | head -10
-        $e && diff e1 e2 | cut -c 1-150 | sed 's/^/  /' | head -6
+        diff o1 o2 | cut -c 1-150 | sed 's/^/  /' | head -n 10
+        $e && diff e1 e2 | cut -c 1-150 | sed 's/^/  /' | head -n 6
     fi
 }
 c <<'X'

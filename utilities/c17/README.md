@@ -80,7 +80,7 @@ The options of the standard:
 | `-O optlevel` | `0` turns off the code generator's improvements; `1` (the default), `2`, `3`, `s` turn them on; anything else is an error |
 | `-B dynamic`, `-B static` | dynamic or static link editing; the last one given counts; without either, the C library's profile decides |
 | `-R directory` | the directories, in order, in the executable's run-time search path (`DT_RUNPATH`); ignored with a warning when linking statically |
-| `-G` | an error: shared objects are not supported yet |
+| `-G` | position-independent code; without `-c`, a shared library (see below) |
 
 Operands: `.c` files are compiled, `.i` files (the output of `-E`)
 compiled without further macro replacement, `.s` files (assembly, an
@@ -148,9 +148,9 @@ segment prefixes (`%fs:`), and `;` between statements.
 The link editor reads ELF relocatable objects, `ar` archives (GNU and
 BSD long names), shared objects, and the linker scripts C libraries
 install as `libc.so` and `libm.so` (`GROUP`, `INPUT`, `AS_NEEDED`). It
-writes an executable (`ET_EXEC`, not position-independent): a read-only,
-an executable and a writable segment at 0x400000, a TLS segment, a
-non-executable stack. It resolves strong, weak and common symbols (the
+writes an executable (`ET_EXEC`, not position-independent; with `-G` a
+shared library, below): a read-only, an executable and a writable
+segment at 0x400000, a TLS segment, a non-executable stack. It resolves strong, weak and common symbols (the
 largest size and alignment), keeps the first of COMDAT groups, sorts
 `.init_array.N` and `.fini_array.N` by priority, defines
 `__init_array_start` and the other symbols the C libraries look for
@@ -179,25 +179,51 @@ the program uses directly (`environ`, `stdout`) are copied into it
 that shared objects refer to, or also define, are exported. All
 bindings are made when the program is loaded (`DF_BIND_NOW`).
 
+`-G` compiles position-independent code: variables and the addresses of
+functions are reached through the GOT, calls through the PLT, except for
+static symbols and those of hidden visibility; thread-local variables use
+the general-dynamic model (`__tls_get_addr`), or initial-exec with
+`__attribute__((tls_model("initial-exec")))`. Without `-c`, `-G` makes a
+shared library (`ET_DYN`, loaded anywhere), whose `DT_SONAME` is the
+name of the output file. Its functions bind to the library itself (as
+ld's `-Bsymbolic-functions` would make them); its other variables, and
+the addresses of its functions, may be taken over by a program (copy
+relocations, canonical PLT entries), so they stay symbolic. Symbols of
+hidden visibility, and c17's run-time support (linked in), are not
+exported. Absolute addresses in data become `R_X86_64_RELATIVE`
+relocations (ahead of the others), or `R_X86_64_64` against a symbol;
+GOT entries `R_X86_64_RELATIVE`, `R_X86_64_GLOB_DAT`, `R_X86_64_TPOFF64`
+or the pair `R_X86_64_DTPMOD64`/`R_X86_64_DTPOFF64`. Undefined symbols
+are left to the dynamic linker (an error if they are hidden). The
+library needs the C library's shared library (`DT_NEEDED`) when there is
+one, unless it is that library (an output named `libc.so...`); it gets no
+start files. An object not compiled with `-G` that uses a symbol of
+another object directly, or an absolute address in code, is an error. A
+linker script operand with `ENTRY(symbol)` gives the library an entry
+point (a C library that is also its dynamic linker: Shall's `libc.so`).
+
 GNU extensions accepted (only syntax that is invalid in C17, or reserved
 identifiers, so strictly conforming programs are not affected):
 `__attribute__` with `aligned`, `packed`, `noreturn`, `weak`, `alias`,
-`visibility`, `section`, `constructor` and `destructor` (with priority)
-and `used` (others are ignored), `__extension__`, `__typeof__`, `asm`
+`visibility`, `section`, `constructor` and `destructor` (with priority),
+`tls_model` and `used` (others are ignored), `__extension__`, `__typeof__`, `asm`
 labels and basic `asm` statements, statement expressions, `a ?: b`, case
 ranges, range designators, zero-length arrays, `, ## __VA_ARGS__`, named
 variadic macro parameters, `#include_next`, `#pragma once`,
 `push_macro`/`pop_macro`, `__has_include`, `__COUNTER__`, and the
 builtins `__builtin_va_*`, `__builtin_offsetof`,
 `__builtin_types_compatible_p`, `__builtin_expect`,
-`__builtin_constant_p`, `__builtin_unreachable`, `__builtin_alloca` and
-`__builtin_complex`. c17 does not define `__GNUC__`.
+`__builtin_constant_p`, `__builtin_unreachable`, `__builtin_alloca`,
+`__builtin_complex`, `__builtin_return_address` and
+`__builtin_frame_address` (any constant level: c17 always keeps a frame
+pointer). `tls_model` is honoured as described for `-G`. c17 does not
+define `__GNUC__`.
 
 ## Choices where the standard leaves room
 
 * The default linking is the C library's (its profile): dynamic for
-  glibc, static for musl. Executables are not position-independent.
-  Shared objects (`-G`) are not supported yet.
+  glibc, static for musl. Executables are not position-independent;
+  shared libraries (`-G`) are.
 * A static executable with glibc: what `libc.a` expects from gcc's
   `libgcc` is in `libc17rt.a`: binary128 arithmetic and comparison
   (rounded to nearest, without the floating-point environment's rounding

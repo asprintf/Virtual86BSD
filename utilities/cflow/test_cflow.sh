@@ -106,19 +106,19 @@ t "-r: the callers of each name" '1 f: int(), <file.c 13>
 t "-r: static functions of two files are two" '5 helper: void(), <a.c 4>
 6    main: 2
 7 helper: void(), <b.c 1>
-8    alpha: 1' 0 sh -c '"$1" -r a.c b.c | grep -A1 helper:' sh "$U"
+8    alpha: 1' 0 sh -c '"$1" -r a.c b.c | awk '"'"'/helper:/ { n = 2 } n > 0 { print; n-- }'"'"' ' sh "$U"
 t "-d 1: the top level only" '1 main: int(), <file.c 6>' 0 "$U" -d 1 file.c
 t "-d 2" '1 main: int(), <file.c 6>
 2    f: int(), <file.c 13>
 3    g: <>' 0 "$U" -d 2 file.c
 t "-d 0: ignored" "$("$U" file.c)" 0 "$U" -d 0 file.c
 t "-d -3: ignored" "$("$U" file.c)" 0 "$U" -d -3 file.c
-t "the definition of a C function: type, file and line" '1 main: int(), <file.c 6>' 0 sh -c '"$1" file.c | head -1' sh "$U"
+t "the definition of a C function: type, file and line" '1 main: int(), <file.c 6>' 0 sh -c '"$1" file.c | head -n 1' sh "$U"
 t "a function pointer used as a value is a reference" '4    helper: void(), <a.c 4>' 0 sh -c '"$1" a.c | grep helper' sh "$U"
 t "-D: a macro defined" '1 main: int(), <a.c 11>
 2    alpha: <>
 3    called_zeta: <>
-4    extra: <>' 0 sh -c '"$1" -D EXTRA a.c | head -4' sh "$U"
+4    extra: <>' 0 sh -c '"$1" -D EXTRA a.c | head -n 4' sh "$U"
 t "-D name=def" '5    level2: <>' 0 sh -c '"$1" -D LEVEL=2 a.c | grep level2' sh "$U"
 t "-U after -D undefines it" '' 1 sh -c '"$1" -D EXTRA -U EXTRA a.c | grep extra' sh "$U"
 t "-D after -U defines it" '4    extra: <>' 0 sh -c '"$1" -U EXTRA -D EXTRA a.c | grep extra' sh "$U"
@@ -173,16 +173,16 @@ if command -v cc >/dev/null 2>&1 && printf 'int g(void);\nint v;\nint main(void)
 fi
 if command -v lex >/dev/null 2>&1; then
     printf '%%%%\na\t{ found(); }\n%%%%\nint main(void) { return yylex(); }\n' > l.l
-    t ".l: lex input, by the lines of the .l file" '1 main: int(), <l.l 4>' 0 sh -c '"$1" -d 1 l.l | head -1' sh "$U"
+    t ".l: lex input, by the lines of the .l file" '1 main: int(), <l.l 4>' 0 sh -c '"$1" -d 1 l.l | head -n 1' sh "$U"
     t ".l: the code lex makes is lex.yy.c" 'lex.yy.c' 0 sh -c '"$1" -d 2 l.l | sed -n "2s/.*<\\([^ ]*\\) .*/\\1/p"' sh "$U"
 fi
 if command -v yacc >/dev/null 2>&1; then
     printf '%%token A\n%%%%\ns: A { action(); } ;\n%%%%\nint main(void) { return yyparse(); }\n' > y.y
     t ".y: yacc input" '1 main: int(), <y.y 5>
-2    yyparse: int(), <y.tab.c' 0 sh -c '"$1" -d 2 y.y | head -2 | sed "2s/ [0-9]*>\$//"' sh "$U"
+2    yyparse: int(), <y.tab.c' 0 sh -c '"$1" -d 2 y.y | head -n 2 | sed "2s/ [0-9]*>\$//"' sh "$U"
     t ".y: the actions are in the graph" '1' 0 sh -c '"$1" y.y | grep -c "action: <>"' sh "$U"
 fi
-t "a file that cannot be read: status 1, the others written" '1 main: int(), <file.c 6>' 1 sh -c '"$1" nosuch.c file.c 2>/dev/null > out; s=$?; head -1 out; exit $s' sh "$U"
+t "a file that cannot be read: status 1, the others written" '1 main: int(), <file.c 6>' 1 sh -c '"$1" nosuch.c file.c 2>/dev/null > out; s=$?; head -n 1 out; exit $s' sh "$U"
 t "a file that cannot be read: a diagnostic" 'cflow: nosuch.c: No such file or directory' 1 sh -c '"$1" nosuch.c 2>&1' sh "$U"
 t "no file: a usage error" '' 2 "$U"
 t "-i with another letter: a usage error" '' 2 "$U" -i z file.c

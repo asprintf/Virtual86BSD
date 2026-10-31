@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <sched.h>
 #include "out.h"
 
 extern char **environ;
@@ -41,13 +42,20 @@ static int visit(const char *p, const struct stat *st, int type, struct FTW *f)
 static int stop(const char *p, const struct stat *st, int type, struct FTW *f)
 { (void)p; (void)st; (void)type; (void)f; return ++nseen == 3 ? 99 : 0; }
 
-int main(void)
+int main(int argc, char **argv)
 {
 	char dir[64] = "/tmp/libc-sspawn.XXXXXX", cwd[1024], buf[256];
 	volatile int v = 1;
 	int r, st, p[2];
 	pid_t pid;
 	sigset_t set;
+
+	/* run by the scheduling test below: report policy and priority */
+	if (argc > 1 && !strcmp(argv[1], "sched")) {
+		struct sched_param sp;
+		sched_getparam(0, &sp);
+		return sched_getscheduler(0) * 100 + sp.sched_priority;
+	}
 
 	/* setjmp / longjmp */
 	r = setjmp(jb);
@@ -114,6 +122,46 @@ int main(void)
 		CHECK(strstr(buf, "\n1\n") != 0);     /* its own process group */
 		posix_spawnattr_destroy(&at);
 		posix_spawn_file_actions_destroy(&fa);
+
+		/* [PS] scheduling attributes */
+		{
+			char *argv5[] = { argv[0], "sched", 0 };
+			struct sched_param sp = { .sched_priority = 5 }, sq;
+			int pol, fifo_ok;
+			posix_spawnattr_init(&at);
+			CHECK(posix_spawnattr_setschedpolicy(&at, 999) == EINVAL);
+			CHECK(posix_spawnattr_setschedpolicy(&at, SCHED_FIFO) == 0);
+			CHECK(posix_spawnattr_setschedparam(&at, &sp) == 0);
+			posix_spawnattr_getschedpolicy(&at, &pol);
+			posix_spawnattr_getschedparam(&at, &sq);
+			CHECK(pol == SCHED_FIFO && sq.sched_priority == 5);
+			/* may a process of ours become SCHED_FIFO? ask in a child */
+			if ((pid = fork()) == 0) _exit(sched_setscheduler(0, SCHED_FIFO, &sp) < 0);
+			waitpid(pid, &st, 0);
+			fifo_ok = WIFEXITED(st) && WEXITSTATUS(st) == 0;
+			CHECK(posix_spawnattr_setflags(&at, POSIX_SPAWN_SETSCHEDULER) == 0);
+			r = posix_spawn(&pid, "/proc/self/exe", 0, &at, argv5, environ);
+			if (fifo_ok) {
+				CHECK(r == 0 && waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == SCHED_FIFO * 100 + 5);
+			} else
+				CHECK(r == EPERM);
+			/* the policy alone: SCHED_OTHER with priority 0 */
+			sp.sched_priority = 0;
+			posix_spawnattr_setschedpolicy(&at, SCHED_OTHER);
+			posix_spawnattr_setschedparam(&at, &sp);
+			CHECK(posix_spawn(&pid, "/proc/self/exe", 0, &at, argv5, environ) == 0);
+			CHECK(waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == 0);
+			/* parameters only, keeping our SCHED_OTHER: priority 50 is invalid there */
+			sp.sched_priority = 50;
+			posix_spawnattr_setschedparam(&at, &sp);
+			posix_spawnattr_setflags(&at, POSIX_SPAWN_SETSCHEDPARAM);
+			CHECK(posix_spawn(&pid, "/proc/self/exe", 0, &at, argv5, environ) == EINVAL);
+			sp.sched_priority = 0;
+			posix_spawnattr_setschedparam(&at, &sp);
+			CHECK(posix_spawn(&pid, "/proc/self/exe", 0, &at, argv5, environ) == 0);
+			CHECK(waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == 0);
+			posix_spawnattr_destroy(&at);
+		}
 
 		/* the child gets no handler of ours; it sees the descriptor
 		 * of a pipe only without FD_CLOEXEC */

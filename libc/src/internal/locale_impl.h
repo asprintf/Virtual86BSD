@@ -53,6 +53,9 @@ struct __lcat {
 	size_t nrulesets, nweightmb, nextramb, nindirectmb, nweightwc, nextrawc, nindirectwc;
 	const unsigned char *collseqmb;    /* 256: the collation sequence of bytes */
 	const uint32_t *collseqwc;         /* 3-level: of characters */
+	const unsigned char *symbextra;    /* multi-character collating elements: [len name][len bytes]
+	                                      pad, seqmb, nwcs, wcs[nwcs], seqwc (glibc's SYMB_EXTRAMB) */
+	size_t nsymbextra;
 };
 
 struct __locale_struct {
@@ -94,6 +97,26 @@ int __coll_valid(const struct __lcat *c, int wide, uint32_t x);
 uint32_t __coll_seq(const struct __lcat *c, int wide, uint32_t x);
 int __coll_seq_runs(const struct __lcat *c, uint32_t sc, uint32_t sd,
                     int (*f)(void *, uint32_t, uint32_t), void *arg);
+/* Multi-character collating elements ("ch"), and the same questions for
+ * a collating element given as a string of units (wide: code points;
+ * else bytes) as for one character. */
+struct __coll_me {
+	const unsigned char *mbs;          /* the bytes (the locale's codeset) */
+	const unsigned char *wcs;          /* nwcs code points, unaligned */
+	size_t nmbs, nwcs;
+	uint32_t seqmb, seqwc;             /* its collation sequence (bytes, wide) */
+};
+/* the next element after *pos (0 to start); 0 at the end */
+int __coll_me_next(const struct __lcat *c, size_t *pos, struct __coll_me *e);
+/* the units of e (wide: code points) into u (at least 256); their number */
+size_t __coll_me_units(const struct __coll_me *e, int wide, uint32_t *u);
+/* x[0..n) is a collating element of the locale (one character: as __coll_valid) */
+int __coll_valids(const struct __lcat *c, int wide, const uint32_t *x, size_t n);
+int __coll_equivs(const struct __lcat *c, int wide, const uint32_t *x, size_t nx,
+                  const uint32_t *y, size_t ny);
+/* its collation sequence: __coll_seq(c, wide, *x) for one unit, else on the
+   wide scale (elements have none on the byte scale); ~0 if none */
+uint32_t __coll_seqs(const struct __lcat *c, int wide, const uint32_t *x, size_t n);
 #define COLL_OF(l) (((l) == LC_GLOBAL_LOCALE ? &__global_locale : (l))->cat[LC_COLLATE])
 int __tab_byte(const uint32_t *t, uint32_t wc);
 

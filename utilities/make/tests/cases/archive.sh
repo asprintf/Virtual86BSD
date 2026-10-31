@@ -1,4 +1,15 @@
 . "$LIB"
+# cc and GNU ar's U (keep the members' times) where the system has them;
+# else (POSIX: c17, and an ar without U) wrappers by those names
+mkdir wbin
+if ! command -v cc >/dev/null 2>&1; then
+    printf '#!/bin/sh\nexec c17 "$@"\n' > wbin/cc
+fi
+printf x > probe.o
+if ! ar -rUc probe.a probe.o 2>/dev/null; then
+    printf '#!/bin/sh\no=$1; shift\nexec %s "$(printf %%s "$o" | tr -d U)" "$@"\n' "$(command -v ar)" > wbin/ar
+fi
+rm -f probe.o probe.a; chmod +x wbin/* 2>/dev/null; PATH=$PWD/wbin:$PATH
 printf 'int f(void){return 1;}\n' > f.c; printf 'int g(void){return 2;}\n' > g.c
 mk <<'X'
 .POSIX:

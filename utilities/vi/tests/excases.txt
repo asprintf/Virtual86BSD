@@ -918,7 +918,7 @@ a
 b
 c
 ----
-2,3w !cat -n
+2,3w !nl -b a
 #### write readonly
 a
 ----

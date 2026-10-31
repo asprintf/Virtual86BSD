@@ -17,6 +17,8 @@ ok() {
 done_tests() { echo "$1: $pass passed, $fail failed"; [ "$fail" = 0 ]; }
 U=${U:-$PWD/time}
 T=${TMPDIR:-/tmp}/test_time.$$
+# only ERE: the parts of the input that match (as grep -o, which is not POSIX)
+ONLY=$(cd ../testlib && pwd)/only.sh; export ONLY
 mkdir -m 700 "$T" || exit 2
 trap 'chmod -R u+rwx "$T" 2>/dev/null; rm -rf "$T" "$T.tl"' EXIT
 # tl: the test language, built here (../testlib/tl.c; ../testlib/tl.md)
@@ -47,14 +49,14 @@ t "sys: a number" "yes" 0 sh -c '"$1" -p true 2>&1 | awk "/^sys/ { print (\$2 >=
 t "the utility's status" "" 7 "$U" sh -c 'exit 7'
 t "the utility's status, -p" "" 0 "$U" -p true
 t "killed by a signal: the same signal" "143" 0 sh -c '"$1" sh -c "kill -s TERM \$\$" 2>/dev/null; echo $?' sh "$U"
-t "killed by a signal: the times are written" "real" 0 sh -c '"$1" -p sh -c "kill -s TERM \$\$" 2>&1 | grep -o "^real"' sh "$U"
+t "killed by a signal: the times are written" "real" 0 sh -c '"$1" -p sh -c "kill -s TERM \$\$" 2>&1 | sh "$ONLY" "^real"' sh "$U"
 t "SIGINT is ignored by time while it waits" "ok${nl}0" 0 sh -c '"$1" sh -c "kill -s INT \$PPID; sleep 1; echo ok" 2>/dev/null; echo $?' sh "$U"
 t "SIGQUIT is ignored by time while it waits" "ok${nl}0" 0 sh -c '"$1" sh -c "kill -s QUIT \$PPID; sleep 1; echo ok" 2>/dev/null; echo $?' sh "$U"
 t "the utility has SIGINT as time found it" "130" 0 sh -c '"$1" "$TLBIN" -e "kill(getpid(), SIGINT); pause();" 2>/dev/null; echo $?' sh "$U"
 t "the arguments" "a b${nl}c" 0 sh -c '"$1" printf "%s\n" "a b" c 2>/dev/null' sh "$U"
 t "a script without #!: run by sh" "plain" 0 sh -c 'printf "echo plain\n" > plain && chmod +x plain && "$1" ./plain 2>/dev/null' sh "$U"
 t "not found: 127" "" 127 "$U" no_such_utility_x9
-t "not found: the times are written" "real" 0 sh -c '"$1" -p no_such_utility_x9 2>&1 | grep -o "^real"' sh "$U"
+t "not found: the times are written" "real" 0 sh -c '"$1" -p no_such_utility_x9 2>&1 | sh "$ONLY" "^real"' sh "$U"
 t "not executable: 126" "" 126 sh -c ': > nx && chmod 644 nx && "$1" ./nx' sh "$U"
 $root || t "not found past an unsearchable directory: 127" "" 127 sh -c 'mkdir -p nd && chmod 0 nd && PATH=$PWD/nd:$PATH "$1" no_such_utility_here' sh "$U"
 t "--" "hi" 0 sh -c '"$1" -- echo hi 2>/dev/null' sh "$U"

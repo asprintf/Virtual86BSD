@@ -316,7 +316,14 @@ in sccs, ngettext with gettext), and in the shell all the special
 built-ins (break, colon, continue, dot, eval, exec, exit, export,
 readonly, return, set, shift, times, trap, unset) and the intrinsic
 utilities (alias, bg, cd, command, fc, fg, getopts, hash, jobs, kill,
-read, type, ulimit, umask, unalias, wait).
+read, type, ulimit, umask, unalias, wait).  `kill` is also installed as
+a program (sh/kill.sh, which runs the built-in), so that `env kill`,
+`xargs kill` and `find -exec kill` work, as POSIX.1-2024 (XCU 1.6)
+requires of it alone among the intrinsic utilities.  The shell's pattern
+matching (case, pathname expansion, `${x#pattern}`) is the C library's
+fnmatch(), so bracket expressions follow the locale (classes, equivalence
+classes, collating symbols).  With PATH unset, commands are searched for
+in the standard path (`getconf PATH`).
 
 c17 compiles, assembles and link-edits by itself, so the collection
 needs nothing outside it but a C library and a kernel.  Built with c17

@@ -32,7 +32,7 @@ $cc -o "$T.tl" "$TL/tl.c" || { echo "cannot compile ../testlib/tl.c"; exit 2; }
 TLBIN=$T.tl; export TLBIN
 tl() { "$TLBIN" "$@"; }
 # ptyrun FDS COMMAND...: COMMAND with the descriptors FDS on a terminal (../testlib/ptyrun.tl)
-ptyrun() { "$TLBIN" "$TL/ptyrun.tl" "$@"; }
+ptyrun() { PTYRUN_INPUT=${PTYRUN_INPUT-} PTYRUN_WAIT=${PTYRUN_WAIT-} "$TLBIN" "$TL/ptyrun.tl" "$@"; }   # (assignments before a function call need not be exported)
 cd "$T" || exit 2
 export LC_ALL=C
 root=false; [ "$(id -u)" = 0 ] && root=true

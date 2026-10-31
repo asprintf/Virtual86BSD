@@ -4,6 +4,7 @@
 #include <limits.h>
 #include <errno.h>
 #include <stdint.h>
+#include <unistd.h>
 #include "syscall.h"
 #include "clofork.h"
 
@@ -64,5 +65,9 @@ int shm_unlink(const char *name)
 {
 	char buf[NAME_MAX + 10];
 	if (shm_path(name, buf)) return -1;
-	return (int)__sys3(SYS_unlinkat, AT_FDCWD, buf, 0);
+	if (unlink(buf) == 0)
+		return 0;
+	if (errno == EPERM)
+		errno = EACCES;     /* the sticky /dev/shm: POSIX says EACCES */
+	return -1;
 }

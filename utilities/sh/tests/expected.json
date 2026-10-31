@@ -539,6 +539,14 @@
   "x1y2z$qw\n",
   0
  ],
+ "cases2.txt:async: $! is the last command of a pipeline": [
+  "sleep 2\n",
+  0
+ ],
+ "cases2.txt:async: SIGINT and SIGQUIT ignored without job control": [
+  "st=0\ndone\nst=0\n",
+  0
+ ],
  "cases2.txt:builtins: OLDPWD set": [
   "/\n",
   0
@@ -1229,6 +1237,10 @@
  ],
  "cases2.txt:expand: unset vs empty with colon": [
   "[x][x][x][]\n",
+  0
+ ],
+ "cases2.txt:functions: assignments exported while the function runs": [
+  "[x]\nafter: [unset]\n0\n",
   0
  ],
  "cases2.txt:misc: IFS restored after read prefix": [

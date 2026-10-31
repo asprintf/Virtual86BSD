@@ -37,9 +37,10 @@ user namespaces to ordinary users (see the head of `chroot.sh`).
 
 1. **stage 0** — the host's compiler builds just five tools of this
    package: c17, make, ar, yacc and lex.
-2. **stage 1** — those tools build the C library and then every utility
-   against it (c17, make and ar too).  No program of the host compiles
-   anything from here on.
+2. **stage 1** — those tools build the C library (`libc.a`, and
+   `libc.so`, which is also its own dynamic linker) and then every
+   utility against it (c17, make and ar too).  No program of the host
+   compiles anything from here on.
 3. **stage 2** — the utilities of stage 1, running on Shall's own C
    library, build everything again into `root/`.
 
@@ -50,19 +51,23 @@ Shall's yacc and lex in both stages.
 
 `root/` then gets `/etc` (from `system/etc`), `/tmp`, `/root`, `/bin`
 and `/lib` (links into `/usr`), empty `/dev`, `/proc` and `/sys` (which
-`chroot.sh` mounts), and these sources in `/usr/src/shall`.  Inside, the
+`chroot.sh` mounts), these sources in `/usr/src/shall`, and the host's
+time zone database in `/usr/share/zoneinfo` (if it has one; `ZONEINFO=dir`
+names another) and its terminfo database in `/usr/share/terminfo` (for
+tput, more, vi; `TERMINFO=dirs` names others).  Inside, the
 system rebuilds itself the same way, with its own c17 as the host's
 compiler:
 
     CC=c17 sh /usr/src/shall/bootstrap.sh /tmp/again
 
-Options: `-s` also builds `libc.so` (the shared C library, which is its
-own dynamic linker); it needs gcc and binutils' ld, since c17 makes no
-shared objects yet.  `-k` keeps the stages, `-w dir` puts them
-elsewhere.  `sh chroot.sh root command...` runs one command inside.
+Options: `-k` keeps the stages, `-w dir` puts them elsewhere.
+`sh chroot.sh root command...` runs one command inside.
 
 Programs in the system are linked statically against `/usr/lib/libc.a`;
 `c17` finds the C library through its profile `/usr/lib/c17/libc/shall`.
+`c17 -B dynamic` links a program with `/usr/lib/libc.so` instead, and
+`c17 -G` makes shared libraries (position-independent code; `dlopen`
+works).
 
 Third-party software builds too: `HOWTO-lua.md` builds Lua 5.4 inside
 the system with c17 and ar, and it passes Lua's own test suite.
@@ -70,24 +75,28 @@ the system with c17 and ar, and it passes Lua's own test suite.
 ## Testing
 
 * The utilities: `cd utilities && sh run_tests.sh` on the host; inside the
-  system `cd /usr/src/shall/utilities && CC=c17 sh run_tests.sh`.  Inside,
-  about 65 of some 6 700 tests fail, mostly because the tests call
-  programs that are not POSIX utilities (`yes`, `cc`, `cat -n`, mail
-  delivery) or need a terminal; the write tests wait for a terminal and
-  must be interrupted.
+  system `cd /usr/src/shall/utilities && CC=c17 sh run_tests.sh`.  The
+  tests use only what POSIX specifies (no `yes`, `head -5`, `grep -o`,
+  `cat -n` and the like), so all of some 6 700 pass inside the system as
+  on the host.
 * The C library: `cd libc && make check` — most of its tests are
   differential, comparing with glibc, so they need gcc and glibc (see
   `libc/README.md`); `LIBC_LINK=dynamic` and `static-pie` run them
   linked those ways.
+* The Open POSIX Test Suite (LTP): of its 1755 conformance tests that
+  build (the others use removed or non-POSIX interfaces), all pass but
+  those that also fail with glibc, plus 8 that test implementation-
+  defined or undefined behaviour (`libc/STATUS.md`, stage 14).
 
 ## Where things stand
 
 See `libc/STATUS.md` and `utilities/README.md`.  In short: all 155
-utilities of POSIX.1-2024 exist (16 of them as built-ins of sh), and all
-interfaces of the C library.  Known gaps: the regular built-ins cannot
-yet be run through exec (e.g. `env kill`); strptime's `%E` and `%O`;
-multi-character collating elements (`[.ch.]`); libc.so needs gcc.  The
-kernel is Linux's.
+utilities of POSIX.1-2024 exist (16 of them as built-ins of sh), and
+1224 of the 1227 interfaces of XSH; the other three are the typed memory
+objects, an option Linux cannot support.  `kill` can also be run
+through exec (`env kill`), as POSIX requires of it alone among the
+intrinsic utilities.  Multi-character collating elements (`[.ch.]`)
+work in regular expressions and patterns.  The kernel is Linux's.
 
 ## License
 

@@ -17,6 +17,8 @@ ok() {
 done_tests() { echo "$1: $pass passed, $fail failed"; [ "$fail" = 0 ]; }
 U=${U:-$PWD/tabs}
 T=${TMPDIR:-/tmp}/test_tabs.$$
+# only ERE: the parts of the input that match (as grep -o, which is not POSIX)
+ONLY=$(cd ../testlib && pwd)/only.sh; export ONLY
 mkdir -m 700 "$T" || exit 2
 trap 'chmod -R u+rwx "$T" 2>/dev/null; rm -rf "$T" "$T.tl"' EXIT
 # tl: the test language, built here (../testlib/tl.c; ../testlib/tl.md)
@@ -27,7 +29,7 @@ $cc -o "$T.tl" "$TL/tl.c" || { echo "cannot compile ../testlib/tl.c"; exit 2; }
 TLBIN=$T.tl; export TLBIN
 tl() { "$TLBIN" "$@"; }
 # ptyrun FDS COMMAND...: COMMAND with the descriptors FDS on a terminal (../testlib/ptyrun.tl)
-ptyrun() { "$TLBIN" "$TL/ptyrun.tl" "$@"; }
+ptyrun() { PTYRUN_INPUT=${PTYRUN_INPUT-} PTYRUN_WAIT=${PTYRUN_WAIT-} "$TLBIN" "$TL/ptyrun.tl" "$@"; }   # (assignments before a function call need not be exported)
 cd "$T" || exit 2
 export LC_ALL=C
 root=false; [ "$(id -u)" = 0 ] && root=true
@@ -63,9 +65,9 @@ t "-a" "<C><R><H>.........<H>......<H>....................<H>...................
 t "-a2" "<C><R><H>.........<H>......<H>........................<H>................................<H><R>" 0 tb -T tw -a2
 t "-c" "<C><R><H>.......<H>....<H>....<H>....<H>...................................<H><R>" 0 tb -T tw -c
 t "-c2" "<C><R><H>.....<H>....<H>....<H>...................................<H><R>" 0 tb -T tw -c2
-t "-c3: its 17 stops" "17" 0 sh -c '"$1" -T tw -c3 | grep -o "<H>" | wc -l | tr -d " "' sh "$U"
+t "-c3: its 17 stops" "17" 0 sh -c '"$1" -T tw -c3 | sh "$ONLY" "<H>" | wc -l | tr -d " "' sh "$U"
 t "-f" "<C><R><H>......<H>....<H>....<H>....<H>....<H><R>" 0 tb -T tw -f
-t "-p: its 16 stops" "16" 0 sh -c '"$1" -T tw -p | grep -o "<H>" | wc -l | tr -d " "' sh "$U"
+t "-p: its 16 stops" "16" 0 sh -c '"$1" -T tw -p | sh "$ONLY" "<H>" | wc -l | tr -d " "' sh "$U"
 t "-s" "<C><R><H>.........<H>.............................................<H><R>" 0 tb -T tw -s
 t "-u" "<C><R><H>...........<H>........<H>........................<H><R>" 0 tb -T tw -u
 t "the stops are where a tab goes: column 1 + 8k for -8" "1 9 17 25 33 41 49 57 65 73" 0 sh -c '"$1" -T tw -8 | sed "s/<C><R>//" | awk "{ s = \$0; col = 1; out = \"\"; while (s != \"\") { if (substr(s, 1, 3) == \"<H>\") { out = out (out == \"\" ? \"\" : \" \") col; s = substr(s, 4) } else if (substr(s, 1, 1) == \" \") { col++; s = substr(s, 2) } else s = substr(s, 2) } print out }"' sh "$U"
@@ -73,7 +75,7 @@ t "the last option counts" "<C><R><H>....<H>....<H>....<H>....<H>...<R>" 0 tb -T
 t "TERM" "<C><R><H>....<H>....<H>....<H>....<H>...<R>" 0 sh -c 'TERM=tt "$1" -4 | tr " " .' sh "$U"
 t "-T over TERM" "<C><R><H>....<H>....<H>....<H>....<H>...<R>" 0 sh -c 'TERM=tn "$1" -T tt -4 | tr " " .' sh "$U"
 t "-Ttype" "<C><R><H>....<H>....<H>....<H>....<H>...<R>" 0 tb -Ttt -4
-t "no cr: a carriage return; no cols: 80" "yes" 0 sh -c '"$1" -T tx | od -c | grep "\\\\r" >/dev/null && [ $("$1" -T tx | grep -o "<H>" | wc -l) = 10 ] && echo yes' sh "$U"
+t "no cr: a carriage return; no cols: 80" "yes" 0 sh -c '"$1" -T tx | od -c | grep "\\\\r" >/dev/null && [ $("$1" -T tx | sh "$ONLY" "<H>" | wc -l) = 10 ] && echo yes' sh "$U"
 t "-- before the list" "<C><R>....<H>....<H><R>" 0 tb -T tt -- 5,9
 # terminals that cannot
 t "no tbc: an error" "" 1 "$U" -T tn

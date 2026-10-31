@@ -27,9 +27,9 @@ _start:
 	jne	4f
 	lea	(%rdi,%r10),%r8
 4:	cmp	$35,%rax		# DT_RELRSZ
-	jne	41f
+	jne	.Lnext
 	mov	%r10,%r9
-41:	add	$16,%rsi
+.Lnext:	add	$16,%rsi
 	jmp	1b
 5:	test	%rcx,%rcx		# R_X86_64_RELATIVE: *(base + off) = base + addend
 	jz	8f
@@ -45,32 +45,32 @@ _start:
 7:	add	$24,%rcx
 	jmp	6b
 8:	test	%r8,%r8			# DT_RELR
-	jz	20f
+	jz	.Lrelr_done
 	add	%r8,%r9			# end
 	xor	%r11d,%r11d		# where
 9:	cmp	%r9,%r8
-	jae	20f
+	jae	.Lrelr_done
 	mov	(%r8),%rax
 	test	$1,%rax
-	jnz	10f
+	jnz	.Lbitmap
 	lea	(%rdi,%rax),%r11	# an address
 	add	%rdi,(%r11)
 	add	$8,%r11
-	jmp	12f
-10:	shr	$1,%rax			# a bitmap of the 63 words from where
+	jmp	.Lrelr_next
+.Lbitmap:	shr	$1,%rax			# a bitmap of the 63 words from where
 	mov	%r11,%r10
-11:	test	%rax,%rax
-	jz	111f
+.Lbits:	test	%rax,%rax
+	jz	.Lbits_done
 	test	$1,%rax
-	jz	110f
+	jz	.Lbit_next
 	add	%rdi,(%r10)
-110:	add	$8,%r10
+.Lbit_next:	add	$8,%r10
 	shr	$1,%rax
-	jmp	11b
-111:	add	$63*8,%r11
-12:	add	$8,%r8
+	jmp	.Lbits
+.Lbits_done:	add	$63*8,%r11
+.Lrelr_next:	add	$8,%r8
 	jmp	9b
-20:	mov	%r12,%rdi
+.Lrelr_done:	mov	%r12,%rdi
 	lea	main(%rip),%rsi
 	and	$-16,%rsp
 	call	__libc_start_main

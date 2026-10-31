@@ -109,6 +109,7 @@ HDRS = \
 	src/internal/clofork.h \
 	src/internal/complex_impl.h \
 	src/internal/elf_min.h \
+	src/internal/era.h \
 	src/internal/fpdigits.h \
 	src/internal/libc.h \
 	src/internal/libm.h \
@@ -431,6 +432,7 @@ OBJS = \
 	$(B)/obj/time/calendar.o \
 	$(B)/obj/time/clock.o \
 	$(B)/obj/time/clock_posix.o \
+	$(B)/obj/time/era.o \
 	$(B)/obj/time/getdate.o \
 	$(B)/obj/time/localtime.o \
 	$(B)/obj/time/localtime_r.o \
@@ -1613,6 +1615,10 @@ $(B)/obj/time/clock.o: src/time/clock.c $(HDRS)
 $(B)/obj/time/clock_posix.o: src/time/clock_posix.c $(HDRS)
 	mkdir -p $(B)/obj/time
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ src/time/clock_posix.c
+
+$(B)/obj/time/era.o: src/time/era.c $(HDRS)
+	mkdir -p $(B)/obj/time
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ src/time/era.c
 
 $(B)/obj/time/getdate.o: src/time/getdate.c $(HDRS)
 	mkdir -p $(B)/obj/time

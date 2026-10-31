@@ -8,9 +8,9 @@
     21 hdrcharset=BINARY
     15 path=w/caf�
 -- -o hdrcharset:=BINARY: the names as they are
-      1     15 path=w/caf�
-      1     16 path=w/café
-      2     21 hdrcharset=BINARY
+1     15 path=w/caf�
+1     16 path=w/café
+2     21 hdrcharset=BINARY
 == reading in the UTF-8 locale
 utf8 rc=0
  c a f 303 251 \n

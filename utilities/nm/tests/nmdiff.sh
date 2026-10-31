@@ -52,7 +52,7 @@ for f in $files; do
         case $o in *-v*) a=$(printf '%s\n' "$a" | sort); b=$(printf '%s\n' "$b" | sort) ;; esac
         if [ "$a" != "$b" ]; then
             fail=$((fail + 1)); echo "FAIL nm $o $f"
-            printf '%s\n' "$a" > "$T/a"; printf '%s\n' "$b" > "$T/b"; diff "$T/a" "$T/b" | head -6
+            printf '%s\n' "$a" > "$T/a"; printf '%s\n' "$b" > "$T/b"; diff "$T/a" "$T/b" | head -n 6
         fi
     done
 done

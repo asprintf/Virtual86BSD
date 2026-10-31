@@ -1784,6 +1784,22 @@ static Node *primary(Token **rest, Token *tok) {
       *rest = skip(tok, ")");
       return e;
     }
+    /* frames: c17 keeps a frame pointer, so level n is n links up the
+       chain of saved %rbp; the return address is the word above */
+    if ((equal(tok, "__builtin_return_address") || equal(tok, "__builtin_frame_address")) &&
+        equal(tok->next, "(")) {
+      bool ret = equal(tok, "__builtin_return_address");
+      Token *t = tok->next->next;
+      int64_t level = const_expr(&t, t);
+      if (level < 0)
+        error_tok(tok, "the level must not be negative");
+      *rest = skip(t, ")");
+      Node *n = new_node(ND_FRAMEADDR, tok);
+      n->val = level;
+      n->rmw_op = ret;
+      n->ty = pointer_to(ty_void);
+      return n;
+    }
     if (equal(tok, "__builtin_unreachable") && equal(tok->next, "(")) {
       *rest = skip(skip(tok->next, "("), ")");
       Node *n = new_node(ND_UNREACHABLE, tok);

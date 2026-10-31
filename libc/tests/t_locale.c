@@ -132,6 +132,36 @@ static void one(const char *name)
 		oi(e ? *e : -1); oc(' '); oi(t2.tm_hour); oc(' '); oi(t2.tm_wday); onl();
 	}
 	{
+		/* eras and alternative digits: strftime, then strptime of its
+		 * output (E and O modifiers) */
+		static const int dates[][3] = { { 1868, 10, 23 }, { 1912, 7, 30 }, { 1926, 12, 25 }, { 1927, 1, 1 },
+			{ 1989, 1, 7 }, { 1989, 1, 8 }, { 1990, 6, 15 }, { 2019, 4, 30 }, { 2019, 5, 1 },
+			{ 2020, 1, 1 }, { 2024, 3, 5 }, { 1999, 12, 31 } };
+		static const char *fm[] = { "%EY", "%EC%Ey", "%Ey %EC", "%EC", "%Ey", "%Ec", "%Ex", "%EX",
+			"%Od %Om %OH %OM %OS", "%Oy", "%Oe %OI %Ow" };
+		/* compared only where the locale has eras (the first 8 formats)
+		 * or alternative digits (the next 3): without them glibc fails
+		 * where POSIX falls back to the plain conversion (s_time.c) */
+		int hasera = *nl_langinfo(ERA) != 0, hasalt = *nl_langinfo(ALT_DIGITS) != 0;
+		unsigned j;
+		for (k = 0; k < sizeof dates / sizeof *dates; k++)
+			for (j = 0; j < sizeof fm / sizeof *fm; j++) {
+				if (j >= 8 ? !hasalt : !hasera) continue;
+				struct tm tm = { .tm_year = dates[k][0] - 1900, .tm_mon = dates[k][1] - 1, .tm_mday = dates[k][2],
+				                 .tm_hour = 21, .tm_min = 7, .tm_sec = 9 }, t2;
+				char *e;
+				mktime(&tm);
+				strftime(buf, sizeof buf, fm[j], &tm);
+				memset(&t2, 0, sizeof t2);
+				e = strptime(buf, fm[j], &t2);
+				os(fm[j]); oc('='); os(buf); oc(' ');
+				oi(e ? e - buf : -1); oc(' ');
+				if (!e) { onl(); continue; }   /* the fields are then unspecified */
+				oi(t2.tm_year); oc(' '); oi(t2.tm_mon); oc(' '); oi(t2.tm_mday); oc(' ');
+				oi(t2.tm_hour); oc(' '); oi(t2.tm_min); oc(' '); oi(t2.tm_sec); onl();
+			}
+	}
+	{
 		static const char *f[] = { "%n", "%i", "%(n", "%!n", "%^n", "%12n", "%-12n|", "%#5n", "%=*#5n", "%.0n", "%.3i", "%(#6.2n" };
 		static const double v[] = { 1234567.891, -1234.5, 0 };
 		for (k = 0; k < sizeof f / sizeof *f; k++) {

@@ -53,9 +53,13 @@ test: all
 difftest: all
 	sh ../testlib/tl.sh tests/run_diff.tl
 
+# kill.sh becomes the kill utility (the only intrinsic utility the exec
+# family must reach, XCU 1.6)
 install: all
 	mkdir -p $(DESTDIR)$(BINDIR)
 	cp $(PROG) $(DESTDIR)$(BINDIR)/$(PROG)
+	cp kill.sh $(DESTDIR)$(BINDIR)/kill
+	chmod 755 $(DESTDIR)$(BINDIR)/kill
 
 clean:
 	rm -f $(PROG) $(OBJS)

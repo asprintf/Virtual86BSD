@@ -188,7 +188,7 @@ func pybool(b) {
     return b ? "True" : "False";
 }
 
-/* the counters as Python writes a dict */
+/* the counters as {'name': count, ...} */
 func statstr(st) {
     return sprintf("{'rounds': %d, 'diffs': %d, 'errors': %d, 'timeouts': %d}",
                    st.rounds, st.diffs, st.errors, st.timeouts);

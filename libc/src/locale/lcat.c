@@ -156,6 +156,10 @@ static int collate_setup(struct __lcat *c)
 		c->collseqmb = (const unsigned char *)c->elem[16];
 		c->collseqwc = (const uint32_t *)(const void *)c->elem[17];
 	}
+	if (c->n > 16) {
+		c->symbextra = (const unsigned char *)c->elem[15];
+		c->nsymbextra = SZ(15);
+	}
 #undef SZ
 	return 0;
 }

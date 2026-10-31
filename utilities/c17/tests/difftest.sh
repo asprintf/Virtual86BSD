@@ -43,7 +43,7 @@ for f in "$D"/tests/run/*.c; do
        ./"c17_$n" > "c17_$n.out" 2>&1 && cmp -s "ref_$n.out" "c17_$n.out"; then
         good
     else
-        bad "program $n"; diff "ref_$n.out" "c17_$n.out" | head -5
+        bad "program $n"; diff "ref_$n.out" "c17_$n.out" | head -n 5
     fi
 done
 
@@ -59,7 +59,7 @@ for s in $seeds; do
     ok=1
     for combo in "cr_c.o ce_r.o" "cr_r.o ce_c.o" "cr_c.o ce_c.o"; do
         $REFCC -o t $combo && ./t > t.out 2>&1
-        cmp -s rr.out t.out || { ok=0; echo "  seed $s: ($combo) differs"; diff rr.out t.out | head -4; }
+        cmp -s rr.out t.out || { ok=0; echo "  seed $s: ($combo) differs"; diff rr.out t.out | head -n 4; }
     done
     if [ $ok = 1 ]; then good; else bad "calling convention, seed $s"; cp callee.c "$D/abi-callee-$s.c"; cp caller.c "$D/abi-caller-$s.c"; fi
 done
@@ -73,7 +73,7 @@ if $REFAS -o ref_insns.o "$D/tests/asm/insns.s" 2>/dev/null; then
     "$U" -c -o c17_insns.o "$D/tests/asm/insns.s"
     asmdump ref_insns.o > ref.dump
     asmdump c17_insns.o > c17.dump
-    if cmp -s ref.dump c17.dump; then good; else bad "assembler: tests/asm/insns.s"; diff ref.dump c17.dump | head -5; fi
+    if cmp -s ref.dump c17.dump; then good; else bad "assembler: tests/asm/insns.s"; diff ref.dump c17.dump | head -n 5; fi
     # c17's own output, assembled both ways: the same code (jumps aside,
     # which $REFAS makes short where it can) is checked by running it
     for f in "$D"/tests/run/*.c; do

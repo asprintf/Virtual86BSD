@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <threads.h>
 #include <time.h>
@@ -235,7 +236,7 @@ static void mutexes(void)
 	CHECK(pthread_mutex_trylock(&m) == EOWNERDEAD);
 	CHECK(pthread_mutex_unlock(&m) == 0);         /* not made consistent */
 	CHECK(pthread_mutex_lock(&m) == ENOTRECOVERABLE);
-	CHECK(pthread_mutexattr_setprotocol(&a, PTHREAD_PRIO_INHERIT) == ENOTSUP);
+	CHECK(pthread_mutexattr_setprotocol(&a, 9) == EINVAL);   /* the protocols: s_prio.c */
 	pthread_mutexattr_destroy(&a);
 
 	/* process-shared robust: the owning process dies */
@@ -304,6 +305,19 @@ static void *sleeper(void *p)
 		pthread_cond_wait(&qc, &qm);
 	woken++;
 	pthread_mutex_unlock(&qm);
+	return 0;
+}
+
+struct dcv { pthread_mutex_t m; pthread_cond_t c; int flag, n; };
+static void *dcv_waiter(void *p)
+{
+	struct dcv *s = p;
+	pthread_mutex_lock(&s->m);
+	s->n++;
+	while (!s->flag)
+		pthread_cond_wait(&s->c, &s->m);
+	s->n--;
+	pthread_mutex_unlock(&s->m);
 	return 0;
 }
 
@@ -390,6 +404,33 @@ static void conds(void)
 		CHECK(waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == 0);
 		munmap(s, sizeof *s);
 	}
+	/* destroyed (and the memory reused) right after a broadcast:
+	   the woken waiters must not touch it again */
+	for (i = 0; i < 2; i++) {
+		struct dcv *s = mmap(0, sizeof *s, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+		pthread_t dt[4];
+		int k;
+		pthread_condattr_setpshared(&ca, i);
+		pthread_mutex_init(&s->m, 0);
+		pthread_cond_init(&s->c, &ca);
+		for (k = 0; k < 4; k++)
+			pthread_create(&dt[k], 0, dcv_waiter, s);
+		pthread_mutex_lock(&s->m);
+		while (s->n < 4) {
+			pthread_mutex_unlock(&s->m);
+			msleep(5);
+			pthread_mutex_lock(&s->m);
+		}
+		s->flag = 1;
+		pthread_cond_broadcast(&s->c);
+		pthread_mutex_unlock(&s->m);
+		CHECK(pthread_cond_destroy(&s->c) == 0);
+		memset(&s->c, 0xff, sizeof s->c);
+		for (k = 0; k < 4; k++)
+			pthread_join(dt[k], 0);
+		CHECK(s->n == 0);
+		munmap(s, sizeof *s);
+	}
 	pthread_condattr_destroy(&ca);
 }
 
@@ -474,6 +515,7 @@ static void sync_objects(void)
 	pthread_create(&t[0], 0, trywr, &rw); pthread_join(t[0], &r); CHECK(r == (void *)EBUSY);
 	pthread_rwlock_unlock(&rw); pthread_rwlock_unlock(&rw); pthread_rwlock_unlock(&rw);
 	CHECK(pthread_rwlock_wrlock(&rw) == 0);
+	CHECK(pthread_rwlock_wrlock(&rw) == EDEADLK && pthread_rwlock_rdlock(&rw) == EDEADLK);
 	pthread_create(&t[0], 0, tryrd, &rw); pthread_join(t[0], &r); CHECK(r == (void *)EBUSY);
 	{
 		struct timespec at = after(CLOCK_REALTIME, 20);
@@ -927,6 +969,44 @@ static void *sched_thread(void *p)
 	return (void *)(long)(pol * 1000 + sp.sched_priority);
 }
 
+/* nice() and setpriority(PRIO_PROCESS, 0) set the process's nice value,
+   so other threads see it (Linux keeps one per thread) */
+static pthread_barrier_t nbar;
+static int nseen;
+static void *nicer(void *p)
+{
+	(void)p;
+	pthread_barrier_wait(&nbar);
+	pthread_barrier_wait(&nbar);
+	nseen = getpriority(PRIO_PROCESS, 0);
+	return 0;
+}
+
+static void nices(void)
+{
+	pid_t pid;
+	int st;
+	if (!(pid = fork())) {
+		pthread_t t;
+		int base = getpriority(PRIO_PROCESS, 0), ok;
+		pthread_barrier_init(&nbar, 0, 2);
+		pthread_create(&t, 0, nicer, 0);
+		pthread_barrier_wait(&nbar);
+		nice(2);
+		pthread_barrier_wait(&nbar);
+		pthread_join(t, 0);
+		ok = nseen == base + 2;
+		pthread_barrier_init(&nbar, 0, 2);
+		pthread_create(&t, 0, nicer, 0);
+		pthread_barrier_wait(&nbar);
+		setpriority(PRIO_PROCESS, 0, base + 3);
+		pthread_barrier_wait(&nbar);
+		pthread_join(t, 0);
+		_exit(ok && nseen == base + 3 ? 0 : 1);
+	}
+	CHECK(waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == 0);
+}
+
 static void scheduling(void)
 {
 	struct sched_param sp;
@@ -954,7 +1034,11 @@ static void scheduling(void)
 		CHECK(i == EPERM);      /* not allowed here */
 	sp.sched_priority = 5;      /* invalid for SCHED_OTHER */
 	pthread_attr_setschedpolicy(&a, SCHED_OTHER);
-	pthread_attr_setschedparam(&a, &sp);
+	CHECK(pthread_attr_setschedparam(&a, &sp) == EINVAL);
+	sp.sched_priority = sched_get_priority_max(SCHED_FIFO) + 1000;
+	pthread_attr_setschedpolicy(&a, SCHED_FIFO);
+	CHECK(pthread_attr_setschedparam(&a, &sp) == EINVAL);
+	pthread_attr_setschedpolicy(&a, SCHED_OTHER);
 	CHECK(pthread_create(&t, &a, sched_thread, 0) == EINVAL);
 	CHECK(pthread_attr_setscope(&a, PTHREAD_SCOPE_PROCESS) == ENOTSUP);
 	pthread_attr_destroy(&a);
@@ -1118,6 +1202,7 @@ int main(void)
 	timers();
 	semaphores();
 	scheduling();
+	nices();
 	c11();
 	printf("%d failures\n", fails);
 	return fails != 0;

@@ -63,8 +63,10 @@ int main(void)
 	st = system("true"); CHECK(st == 0);
 	st = system("echo hi > sysout"); CHECK(st == 0);
 	fd = open("sysout", O_RDONLY); CHECK(fd >= 0 && read(fd, t, 10) == 3 && !memcmp(t, "hi\n", 3)); close(fd);
-	st = system("kill -TERM $$"); CHECK(WIFSIGNALED(st) && WTERMSIG(st) == SIGTERM);
-	{ struct sigaction sa; sigaction(SIGINT, 0, &sa); CHECK(sa.sa_handler == SIG_DFL); }
+	{ /* system() leaves SIGINT as it was (ignored when run in the background) */
+	  struct sigaction sa, sa0; sigaction(SIGINT, 0, &sa0);
+	  st = system("kill -TERM $$"); CHECK(WIFSIGNALED(st) && WTERMSIG(st) == SIGTERM);
+	  sigaction(SIGINT, 0, &sa); CHECK(sa.sa_handler == sa0.sa_handler); }
 
 	/* getsubopt */
 	{

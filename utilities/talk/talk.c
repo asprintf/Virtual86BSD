@@ -826,25 +826,43 @@ int main(int argc, char *argv[])
         close(fd);
         fd = -1;
     }
-    if (fd < 0) {
+    /* A socket in the way may be a call being set up just now (both
+       calling at once, with one name for both): try to answer it a few
+       times before taking it for one left behind. */
+    for (int tries = 0; fd < 0; tries++) {
         ring_tty = callee_tty(want);
         sock_name(&addr, me, peer);
         struct stat st;
         if (lstat(addr.sun_path, &st) == 0) {
             if (st.st_uid != getuid() || !S_ISSOCK(st.st_mode))
                 fail("%s: in the way", addr.sun_path);
+            if (tries < 5) {
+                nanosleep(&(struct timespec){ 0, 100000000 }, NULL);
+                if ((fd = answer_call(peer, peer_uid, me)) >= 0 && !prove(fd)) {
+                    close(fd);
+                    fd = -1;
+                }
+                continue;
+            }
             unlink(addr.sun_path);
         }
         listener = socket(AF_UNIX, SOCK_STREAM, 0);
         if (listener < 0)
             fail("socket: %s", strerror(errno));
         fcntl(listener, F_SETFD, FD_CLOEXEC);
-        if (bind(listener, (struct sockaddr *)&addr, sizeof addr) != 0)
+        if (bind(listener, (struct sockaddr *)&addr, sizeof addr) != 0) {
+            if (errno == EADDRINUSE && tries < 10) {
+                close(listener);
+                listener = -1;
+                continue;
+            }
             fail("%s: %s", addr.sun_path, strerror(errno));
+        }
         memcpy(mysock, addr.sun_path, sizeof mysock);
         have_sock = true;
         if (chmod(mysock, 0666) != 0 || listen(listener, 4) != 0)
             fail("%s: %s", mysock, strerror(errno));
+        break;
     }
     screen_start();
     if (fd >= 0) {

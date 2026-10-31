@@ -327,6 +327,7 @@ struct Obj {
   bool is_weak;
   char *alias;         /* alias("target") */
   char *visibility;    /* "hidden", "protected", "internal" */
+  bool tls_ie;         /* tls_model("initial-exec") */
   char *section;       /* section("name") */
   int ctor_prio;       /* constructor: 0 none, 65536 without priority */
   int dtor_prio;
@@ -415,6 +416,7 @@ typedef enum {
   ND_VA_ARG,
   ND_VA_COPY,
   ND_ALLOCA,
+  ND_FRAMEADDR, // __builtin_frame_address / __builtin_return_address (val: level; rmw_op 1: return)
   ND_REAL,      // __real__ (complex)
   ND_IMAG,      // __imag__ (complex)
   ND_MKCOMPLEX, // build complex from (lhs, rhs)

@@ -158,7 +158,6 @@ t "-R: DT_RUNPATH, in order" "runpath /opt/one:/opt/two" 0 sh -c '"$1" -B dynami
 t "-B static after -B dynamic: the last one" "" 0 sh -c '"$1" -B dynamic -B static -o bs2 b.c sub/a.c 2>/dev/null && ! $2 bs2 | grep -q "^interp"' sh "$U" "$ELF";;
 esac
 t "-R with static linking: a warning" "c17: warning: -R ignored: static linking" 0 sh -c '"$1" -B static -R /lib -o br2 b.c sub/a.c 2>&1 | grep -v "^c17: undefined\|^c17: cannot"' sh "$U"
-t "-G: not supported yet" "" 1 "$U" -G -o x.so sub/a.c
 t "-B other: an error" "" 1 "$U" -B shared b.c sub/a.c
 
 cat > err.c <<'X'
@@ -209,8 +208,8 @@ for f in "$D"/tests/run/*.c; do
            ./"run_$n" > "run_$n.out" 2>&1 && cmp -s "run_$n.out" "$D/tests/run/$n.expected"; then
             pass=$((pass+1))
         else
-            fail=$((fail+1)); echo "FAIL program $n (-O $o, $lib $mode)"; head -3 "run_$n.err"
-            diff "$D/tests/run/$n.expected" "run_$n.out" | head -5
+            fail=$((fail+1)); echo "FAIL program $n (-O $o, $lib $mode)"; head -n 3 "run_$n.err"
+            diff "$D/tests/run/$n.expected" "run_$n.out" | head -n 5
         fi
     done
 done
@@ -224,7 +223,7 @@ for f in "$D"/tests/chibicc/*.c; do
        ./"ch_$n" >> "ch_$n.log" 2>&1; then
         pass=$((pass+1))
     else
-        fail=$((fail+1)); echo "FAIL chibicc $n: $(grep -v '=> ' "ch_$n.log" | head -2) $(tail -n 1 "ch_$n.log")"
+        fail=$((fail+1)); echo "FAIL chibicc $n: $(grep -v '=> ' "ch_$n.log" | head -n 2) $(tail -n 1 "ch_$n.log")"
     fi
 done
 
@@ -277,7 +276,7 @@ asmdump() {
 c17 -c -o insns.o "$D/tests/asm/insns.s"
 asmdump insns.o > insns.dump
 ok "assembler: encodings and relocations (tests/asm/insns.s)" cmp -s insns.dump "$D/tests/asm/insns.expected"
-cmp -s insns.dump "$D/tests/asm/insns.expected" || diff "$D/tests/asm/insns.expected" insns.dump | head -5
+cmp -s insns.dump "$D/tests/asm/insns.expected" || diff "$D/tests/asm/insns.expected" insns.dump | head -n 5
 c17 -c -o noteo.o b.c
 ok "objects: relocatable, a non-executable stack" sh -c "$ELF noteo.o | grep -q '^type REL' && $ELF noteo.o | grep -q '^section .note.GNU-stack PROGBITS'"
 cat > lab.s <<'X'
@@ -430,6 +429,73 @@ ok "executable: a non-executable stack" grep -q '^segment GNU_STACK R W$' layout
 ok "executable: the entry point is _start" sh -c "[ \"\$(sed -n 's/^entry //p' layout.txt)\" = \"\$(awk '\$2 == \"_start\" { print \$6 }' layout.txt)\" ]"
 $ELF tls > tlslayout.txt
 ok "executable: a TLS segment when there is thread-local storage" grep -q '^segment TLS R$' tlslayout.txt
+
+# ------------------------------------------------------------ shared libraries (-G)
+cat > shlib.c <<'END'
+int counter = 5;                       /* exported, so a program may copy it */
+static int calls;
+__attribute__((visibility("hidden"))) int helper(int x) { return x * 3; }
+int add(int a, int b) { calls++; return a + b + helper(0); }
+static const char *names[] = { "zero", "one", "two" };   /* relocated pointers */
+int (*fp)(int, int) = add;             /* a function's address in data */
+int *pcounter = &counter;
+const char *name(int i) { return names[i]; }
+int bump(void) { return ++counter + calls; }
+_Thread_local int tl = 7;              /* general-dynamic */
+int *tlp(void) { return &tl; }
+long double twice(long double x) { return x * 2; }
+END
+cat > shmain.c <<'END'
+#include <stdio.h>
+extern int counter, *pcounter;
+extern int (*fp)(int, int);
+int add(int, int); const char *name(int); int bump(void); int *tlp(void);
+long double twice(long double);
+int main(void) {
+    int a = add(1, 2), eq = fp == add, b, c;
+    counter = 100;                     /* the program's copy is the variable */
+    b = bump();
+    c = *pcounter;
+    printf("%d %s %d %d %d %d %Lg\n", a, name(2), eq, b, c, *tlp(), twice(1.5L));
+    return 0;
+}
+END
+cat > shdl.c <<'END'
+#include <dlfcn.h>
+#include <stdio.h>
+int main(void) {
+    void *h = dlopen("./libsh.so", RTLD_NOW);
+    int *(*f)(void) = h ? (int *(*)(void))dlsym(h, "tlp") : 0;
+    printf("%d\n", f ? *f() : -1);
+    return 0;
+}
+END
+"$U" -G -c -o shlib.o shlib.c
+$ELF -r .text shlib.o > shrel.txt
+ok "-G -c: position-independent (through the GOT and the PLT)" sh -c "grep -q GOTPCREL shrel.txt && grep -q PLT32 shrel.txt && grep -q TLSGD shrel.txt && ! grep -q 'R_X86_64_32' shrel.txt"
+case " $configs " in *" $deflibc:dynamic "*)
+"$U" -G -o libsh.so shlib.c
+$ELF libsh.so > shlayout.txt
+ok "-G: a shared object (ET_DYN), its soname the name of the file" sh -c "grep -q '^type DYN$' shlayout.txt && grep -q '^soname libsh.so$' shlayout.txt && ! grep -q '^interp' shlayout.txt"
+ok "-G: functions and variables exported" sh -c "grep -q '^dynsym add FUNC GLOBAL .text$' shlayout.txt && grep -q '^dynsym counter OBJECT GLOBAL .data$' shlayout.txt"
+ok "-G: hidden and static symbols not exported" sh -c "! grep -q '^dynsym helper ' shlayout.txt && ! grep -q '^dynsym calls ' shlayout.txt"
+t "-G: a program using it (copied variable, function addresses, TLS)" "3 two 1 102 101 7 3" 0 sh -c '"$1" -B dynamic -o shm shmain.c -L . -l sh -R "$PWD" && ./shm' sh "$U"
+t "-G: dlopen, a thread-local variable through __tls_get_addr" "7" 0 sh -c '"$1" -B dynamic -o shd shdl.c -l dl && ./shd' sh "$U"
+printf 'int v; int f(void) { return v; }\n' > nopic.c
+"$U" -c -o nopic.o nopic.c
+t "-G: an object not compiled with -G: an error" "c17: nopic.o: 'v' used directly (not through the GOT) in .text: not in a shared library (compile it with -G)" 1 sh -c '"$1" -G -o libnp.so nopic.o 2>&1; "$1" -G -o libnp.so nopic.o 2>/dev/null' sh "$U"
+printf '__attribute__((visibility("hidden"))) int nowhere(void);\nint g(void) { return nowhere(); }\n' > hidundef.c
+t "-G: an undefined hidden symbol: an error" "c17: undefined symbol 'nowhere' of hidden visibility (first referenced in hidundef.c)" 1 sh -c '"$1" -G -o libhu.so hidundef.c 2>&1 | sed "s/(first referenced in [^)]*)/(first referenced in hidundef.c)/"; "$1" -G -o libhu.so hidundef.c 2>/dev/null' sh "$U"
+printf 'ENTRY(start_here)\n' > entry.lds
+printf 'void start_here(void) {}\n' > entry.c
+"$U" -G -o libent.so entry.lds entry.c
+ok "-G: ENTRY(symbol) in a linker script: the entry point" sh -c "[ \"\$($ELF libent.so | sed -n 's/^entry //p')\" = \"\$($ELF libent.so | awk '\$2 == \"start_here\" { print \$6 }')\" ]";;
+esac
+printf '__attribute__((tls_model("initial-exec"))) _Thread_local int ie;\nint *p(void) { return &ie; }\n' > tlsie.c
+"$U" -G -S -o tlsie.s tlsie.c
+ok "-G: tls_model(\"initial-exec\"): the initial-exec sequence" sh -c "grep -q 'ie@gottpoff' tlsie.s && ! grep -q tlsgd tlsie.s"
+printf '%s\n' '#include <stdio.h>' 'static void *ra(void) { return __builtin_return_address(0); }' 'static void *f1(void) { return __builtin_frame_address(1); }' 'int main(void) { void *a = ra(), *b = ra(); printf("%d %d\n", a != b && a != 0, f1() == __builtin_frame_address(0)); return 0; }' > frames.c
+t "__builtin_return_address, __builtin_frame_address" "1 1" 0 sh -c '"$1" -o frames frames.c && ./frames' sh "$U"
 
 # ------------------------------------------------------------ calling convention
 # the general and the fast code paths (-O 0, -O 1) must agree on it
