@@ -1,0 +1,15 @@
+ftp		21/tcp
+ssh		22/tcp
+telnet		23/tcp
+smtp		25/tcp
+domain		53/tcp
+domain		53/udp
+http		80/tcp
+pop3		110/tcp
+ntp		123/udp
+imap		143/tcp
+https		443/tcp
+printer		515/tcp
+uucp		540/tcp
+talk		517/udp
+ntalk		518/udp

@@ -1,0 +1,9 @@
+# musl on Debian and Ubuntu (package musl-dev), x86-64.  Linked statically
+# by default; -B dynamic uses musl's dynamic linker.
+include /usr/include/x86_64-linux-musl
+libdir /usr/lib/x86_64-linux-musl
+crt1 crt1.o
+crti crti.o
+crtn crtn.o
+interp /lib/ld-musl-x86_64.so.1
+link static

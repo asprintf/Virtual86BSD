@@ -1,0 +1,15 @@
+constructor 101
+constructor 200
+constructor (no priority)
+argc 1, argv[0] set 1, argv[argc] null 1
+weak function null, weak data null
+thread 1: 18 100 thread 1
+thread 2: 19 200 thread 2
+thread 3: 20 300 thread 3
+thread 4: 21 400 thread 4
+main: 17 0 initial
+tls aligned: 0
+malloc 1M ok x
+atexit 2
+atexit 1
+destructor

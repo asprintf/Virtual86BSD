@@ -1,0 +1,82 @@
+comment_char %
+escape_char /
+% A test locale for collation: a contraction (ch), expansions (sharp s,
+% ae), ignored punctuation, accents at the second level (backward),
+% case at the third, and a last level with position.
+LC_CTYPE
+copy "i18n"
+END LC_CTYPE
+LC_COLLATE
+collating-element <ch> from "<U0063><U0068>"
+collating-symbol <BASE>
+collating-symbol <ACUTE>
+collating-symbol <GRAVE>
+collating-symbol <MIN>
+collating-symbol <CAP>
+order_start forward;backward;forward;forward,position
+<BASE>
+<ACUTE>
+<GRAVE>
+<MIN>
+<CAP>
+<U0020> IGNORE;IGNORE;IGNORE;<U0020>
+<U002D> IGNORE;IGNORE;IGNORE;<U002D>
+<U0027> IGNORE;IGNORE;IGNORE;<U0027>
+<U002E> IGNORE;IGNORE;IGNORE;<U002E>
+<U0030> <U0030>;<BASE>;<MIN>;<U0030>
+<U0031> <U0031>;<BASE>;<MIN>;<U0031>
+<U0032> <U0032>;<BASE>;<MIN>;<U0032>
+<U0061> <U0061>;<BASE>;<MIN>;<U0061>
+<U0041> <U0061>;<BASE>;<CAP>;<U0041>
+<U00E1> <U0061>;<ACUTE>;<MIN>;<U00E1>
+<U00C1> <U0061>;<ACUTE>;<CAP>;<U00C1>
+<U00E0> <U0061>;<GRAVE>;<MIN>;<U00E0>
+<U0062> <U0062>;<BASE>;<MIN>;<U0062>
+<U0042> <U0062>;<BASE>;<CAP>;<U0042>
+<U0063> <U0063>;<BASE>;<MIN>;<U0063>
+<U0043> <U0063>;<BASE>;<CAP>;<U0043>
+<ch> <ch>;<BASE>;<MIN>;<ch>
+<U0064> <U0064>;<BASE>;<MIN>;<U0064>
+<U0065> <U0065>;<BASE>;<MIN>;<U0065>
+<U0045> <U0065>;<BASE>;<CAP>;<U0045>
+<U00E9> <U0065>;<ACUTE>;<MIN>;<U00E9>
+<U00C9> <U0065>;<ACUTE>;<CAP>;<U00C9>
+<U00E8> <U0065>;<GRAVE>;<MIN>;<U00E8>
+<U00E6> "<U0061><U0065>";"<BASE><BASE>";"<MIN><MIN>";<U00E6>
+<U0068> <U0068>;<BASE>;<MIN>;<U0068>
+<U0073> <U0073>;<BASE>;<MIN>;<U0073>
+<U00DF> "<U0073><U0073>";"<BASE><BASE>";"<MIN><MIN>";<U00DF>
+<U007A> <U007A>;<BASE>;<MIN>;<U007A>
+UNDEFINED
+order_end
+END LC_COLLATE
+LC_NUMERIC
+copy "POSIX"
+END LC_NUMERIC
+LC_TIME
+copy "POSIX"
+END LC_TIME
+LC_MONETARY
+copy "POSIX"
+END LC_MONETARY
+LC_MESSAGES
+copy "POSIX"
+END LC_MESSAGES
+LC_PAPER
+copy "en_US"
+END LC_PAPER
+LC_NAME
+copy "en_US"
+END LC_NAME
+LC_ADDRESS
+copy "en_US"
+END LC_ADDRESS
+LC_TELEPHONE
+copy "en_US"
+END LC_TELEPHONE
+LC_MEASUREMENT
+copy "en_US"
+END LC_MEASUREMENT
+LC_IDENTIFICATION
+copy "en_US"
+END LC_IDENTIFICATION

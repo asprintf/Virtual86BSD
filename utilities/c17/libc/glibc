@@ -1,0 +1,12 @@
+# The GNU C library on Debian, Ubuntu and their derivatives (x86-64).
+# Other distributions: the directories may differ (Fedora and Arch:
+# include /usr/include only, libdir /usr/lib64 or /usr/lib).
+include /usr/include/x86_64-linux-gnu
+include /usr/include
+libdir /usr/lib/x86_64-linux-gnu
+libdir /lib/x86_64-linux-gnu
+crt1 crt1.o
+crti crti.o
+crtn crtn.o
+interp /lib64/ld-linux-x86-64.so.2
+link dynamic

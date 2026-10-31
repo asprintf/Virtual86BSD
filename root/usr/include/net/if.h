@@ -1,0 +1,19 @@
+#ifndef _NET_IF_H
+#define _NET_IF_H
+#include <bits/features.h>
+
+#define IF_NAMESIZE 16
+
+struct if_nameindex {
+	unsigned if_index;
+	char *if_name;
+};
+
+__BEGIN_DECLS
+void if_freenameindex(struct if_nameindex *);
+char *if_indextoname(unsigned, char *);
+struct if_nameindex *if_nameindex(void);
+unsigned if_nametoindex(const char *);
+__END_DECLS
+
+#endif

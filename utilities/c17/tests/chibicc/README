@@ -1,0 +1,7 @@
+Tests from chibicc (https://github.com/rui314/chibicc, MIT license),
+with constructs that are not valid C17 removed (chibicc accepts e.g.
+"100f", conflicting redeclarations, "asm"/"typeof" as keywords, comma
+expressions as lvalues).  Skipped entirely: asm.c (non-reserved "asm"
+keyword) and commonsym.c (relies on common symbols, i.e. -fcommon).
+line.c: chibicc's expected values for #line are off by one (C17 6.10.4:
+the *next* line gets the given number); corrected here.
