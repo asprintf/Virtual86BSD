@@ -10,3 +10,5 @@ echo "-- failing command status"; printf 'all: ; @exit 7\n' > m4; $M -f m4; echo
 echo "-- killed command"; printf 'all: ; @kill -9 $$$$\n' > m5; $M -f m5; echo rc=$?
 echo "-- -k keeps going with independent targets"; printf 'all: a b\na: ; @false\nb: ; @echo b made\n' > m6; $M -k -f m6; echo rc=$?
 echo "-- -q with an error"; $M -q -f m6 nosuch; echo rc=$?
+echo "-- no target written"; printf ': x\n' > m7; $M -f m7; echo rc=$?
+echo "-- targets that expand to nothing: the rule is ignored"; printf 'E =\nall: ; @echo all\n$(E): x\n\t@echo never\n$(E) $(E):: y\n' > m8; $M -f m8; echo rc=$?

@@ -143,3 +143,6 @@ t p_rs_regex_ext 'printf "aXXbXc" | $AWK "BEGIN{RS=\"X+\"} {print}"'
 t p_rs_newline_in_fields 'printf "a b\nc d\n\ne f\n" | $AWK "BEGIN{RS=\"\"} {print NF, \$3}"'
 t p_rs_para_regex_fs 'printf "a1b\nc\n\nd\n" | $AWK "BEGIN{RS=\"\"; FS=\"[0-9]\"} {print NF}"'
 t p_uninit_rs 'printf "x\ny\n" | $AWK -v RS= "{print NF}"'
+t p_items_after_continuation 'echo "a b" | $AWK "BEGIN { x = 1 } \\
+  { print \$2, x } \\
+  END { print \"end\" }"'

@@ -4,8 +4,8 @@ An implementation of the `awk` utility following IEEE Std 1003.1-2024
 (The Open Group Base Specifications Issue 8). It is written in C11 and uses
 only POSIX interfaces (`regcomp`/`regexec`, `popen`, `read`, locale functions).
 The grammar is a yacc grammar (`awk.y`) and the tokens a lex scanner
-(`awk.l`), both generated with the `yacc` and `lex` of this project; the
-generated files are included, so building needs only a C compiler.
+(`awk.l`); the C files are generated from them in the build, by the
+`yacc` and `lex` of this project.
 
 ## Build and test
 
@@ -15,9 +15,12 @@ generated files are included, so building needs only a C compiler.
     make install   # into $(PREFIX)/bin; PREFIX=/usr/local, DESTDIR= for staging
     make clean
 
-To regenerate the parser and scanner, delete the generated files and run
-`make`; it uses `yacc` and `lex` from PATH, or `make YACC=... LEX=...` (for
-instance the ones in `../yacc` and `../lex`).
+The parser and scanner are generated in the build, by the yacc and lex of
+this collection: `make` builds `../yacc/yacc` and `../lex/lex` first when
+they are not there yet (so the directory needs `yacc/` and `lex/`
+beside it, as in the collection), and `make YACC=... LEX=...` names other
+ones.  The generated files are not part of the sources; `make clean`
+removes them.
 
 ## Where yacc and lex are used
 

@@ -11,12 +11,19 @@ size_t confstr(int name, char *buf, size_t len)
 	case _CS_POSIX_V8_LP64_OFF64_CFLAGS: case _CS_POSIX_V7_LP64_OFF64_CFLAGS:
 	case _CS_POSIX_V8_LP64_OFF64_LDFLAGS: case _CS_POSIX_V7_LP64_OFF64_LDFLAGS:
 	case _CS_POSIX_V8_LP64_OFF64_LIBS: case _CS_POSIX_V7_LP64_OFF64_LIBS:
+	/* LPBIG_OFFBIG (int of at least 32 bits; long, off_t and pointers of
+	   at least 64) is the same environment */
+	case _CS_POSIX_V8_LPBIG_OFFBIG_CFLAGS: case _CS_POSIX_V7_LPBIG_OFFBIG_CFLAGS:
+	case _CS_POSIX_V8_LPBIG_OFFBIG_LDFLAGS: case _CS_POSIX_V7_LPBIG_OFFBIG_LDFLAGS:
+	case _CS_POSIX_V8_LPBIG_OFFBIG_LIBS: case _CS_POSIX_V7_LPBIG_OFFBIG_LIBS:
 	case _CS_POSIX_V8_THREADS_CFLAGS: case _CS_POSIX_V7_THREADS_CFLAGS:
 	case _CS_POSIX_V8_THREADS_LDFLAGS: case _CS_POSIX_V7_THREADS_LDFLAGS:
 	case _CS_V8_ENV: case _CS_V7_ENV:
 		s = ""; break;
-	case _CS_POSIX_V8_WIDTH_RESTRICTED_ENVS: case _CS_POSIX_V7_WIDTH_RESTRICTED_ENVS:
-		s = "POSIX_V8_LP64_OFF64"; break;
+	case _CS_POSIX_V8_WIDTH_RESTRICTED_ENVS:
+		s = "POSIX_V8_LP64_OFF64\nPOSIX_V8_LPBIG_OFFBIG"; break;
+	case _CS_POSIX_V7_WIDTH_RESTRICTED_ENVS:
+		s = "POSIX_V7_LP64_OFF64\nPOSIX_V7_LPBIG_OFFBIG"; break;
 	default:
 		if ((unsigned)name > _CS_V7_ENV) { errno = EINVAL; return 0; }
 		/* the unsupported programming environments: no value */

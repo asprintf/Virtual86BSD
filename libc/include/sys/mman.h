@@ -32,6 +32,15 @@
 #define POSIX_MADV_WILLNEED   3
 #define POSIX_MADV_DONTNEED   4
 
+/* [TYM] typed memory objects, where the system has them (sysconf) */
+#define POSIX_TYPED_MEM_ALLOCATE        0x01
+#define POSIX_TYPED_MEM_ALLOCATE_CONTIG 0x02
+#define POSIX_TYPED_MEM_MAP_ALLOCATABLE 0x04
+
+struct posix_typed_mem_info {
+	size_t posix_tmi_length;
+};
+
 __BEGIN_DECLS
 int   mlock(const void *, size_t);
 int   mlockall(int);
@@ -42,6 +51,9 @@ int   munlock(const void *, size_t);
 int   munlockall(void);
 int   munmap(void *, size_t);
 int   posix_madvise(void *, size_t, int);
+int   posix_mem_offset(const void *__RESTRICT, size_t, off_t *__RESTRICT, size_t *__RESTRICT, int *__RESTRICT);
+int   posix_typed_mem_get_info(int, struct posix_typed_mem_info *);
+int   posix_typed_mem_open(const char *, int, int);
 int   shm_open(const char *, int, mode_t);
 int   shm_unlink(const char *);
 __END_DECLS

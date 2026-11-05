@@ -187,6 +187,8 @@ static OutSec *iplt_sec, *igot_sec, *rela_iplt_sec;
 static bool shared;          /* -G: a shared library */
 static bool reading_hidden;  /* the input being read is c17's run-time support */
 static uint64_t base_addr;
+static char **script_end_syms;  /* NAME = . at the end of a linker script's SECTIONS */
+static int nscript_end_syms;
 
 static void lerror(char *fmt, ...) PRINTF(1, 2);
 static void lerror(char *fmt, ...) {
@@ -660,6 +662,152 @@ static void read_dso(char *path, unsigned char *buf, size_t len, bool as_needed)
 static void add_input(LinkOptions *opts, char *path, char *name, bool group, bool as_needed,
                       int depth);
 static Archive **group_ars;
+
+/* SECTIONS in a linker script (a kernel's): the subset c17 understands.
+   ". = ADDR;" before the first output section sets the address of the
+   image (its ELF header); "NAME = .;" after the last one, perhaps after
+   ". = ALIGN(N);", defines NAME at the (aligned) end of the image.  The
+   output section descriptions themselves are not interpreted: sections
+   are placed by c17's usual rules, so code must not rely on their order
+   (but a ".boot" section comes first, right after the ELF headers, for a
+   boot loader's header that must be near the start of the image). */
+static bool script_has_base;
+static uint64_t script_base;
+static uint64_t *script_end_align;
+
+static bool script_number(char **pp, uint64_t *v, bool *is_align) {
+  char *p = *pp;
+  while (isspace((unsigned char)*p))
+    p++;
+  if (!strncmp(p, "ALIGN", 5)) {
+    p += 5;
+    while (isspace((unsigned char)*p))
+      p++;
+    if (*p != '(')
+      return false;
+    p++;
+    bool inner;
+    if (!script_number(&p, v, &inner) || inner)
+      return false;
+    while (isspace((unsigned char)*p))
+      p++;
+    if (*p != ')')
+      return false;
+    *pp = p + 1;
+    *is_align = true;
+    return true;
+  }
+  *is_align = false;
+  if (!isdigit((unsigned char)*p))
+    return false;
+  errno = 0;
+  char *e;
+  unsigned long long n = strtoull(p, &e, 0);
+  if (errno)
+    return false;
+  if (*e == 'K' || *e == 'M') {
+    n <<= *e == 'K' ? 10 : 20;
+    e++;
+  }
+  *v = n;
+  *pp = e;
+  return true;
+}
+
+static void read_sections(char *path, char **pp) {
+  char *p = *pp;
+  bool seen_output = false;
+  uint64_t align = 1;
+  while (isspace((unsigned char)*p))
+    p++;
+  if (*p != '{') {
+    lerror("%s: '{' expected after SECTIONS", path);
+    return;
+  }
+  p++;
+  for (;;) {
+    while (isspace((unsigned char)*p) || *p == ';')
+      p++;
+    if (p[0] == '/' && p[1] == '*') {
+      char *e = strstr(p + 2, "*/");
+      p = e ? e + 2 : p + strlen(p);
+      continue;
+    }
+    if (!*p) {
+      lerror("%s: '}' missing after SECTIONS", path);
+      return;
+    }
+    if (*p == '}') {
+      *pp = p + 1;
+      return;
+    }
+    char *start = p;
+    while (*p && !isspace((unsigned char)*p) && *p != '=' && *p != ':' && *p != ';' &&
+           *p != '{')
+      p++;
+    char *word = xstrndup(start, p - start);
+    while (isspace((unsigned char)*p))
+      p++;
+    if (*p == '=') {  /* an assignment */
+      p++;
+      while (isspace((unsigned char)*p))
+        p++;
+      uint64_t v = 0;
+      bool is_align = false;
+      bool dot = *p == '.' && !isalnum((unsigned char)p[1]) && p[1] != '_';
+      if (dot)
+        p++;
+      else if (!script_number(&p, &v, &is_align)) {
+        lerror("%s: SECTIONS: expression '%.20s' not supported", path, p);
+        return;
+      }
+      if (!strcmp(word, ".")) {
+        if (dot)
+          ;
+        else if (is_align)
+          align = v;
+        else if (!seen_output) {
+          script_has_base = true;
+          script_base = v;
+        } else {
+          lerror("%s: SECTIONS: setting '.' between output sections not supported", path);
+          return;
+        }
+      } else if (dot && seen_output) {
+        script_end_syms = xrealloc(script_end_syms, sizeof(char *) * (nscript_end_syms + 1));
+        script_end_align = xrealloc(script_end_align, sizeof(uint64_t) * (nscript_end_syms + 1));
+        script_end_syms[nscript_end_syms] = word;
+        script_end_align[nscript_end_syms++] = align ? align : 1;
+      } else {
+        lerror("%s: SECTIONS: assignment to '%s' not supported", path, word);
+        return;
+      }
+      continue;
+    }
+    /* an output section description: name [AT(...)] : ... { ... }; what
+       /DISCARD/ names is left out anyway (notes, comments, unwind tables) */
+    bool discard = !strcmp(word, "/DISCARD/");
+    if (nscript_end_syms && !discard) {
+      lerror("%s: SECTIONS: symbols may only be defined after the last output section", path);
+      return;
+    }
+    if (!discard) {
+      seen_output = true;
+      align = 1;
+    }
+    while (*p && *p != '{')
+      p++;
+    int depth = 0;
+    for (; *p; p++) {
+      if (*p == '{')
+        depth++;
+      else if (*p == '}' && --depth == 0) {
+        p++;
+        break;
+      }
+    }
+  }
+}
 static int ngroup_ars;
 
 /* A linker script of the kind C libraries install as libc.so: GROUP (
@@ -710,6 +858,10 @@ static void read_script(LinkOptions *opts, char *path, char *text, bool group, i
         p++;
       if (*p)
         p++;
+      continue;
+    }
+    if (!strcmp(word, "SECTIONS") && depth_paren == 0) {
+      read_sections(path, &p);
       continue;
     }
     if (!strcmp(word, "OUTPUT_FORMAT") || !strcmp(word, "OUTPUT_ARCH") ||
@@ -777,7 +929,8 @@ static void add_input(LinkOptions *opts, char *path, char *name, bool group, boo
       text = false;
   if (text && depth < 8) {
     char *t = xstrndup((char *)buf, len);
-    if (strstr(t, "GROUP") || strstr(t, "INPUT") || strstr(t, "ENTRY")) {
+    if (strstr(t, "GROUP") || strstr(t, "INPUT") || strstr(t, "ENTRY") ||
+        strstr(t, "SECTIONS")) {
       read_script(opts, path, t, group, depth);
       return;
     }
@@ -865,7 +1018,7 @@ static int cmp_prio(const void *a, const void *b) {
 
 /* Rank of an output section within its segment */
 static int sec_rank(OutSec *o) {
-  static char *order[] = {".interp", ".hash", ".dynsym", ".dynstr", ".gnu.version",
+  static char *order[] = {".boot", ".interp", ".hash", ".dynsym", ".dynstr", ".gnu.version",
                           ".gnu.version_r", ".rela.dyn", ".rela.plt", ".rela.iplt", ".rodata",
                           ".init", ".plt", ".iplt", ".text", ".fini", ".tdata", "(tls)",
                           ".tbss", ".preinit_array", ".init_array", ".fini_array", ".dynamic",
@@ -1079,6 +1232,9 @@ static char *linker_syms[] = {"__init_array_start", "__init_array_end",
 static bool is_linker_name(char *name) {
   for (int k = 0; linker_syms[k]; k++)
     if (!strcmp(name, linker_syms[k]))
+      return true;
+  for (int k = 0; k < nscript_end_syms; k++)
+    if (!strcmp(name, script_end_syms[k]))
       return true;
   return startswith(name, "__start_") || startswith(name, "__stop_");
 }
@@ -1874,6 +2030,8 @@ int link_executable(LinkOptions *opts) {
   shared = opts->shared;
   dynamic = opts->interp != NULL || shared;
   base_addr = shared ? 0 : BASE_ADDR;
+  script_has_base = false;
+  nscript_end_syms = 0;
   dlibs = NULL;
   ndlibs = 0;
   plt_syms = copy_syms = dyn_syms = NULL;
@@ -1885,7 +2043,7 @@ int link_executable(LinkOptions *opts) {
 
   /* the entry point: _start, or (a shared library: none) what a linker
      script names */
-  char *entry = opts->entry ? opts->entry : shared ? NULL : "_start";
+  char *entry = opts->entry;
   GSym *eg = NULL;
   if (entry) {
     eg = get_gsym(entry);
@@ -1902,8 +2060,15 @@ int link_executable(LinkOptions *opts) {
               i >= opts->group_start, false, 0);
   }
   reading_hidden = false;
+  if (script_has_base)
+    base_addr = script_base;
   if (opts->entry && (!entry || strcmp(entry, opts->entry))) {  /* ENTRY ( ... ) */
     entry = opts->entry;
+    eg = get_gsym(entry);
+    eg->referenced = true;
+  }
+  if (!entry && !shared) {  /* the default: _start (from crt1.o) */
+    entry = "_start";
     eg = get_gsym(entry);
     eg->referenced = true;
   }
@@ -2173,6 +2338,8 @@ int link_executable(LinkOptions *opts) {
   o = find_out(".bss");
   define_linker_sym("__bss_start", o ? o->addr : edata, NULL);
   define_linker_sym("__ehdr_start", base_addr, NULL);
+  for (int i = 0; i < nscript_end_syms; i++)
+    define_linker_sym(script_end_syms[i], align_up(end, script_end_align[i]), NULL);
   define_linker_sym("__executable_start", base_addr, NULL);
   define_linker_sym("_GLOBAL_OFFSET_TABLE_",
                     gotplt_sec ? gotplt_sec->addr : got_sec ? got_sec->addr : 0, NULL);
@@ -2446,8 +2613,8 @@ int link_executable(LinkOptions *opts) {
     wr32(ph, PT_PHDR);
     wr32(ph + 4, PF_R);
     wr64(ph + 8, EHDR_SIZE);
-    wr64(ph + 16, BASE_ADDR + EHDR_SIZE);
-    wr64(ph + 24, BASE_ADDR + EHDR_SIZE);
+    wr64(ph + 16, base_addr + EHDR_SIZE);
+    wr64(ph + 24, base_addr + EHDR_SIZE);
     wr64(ph + 32, (uint64_t)nphdr * PHDR_SIZE);
     wr64(ph + 40, (uint64_t)nphdr * PHDR_SIZE);
     wr64(ph + 48, 8);

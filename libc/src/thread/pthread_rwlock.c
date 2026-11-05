@@ -1,17 +1,46 @@
 /* Read-write locks: the lock word counts readers, or is 0x7fffffff when
  * write-locked; bit 31 marks sleepers, which every last unlock wakes.
- * Readers are preferred (as glibc's default). */
+ * Readers are preferred (as glibc's default), except as Thread Execution
+ * Scheduling requires: a reader running SCHED_FIFO or SCHED_RR does not
+ * take the lock while a writer of higher or equal priority (also FIFO or
+ * RR) is blocked on it.  Those writers are counted in __vi[4], and __vi[5]
+ * is 1 + the highest of their priorities (0: none).  When one of them
+ * stops waiting the priority is cleared and the others, all woken, put
+ * theirs back before they sleep again: on one processor the woken threads
+ * run in priority order, so the outcome is POSIX's; on several, a reader
+ * woken at the same moment may get in before a writer it should yield to. */
 #include <errno.h>
 #include <pthread.h>
 #include <string.h>
 #include "pthread_impl.h"
 #include "atomic.h"
+#include "syscall.h"
+#include <sched.h>
 
 #define WR 0x7fffffff
 #define WAITING ((int)0x80000000)
 #define L(rw) (&(rw)->__vi[0])
 #define PRIV(rw) (!(rw)->_rw_shared)
 #define OWNER(rw) (&(rw)->__vi[3])  /* tid of the write owner, for EDEADLK */
+#define WW(rw) (&(rw)->__vi[4])     /* real-time writers blocked */
+#define WP(rw) (&(rw)->__vi[5])     /* 1 + the highest priority among them */
+
+/* the calling thread's priority when it runs SCHED_FIFO or SCHED_RR, else -1 */
+static int rt_prio(void)
+{
+	struct __pthread *self = __pthread_self();
+	struct sched_param sp;
+	long pol = __syscall1(SYS_sched_getscheduler, self->tid);
+	if (pol < 0)
+		return -1;
+	pol &= ~0x40000000;	/* SCHED_RESET_ON_FORK */
+	if (pol != SCHED_FIFO && pol != SCHED_RR)
+		return -1;
+	memset(&sp, 0, sizeof sp);
+	if (__syscall2(SYS_sched_getparam, self->tid, &sp) < 0)
+		return -1;
+	return sp.sched_priority;
+}
 
 int pthread_rwlock_init(pthread_rwlock_t *__RESTRICT rw, const pthread_rwlockattr_t *__RESTRICT a)
 {
@@ -36,12 +65,18 @@ static int sleep_on(pthread_rwlock_t *rw, int v, clockid_t clk, const struct tim
 
 static int rdlock(pthread_rwlock_t *rw, clockid_t clk, const struct timespec *at, int try)
 {
-	int v, n, r;
+	int v, n, r, prio = -2;
 	if (!try && *OWNER(rw) == __pthread_self()->tid)
 		return EDEADLK;
 	for (;;) {
 		v = *L(rw);
 		n = v & WR;
+		if (n != WR && *WW(rw) > 0) {
+			if (prio == -2)
+				prio = rt_prio();
+			if (prio >= 0 && *WP(rw) > prio)
+				n = WR;	/* a writer of higher or equal priority waits: as if write-locked */
+		}
 		if (n != WR) {
 			if (n == WR - 1)
 				return EAGAIN;
@@ -56,9 +91,20 @@ static int rdlock(pthread_rwlock_t *rw, clockid_t clk, const struct timespec *at
 	}
 }
 
+/* a real-time writer stops waiting: the priority is cleared, and the
+ * writers still waiting put theirs back when they are woken (all are, by
+ * the unlock that follows an acquisition, or here after a time-out) */
+static void wr_unregister(pthread_rwlock_t *rw, int acquired)
+{
+	a_dec(WW(rw));
+	*WP(rw) = 0;
+	if (!acquired)
+		__wake(L(rw), -1, PRIV(rw));
+}
+
 static int wrlock(pthread_rwlock_t *rw, clockid_t clk, const struct timespec *at, int try)
 {
-	int v, r;
+	int v, r, prio = -2, w;
 	if (!try && *OWNER(rw) == __pthread_self()->tid)
 		return EDEADLK;
 	for (;;) {
@@ -66,14 +112,27 @@ static int wrlock(pthread_rwlock_t *rw, clockid_t clk, const struct timespec *at
 		if (!(v & WR)) {
 			if (a_cas(L(rw), v, v | WR) == v) {
 				*OWNER(rw) = __pthread_self()->tid;
+				if (prio >= 0)
+					wr_unregister(rw, 1);
 				return 0;
 			}
 			continue;
 		}
 		if (try)
 			return EBUSY;
-		if ((r = sleep_on(rw, v, clk, at)))
+		if (prio == -2) {
+			prio = rt_prio();
+			if (prio >= 0)
+				a_inc(WW(rw));
+		}
+		if (prio >= 0)
+			while ((w = *WP(rw)) < prio + 1 && a_cas(WP(rw), w, prio + 1) != w)
+				;
+		if ((r = sleep_on(rw, v, clk, at))) {
+			if (prio >= 0)
+				wr_unregister(rw, 0);
 			return r;
+		}
 	}
 }
 

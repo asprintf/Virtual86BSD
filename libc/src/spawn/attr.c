@@ -1,5 +1,6 @@
 #include <spawn.h>
 #include <errno.h>
+#include <stddef.h>
 #include <string.h>
 #include <sched.h>
 
@@ -29,15 +30,23 @@ int posix_spawnattr_getsigmask(const posix_spawnattr_t *__RESTRICT a, sigset_t *
  * or POSIX_SPAWN_SETSCHEDPARAM; checked against the system when it is spawned */
 int posix_spawnattr_setschedpolicy(posix_spawnattr_t *a, int pol)
 {
-	if (pol != SCHED_OTHER && pol != SCHED_FIFO && pol != SCHED_RR) return EINVAL;
+	if (pol != SCHED_OTHER && pol != SCHED_FIFO && pol != SCHED_RR && pol != SCHED_SPORADIC) return EINVAL;
 	a->__policy = pol;
 	return 0;
 }
 int posix_spawnattr_getschedpolicy(const posix_spawnattr_t *__RESTRICT a, int *__RESTRICT pol) { *pol = a->__policy; return 0; }
-int posix_spawnattr_setschedparam(posix_spawnattr_t *__RESTRICT a, const struct sched_param *__RESTRICT p) { a->__prio = p->sched_priority; return 0; }
+/* (a sporadic server's other members are kept in __pad) */
+#define SS_OFF offsetof(struct sched_param, sched_ss_low_priority)
+int posix_spawnattr_setschedparam(posix_spawnattr_t *__RESTRICT a, const struct sched_param *__RESTRICT p)
+{
+	a->__prio = p->sched_priority;
+	memcpy(a->__pad, (const char *)p + SS_OFF, sizeof *p - SS_OFF);
+	return 0;
+}
 int posix_spawnattr_getschedparam(const posix_spawnattr_t *__RESTRICT a, struct sched_param *__RESTRICT p)
 {
 	memset(p, 0, sizeof *p);
 	p->sched_priority = a->__prio;
+	memcpy((char *)p + SS_OFF, a->__pad, sizeof *p - SS_OFF);
 	return 0;
 }

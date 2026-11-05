@@ -21,6 +21,7 @@ static bool opt_G;
 static bool opt_v;
 static bool opt_static;
 static bool opt_dynamic;
+static bool opt_standalone;  /* -B standalone: no C library, no start files */
 static char *opt_o;
 
 static StrArray tmpfiles;
@@ -363,7 +364,7 @@ static int do_link(StrArray *objs_by_operand, StrArray *names_by_operand, char *
      .fini) are used when the C library has them.  A shared library (-G)
      gets none of them: they belong to programs. */
   char *crtpath[3] = {NULL, NULL, NULL};
-  for (int i = 0; i < 3 && !opt_G; i++) {
+  for (int i = 0; i < 3 && !opt_G && !opt_standalone; i++) {
     if (!libc_crt[i])
       continue;
     crtpath[i] = libc_file(libc_crt[i]);
@@ -417,7 +418,9 @@ static int do_link(StrArray *objs_by_operand, StrArray *names_by_operand, char *
      it, not exported. */
   int group_start = in.len, hide_from = -1;
   char *libc;
-  if (opt_G) {
+  if (opt_standalone) {
+    libc = NULL;
+  } else if (opt_G) {
     char *base = strrchr(output, '/') ? strrchr(output, '/') + 1 : output;
     libc = NULL;
     if (strncmp(base, "libc.so", 7))
@@ -435,7 +438,7 @@ static int do_link(StrArray *objs_by_operand, StrArray *names_by_operand, char *
   if (libc)
     strarray_push(&in, libc);
   char *rt = format("%s/libc17rt.a", libdir);
-  if (file_exists(rt)) {
+  if (file_exists(rt) && !opt_standalone) {
     if (opt_G)
       hide_from = in.len;
     strarray_push(&in, rt);
@@ -532,6 +535,8 @@ static void parse_args(int argc, char **argv) {
           opt_dynamic = true, opt_static = false;
         else if (!strcmp(val, "static"))
           opt_static = true, opt_dynamic = false;
+        else if (!strcmp(val, "standalone"))
+          opt_standalone = opt_static = true, opt_dynamic = false;
         else
           fatal("-B: unsupported mode '%s'", val);
         break;

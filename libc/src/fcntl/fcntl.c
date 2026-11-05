@@ -19,14 +19,17 @@ int fcntl(int fd, int cmd, ...)
 		return (int)__sys_cp3(SYS_fcntl, fd, cmd, arg);
 	case F_GETFD:
 		r = __syscall2(SYS_fcntl, fd, F_GETFD);
+		if (__clofork_native()) return (int)__syscall_ret((unsigned long)r);
 		if (r >= 0 && __clofork_get(fd)) r |= FD_CLOFORK;
 		return (int)__syscall_ret((unsigned long)r);
 	case F_SETFD:
+		if (__clofork_native()) return (int)__sys3(SYS_fcntl, fd, F_SETFD, arg & (FD_CLOEXEC | FD_CLOFORK));
 		r = __syscall3(SYS_fcntl, fd, F_SETFD, arg & FD_CLOEXEC);
 		if (r >= 0 && (__clofork_any || (arg & FD_CLOFORK)) &&
 		    __clofork_set(fd, (arg & FD_CLOFORK) != 0) < 0) return -1;
 		return (int)__syscall_ret((unsigned long)r);
 	case F_DUPFD_CLOFORK:
+		if (__clofork_native()) return (int)__sys3(SYS_fcntl, fd, F_DUPFD_CLOFORK, arg);
 		r = __syscall3(SYS_fcntl, fd, F_DUPFD, arg);
 		if (r >= 0 && __clofork_set((int)r, 1) < 0) {
 			__syscall1(SYS_close, r);

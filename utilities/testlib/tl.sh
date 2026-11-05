@@ -10,6 +10,6 @@ cc=${CC:-}
 TLBIN=${TMPDIR:-/tmp}/tl.$$
 trap 'rm -f "$TLBIN"' EXIT
 trap 'rm -f "$TLBIN"; trap - INT; kill -s INT $$' INT
-$cc -o "$TLBIN" "$d/tl.c" || { echo "tl.sh: cannot compile $d/tl.c" >&2; exit 2; }
+$cc -o "$TLBIN" "$d/../tl/tl.c" || { echo "tl.sh: cannot compile $d/../tl/tl.c" >&2; exit 2; }
 export TLBIN
 "$TLBIN" "$@"

@@ -150,6 +150,18 @@ through two stages of its own, in a directory that ../chroot.sh enters
 | [xgettext](xgettext/) | extract gettext call strings from C-language source files | 891 | 33 |
 | [yacc](yacc/) | yet another compiler compiler (with liby.a) | 3693 | 20 |
 
+Beyond POSIX, one more program of this collection is a part of the
+system:
+
+| directory | program | lines | tests |
+|-----------|---------|------:|------:|
+| [tl](tl/) | tl, the test language: a scripting language in the style of C, with POSIX and pseudo-terminals as its library | 6725 | 98 |
+
+It is the language the tests of the other utilities are written in where
+the shell is not enough (below), installed in `/usr/bin` so that tests
+like them can be written for anything else on the system; `man tl` and
+`tl/tl.md` describe it.  It is not counted in the totals below.
+
 Lines: C, yacc and lex sources, without generated files and tests; the
 sources in `lib/` (9254 lines) are counted once, in the total only
 (141,617 in all).  Tests: what `make test` counts, 7048 in all; a count is of cases
@@ -160,13 +172,15 @@ implementations.
 
 ## Requirements
 
-* A C11 compiler as `cc` (or `make CC=...`) and a POSIX system.  The
-  collection builds with any POSIX make, including its own:
-  `cd make && cc -O2 -o make *.c`, then `make/make` at the top.  With
-  the compiler POSIX names, which takes no `-std=` or warning options:
-  `make CC=c17 STDFLAGS=`; this collection's c17 does (with the C
-  library of a Linux distribution, glibc, or with musl: see
-  c17/README.md).
+* A C compiler and a POSIX system.  The Makefiles do not name the
+  compiler: `CC` is make's own, as POSIX specifies it: `c17` for a make
+  of POSIX.1-2024 (this collection's make among them), `c99` for one of
+  POSIX.1-2008/2017 (GNU make with `.POSIX:`, which calls gcc
+  `-std=c99`); `make CC=...`, or `CC` in the environment, names another.
+  The sources are C11 and also build as C99.  The collection builds with any POSIX make,
+  including its own: `cd make && cc -O2 -o make *.c`, then `make/make`
+  at the top.  This collection's c17 builds it too (with the C library
+  of a Linux distribution, glibc, or with musl: see c17/README.md).
 * The tests: a POSIX shell, the POSIX utilities and a C compiler (for tl,
   the test language, and the small helpers in `testlib/`); nothing else.
 * `make difftest`: the reference implementations named in each README.md
@@ -191,14 +205,18 @@ ipcrm.
 What a shell script cannot do well (drive a program on a pseudo-terminal
 and read its screen, compare with a reference implementation case by
 case, generate random programs, read binary formats) is written in tl,
-a small language in the style of C made for these tests: one interpreter,
-`testlib/tl.c` (C99 and POSIX, about 6700 lines), which each test script
-compiles for itself, so the tests need no other language.  It has
+a small language in the style of C made for these tests, and now a
+program of the system in its own right ([tl/](tl/), installed as
+`/usr/bin/tl`): one interpreter, `tl/tl.c` (C99 and POSIX, about 6700
+lines), which each test script compiles for itself from these sources
+(so the tests run on any host, and test the tl beside them, not one
+installed earlier).  It has
 dynamic values (strings of bytes, lists, maps), POSIX regular
 expressions, the interfaces of POSIX as its library (processes, signals,
 descriptors, user IDs, time) and pseudo-terminals with a terminal
 emulator (xterm and ANSI sequences) for the interactive utilities.
-`testlib/tl.md` describes it.  In `testlib/` too: `ptyrun.tl` runs a
+`tl/tl.md` describes it.  In `testlib/`, the libraries of the tests
+written in it: `ptyrun.tl` runs a
 command with some of its descriptors on a pseudo-terminal, typing
 `$PTYRUN_INPUT` on it when that is set (for tty, nohup, stty, ps and the
 questions of compress and patch); `expect.tl` holds sessions in the
@@ -230,8 +248,9 @@ Every utility directory has the same parts:
 
 Makefiles are POSIX makefiles (`.POSIX:`) of one pattern: `CC`, `CFLAGS`
 (default `-O2`), `LDFLAGS`, `PREFIX`, `BINDIR` (and `DESTDIR`) can be set
-on the command line; `STDFLAGS` holds what the sources need (`-std=c11`
-and the warnings).  Each source defines its own feature-test macros
+on the command line, and `STDFLAGS`, empty, more options for the
+compiler: with gcc or clang `STDFLAGS="-std=c11 -Wall -Wextra"` gives the
+warnings the sources are kept free of.  Each source defines its own feature-test macros
 (`_POSIX_C_SOURCE`, `_XOPEN_SOURCE`) before any include, or includes the
 project header that does; nothing depends on the makefile for them.
 

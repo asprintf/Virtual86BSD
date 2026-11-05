@@ -34,11 +34,11 @@ C17_LIBDIR=${C17_LIBDIR:-$D}; export C17_LIBDIR
 T=${TMPDIR:-/tmp}/test_c17.$$
 mkdir -m 700 "$T" || exit 2
 trap 'chmod -R u+rwx "$T" 2>/dev/null; rm -rf "$T" "$T.tl"' EXIT
-# tl: the test language, built here (../testlib/tl.c; ../testlib/tl.md)
+# tl: the test language, built here (../tl/tl.c; ../tl/tl.md)
 TL=$(cd ../testlib && pwd) || exit 2; export TL
 cc=${cc:-${CC:-}}
 [ -n "$cc" ] || for c in c17 c99 cc; do command -v $c >/dev/null 2>&1 && { cc=$c; break; }; done
-$cc -o "$T.tl" "$TL/tl.c" || { echo "cannot compile ../testlib/tl.c"; exit 2; }
+$cc -o "$T.tl" "$TL/../tl/tl.c" || { echo "cannot compile ../tl/tl.c"; exit 2; }
 TLBIN=$T.tl; export TLBIN
 $cc -o "$T/fstat" "$TL/fstat.c" || { echo "cannot compile ../testlib/fstat.c"; exit 2; }
 ELF="$TLBIN $D/tests/elfinfo.tl"
@@ -255,6 +255,15 @@ done
 printf "%s\n" "#include <stddef.h>" "typedef int (*fp)(void);" "int f(fp g, void (*h)(int)) { return g == NULL || NULL != h || g == 0; }" > npc.c
 c17 -c -o npc.o npc.c > npc.err 2>&1
 ok "function pointer == NULL: no diagnostic" test ! -s npc.err
+
+# a structure with a flexible array member may be a member of a union, in
+# any place (only structures and arrays may not have it)
+printf "%s\n" "struct s { int n; char a[]; };" "union u { struct s s; char space[16]; };" "union v { char space[16]; struct s s; };" "int f(union u *p, union v *q) { return p->s.n + q->s.n; }" > famu.c
+c17 -c -o famu.o famu.c > famu.err 2>&1
+ok "flexible-array structure in a union: no diagnostic" test ! -s famu.err
+printf "%s\n" "struct s { int n; char a[]; };" "struct t { struct s s; int x; };" "int f(struct t *p) { return p->x; }" > fams.c
+c17 -c -o fams.o fams.c > fams.err 2>&1
+ok "flexible-array structure in a structure: a warning" grep -q "flexible array member" fams.err
 
 # ------------------------------------------------------------ preprocessor
 for f in "$D"/tests/pp/*.c; do

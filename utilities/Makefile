@@ -18,7 +18,7 @@ UTILS = ar asa at awk basename bc c17 cal cat cflow chgrp chmod chown cksum \
 	localedef logger logname lp ls m4 mailx make man mesg mkdir mkfifo more \
 	msgfmt mv newgrp nice nl nm nohup od paste patch pathchk pax pr printf \
 	ps pwd readlink realpath renice rm rmdir sccs sed sh sleep sort split \
-	strings strip stty tabs tail talk tee test time timeout touch tput tr \
+	strings strip stty tabs tail talk tee test time timeout tl touch tput tr \
 	true tsort tty uname unexpand uniq unlink uucp uudecode uuencode uustat \
 	uux vi wc who write xargs xgettext yacc
 

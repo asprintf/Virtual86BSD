@@ -12,7 +12,7 @@
  *
  * The pages are the standard's text, which is copyrighted (IEEE and The
  * Open Group); they are made where the standard is, and not distributed
- * with these utilities.  tl is the language of the tests (../testlib/tl.c).
+ * with these utilities.  tl is the language of the tests (../tl/tl.c).
  */
 
 var WIDTH = 72;

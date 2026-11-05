@@ -97,6 +97,14 @@ stay ignored, and with -n, -p or -q make does not catch them.
   sh -e, as the standard requires.  GNU make keeps -e for .IGNORE.
 * The built-in .c.a and .sh rules are exactly those of the standard
   (cp, not cat; the object file is removed after ar).
+* A target with no commands that exists keeps its own time: what depends
+  on it is remade only if it is older than that file, as with GNU and BSD
+  make (SQLite's `parse.h: parse.c`, both written by lemon).  One that
+  doesn't exist counts as newer than everything.
+* A rule whose targets expand to nothing (`$(EMPTY): x`) is ignored,
+  with its commands, as GNU and BSD make do (the standard doesn't say;
+  SQLite's makefiles rely on it).  A rule with no target written
+  (`: x`) is an error.
 * Prerequisites accumulate in the order the rules appear.  GNU make
   moves those of the rule with commands to the front.
 * Messages follow GNU make's wording ("make: *** [t] Error 1",
@@ -106,8 +114,8 @@ stay ignored, and with -n, -p or -q make does not catch them.
 
 ## Testing
 
-* tests/difftest.tl: 58 cases run with this make and with GNU make 4.3,
-  comparing output and exit status.  45 are identical; the other 13 are
+* tests/difftest.tl: 60 cases run with this make and with GNU make 4.3,
+  comparing output and exit status.  47 are identical; the other 13 are
   listed in tests/cases.tl with the reason they differ, such as .WAIT
   and :::=, which GNU make 4.3 lacks, and the differences listed above.
 * tests/run.tl: 14 regression scripts with frozen output, for behaviour

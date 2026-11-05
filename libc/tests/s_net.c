@@ -385,6 +385,29 @@ static int count(struct addrinfo *r)
 	return n;
 }
 
+/* can this system reach 10.0.0.1 but not 2001:db8::1 (UDP connect)? */
+static int v4_only_route(void)
+{
+	struct sockaddr_in a4;
+	struct sockaddr_in6 a6;
+	int f4 = socket(AF_INET, SOCK_DGRAM, 0), f6 = socket(AF_INET6, SOCK_DGRAM, 0), ok4, ok6;
+	memset(&a4, 0, sizeof a4);
+	a4.sin_family = AF_INET;
+	a4.sin_port = htons(53);
+	a4.sin_addr.s_addr = htonl(0x0a000001);
+	memset(&a6, 0, sizeof a6);
+	a6.sin6_family = AF_INET6;
+	a6.sin6_port = htons(53);
+	inet_pton(AF_INET6, "2001:db8::1", &a6.sin6_addr);
+	ok4 = f4 >= 0 && connect(f4, (struct sockaddr *)&a4, sizeof a4) == 0;
+	ok6 = f6 >= 0 && connect(f6, (struct sockaddr *)&a6, sizeof a6) == 0;
+	if (f4 >= 0)
+		close(f4);
+	if (f6 >= 0)
+		close(f6);
+	return ok4 && !ok6;
+}
+
 static const char *addr_of(struct addrinfo *r, char *b)
 {
 	void *a = r->ai_family == AF_INET ? (void *)&((struct sockaddr_in *)r->ai_addr)->sin_addr
@@ -468,7 +491,9 @@ static void resolver(void)
 	h.ai_flags = 0;
 	CHECK((e = getaddrinfo("a.example.test", 0, &h, &r)) == 0);
 	if (!e) {
-		CHECK(count(r) == 3 && r->ai_family == AF_INET);   /* no IPv6 route: last */
+		/* where IPv4 has a route and IPv6 not, IPv6 sorts last (RFC 6724
+		   rule 1); otherwise the order is the precedence table's */
+		CHECK(count(r) == 3 && (r->ai_family == AF_INET || !v4_only_route()));
 		freeaddrinfo(r);
 	}
 	h.ai_family = AF_INET6;

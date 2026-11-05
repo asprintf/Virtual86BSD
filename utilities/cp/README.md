@@ -37,7 +37,9 @@ dependencies beyond libc.
 * An existing destination that is not a directory is removed before a FIFO,
   device or symbolic link is created in its place (after a prompt, with -i),
   so that a hierarchy can be copied again over an earlier copy.
-* -p sets the owner first (EPERM is not reported; the set-ID bits are then
+* -p sets the owner first (EPERM, and EINVAL for an ID the system cannot
+  represent, such as one outside a user namespace's mapping, are not
+  reported; the set-ID bits are then
   cleared), then the mode, then the times; directories get their times after
   their contents.
 * -P without -R copies a symbolic link operand as a link.

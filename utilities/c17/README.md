@@ -57,7 +57,7 @@ a profile, the pathname of one, or a directory with `include/` and `lib/`
 `$(PREFIX)/lib/c17` (in the build directory the tests set it to the
 directory itself).
 
-c17 compiles itself: `make CC=c17 STDFLAGS=` with an installed c17 gives
+c17 compiles itself: `make CC=c17` with an installed c17 gives
 the same compiler, and the tests check that the assembly it writes stays
 the same over two more generations.
 
@@ -79,6 +79,7 @@ The options of the standard:
 | `-s` | an executable without symbol table or debugging information |
 | `-O optlevel` | `0` turns off the code generator's improvements; `1` (the default), `2`, `3`, `s` turn them on; anything else is an error |
 | `-B dynamic`, `-B static` | dynamic or static link editing; the last one given counts; without either, the C library's profile decides |
+| `-B standalone` | (an extension) static link editing without the C library, its start files and c17's run-time library: for a kernel, with a linker script operand (below) |
 | `-R directory` | the directories, in order, in the executable's run-time search path (`DT_RUNPATH`); ignored with a warning when linking statically |
 | `-G` | position-independent code; without `-c`, a shared library (see below) |
 
@@ -143,11 +144,28 @@ including its reversed x87 mnemonics), the usual directives (`.text`,
 local labels `1:` with `1b` and `1f`, expressions with differences of
 labels (also of labels defined later), the relocation operators `@PLT`,
 `@GOTPCREL`, `@tpoff`, `@gottpoff`, `@tlsgd`, `@tlsld`, `@dtpoff`,
-segment prefixes (`%fs:`), and `;` between statements.
+segment prefixes (`%fs:`), and `;` between statements.  For a kernel:
+the system instructions (`in`/`out` and the string forms, `cli`/`sti`,
+`lgdt`/`lidt`/`ltr` and the other descriptor-table instructions,
+`invlpg`, `mov` to and from control and segment registers,
+`rdmsr`/`wrmsr`, `swapgs`, `iretq`, `lretq`, `ljmp`, `fxsave`/`fxrstor`,
+`ldmxcsr`/`stmxcsr`), `.code32` (32-bit protected-mode code: no REX
+prefixes, 32-bit address registers, absolute `disp32` addresses) and
+`.code64`, macros (`.macro NAME params` ... `.endm`, with `\param`,
+defaults `param=value`, `\()` and `\@`), and a parenthesized expression
+as an operand (`(sym - BASE)`).  Short jumps are not relaxed: a jump
+whose target is not yet known gets a 32-bit displacement.
 
 The link editor reads ELF relocatable objects, `ar` archives (GNU and
 BSD long names), shared objects, and the linker scripts C libraries
-install as `libc.so` and `libm.so` (`GROUP`, `INPUT`, `AS_NEEDED`). It
+install as `libc.so` and `libm.so` (`GROUP`, `INPUT`, `AS_NEEDED`).
+Of a kernel's linker script it takes `ENTRY(symbol)` and from `SECTIONS`
+the address of the image (`. = ADDRESS;` before the first output
+section) and symbols defined at its end (`NAME = .;` after the last
+one, perhaps after `. = ALIGN(N);`); the output section descriptions
+themselves are not interpreted (sections go where c17 puts them), but a
+section named `.boot` comes first, right after the ELF headers, for a
+boot loader's header. It
 writes an executable (`ET_EXEC`, not position-independent; with `-G` a
 shared library, below): a read-only, an executable and a writable
 segment at 0x400000, a TLS segment, a non-executable stack. It resolves strong, weak and common symbols (the
@@ -308,7 +326,7 @@ assembler, and c17's own assembly output assembled by it; with
 `CSMITH=prefix` (`CSMITH_COUNT`) random programs of Csmith compared with
 `cc -O0`.
 
-Beyond these: this whole collection, built with `make CC=c17 STDFLAGS=`
+Beyond these: this whole collection, built with `make CC=c17`
 against glibc (dynamically linked, the default), passes its tests
 exactly as the same sources built by gcc do (6874 tests; the 9 failures
 of bc, diff and talk come from this test machine and are the same with

@@ -18,8 +18,8 @@ cc=${CC:-}
 [ -n "$cc" ] || for c in c17 c99 cc; do command -v $c >/dev/null 2>&1 && { cc=$c; break; }; done
 $cc -o ltouch "$HERE/../../testlib/ltouch.c" || exit 2
 LTOUCH=$W/ltouch
-# tl, the test language, for treecmp.tl (../../testlib/tl.c)
-$cc -o tl "$HERE/../../testlib/tl.c" || exit 2
+# tl, the test language, for treecmp.tl (../../tl/tl.c)
+$cc -o tl "$HERE/../../tl/tl.c" || exit 2
 CMP="$W/tl $HERE/treecmp.tl"
 
 pass=0; fail=0

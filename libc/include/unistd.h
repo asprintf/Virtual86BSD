@@ -36,7 +36,7 @@
 #define _POSIX_MESSAGE_PASSING          202405L
 #define _POSIX_MONOTONIC_CLOCK          202405L
 #define _POSIX_NO_TRUNC                 1
-#define _POSIX_PRIORITIZED_IO           (-1)
+#define _POSIX_PRIORITIZED_IO           202405L
 #define _POSIX_PRIORITY_SCHEDULING      202405L
 #define _POSIX_RAW_SOCKETS              202405L
 #define _POSIX_READER_WRITER_LOCKS      202405L
@@ -48,7 +48,7 @@
 #define _POSIX_SHELL                    1
 #define _POSIX_SPAWN                    202405L
 #define _POSIX_SPIN_LOCKS               202405L
-#define _POSIX_SPORADIC_SERVER          (-1)
+#define _POSIX_SPORADIC_SERVER          0       /* sysconf() tells */
 #define _POSIX_SYNCHRONIZED_IO          202405L
 #define _POSIX_THREAD_ATTR_STACKADDR    202405L
 #define _POSIX_THREAD_ATTR_STACKSIZE    202405L
@@ -60,23 +60,23 @@
 #define _POSIX_THREAD_ROBUST_PRIO_INHERIT 202405L
 #define _POSIX_THREAD_ROBUST_PRIO_PROTECT 202405L
 #define _POSIX_THREAD_SAFE_FUNCTIONS    202405L
-#define _POSIX_THREAD_SPORADIC_SERVER   (-1)
+#define _POSIX_THREAD_SPORADIC_SERVER   0       /* sysconf() tells */
 #define _POSIX_THREADS                  202405L
 #define _POSIX_TIMEOUTS                 202405L
 #define _POSIX_TIMERS                   202405L
-#define _POSIX_TYPED_MEMORY_OBJECTS     (-1)
+#define _POSIX_TYPED_MEMORY_OBJECTS     0       /* sysconf() tells */
 #define _POSIX_V8_ILP32_OFF32           (-1)
 #define _POSIX_V8_ILP32_OFFBIG          (-1)
 #define _POSIX_V8_LP64_OFF64            1
-#define _POSIX_V8_LPBIG_OFFBIG          (-1)
+#define _POSIX_V8_LPBIG_OFFBIG          1       /* the same as LP64_OFF64 */
 #define _POSIX_V7_ILP32_OFF32           (-1)
 #define _POSIX_V7_ILP32_OFFBIG          (-1)
 #define _POSIX_V7_LP64_OFF64            1
-#define _POSIX_V7_LPBIG_OFFBIG          (-1)
+#define _POSIX_V7_LPBIG_OFFBIG          1
 #define _POSIX2_C_BIND                  202405L
 #define _POSIX2_C_DEV                   202405L
 #define _POSIX2_CHAR_TERM               1
-#define _POSIX2_FORT_RUN                (-1)
+#define _POSIX2_FORT_RUN                202405L /* asa */
 #define _POSIX2_LOCALEDEF               202405L
 #define _POSIX2_SW_DEV                  202405L
 #define _POSIX2_UPE                     202405L
@@ -92,7 +92,7 @@
 
 /* ---- Execution-time constants ---- */
 #define _POSIX_ASYNC_IO  1
-#define _POSIX_PRIO_IO   (-1)
+#define _POSIX_PRIO_IO   1
 #define _POSIX_SYNC_IO   1
 #define _POSIX2_SYMLINKS 1
 /* _POSIX_FALLOC and _POSIX_TIMESTAMP_RESOLUTION vary by file system. */

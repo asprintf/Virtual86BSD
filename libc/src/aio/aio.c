@@ -10,12 +10,19 @@
  * cancels them (the I/O call and the wait for predecessors are
  * cancellation points), and the cleanup handler records ECANCELED.  A
  * SIGEV_THREAD notification function runs in the worker, with the signal
- * mask of the thread that submitted the request. */
+ * mask of the thread that submitted the request.
+ *
+ * Prioritized I/O: when the submitting thread has a priority scheduling
+ * policy (SCHED_FIFO, SCHED_RR), the worker of a read or write runs with
+ * that policy at the thread's priority less aio_reqprio, so requests are
+ * served in priority order; otherwise aio_reqprio has no effect (POSIX
+ * leaves it unspecified). */
 #include <aio.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
+#include <sched.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -212,6 +219,19 @@ static int submit(struct aiocb *cb, int op, struct lio *l)
 	if (r->sev.sigev_notify == SIGEV_THREAD && r->sev.sigev_notify_attributes)
 		a = *r->sev.sigev_notify_attributes;
 	pthread_attr_setdetachstate(&a, PTHREAD_CREATE_DETACHED);
+	if (op <= LIO_WRITE) {
+		struct sched_param sp;
+		int pol;
+		if (pthread_getschedparam(pthread_self(), &pol, &sp) == 0 && (pol == SCHED_FIFO || pol == SCHED_RR)) {
+			int min = sched_get_priority_min(pol);
+			sp.sched_priority -= cb->aio_reqprio;
+			if (sp.sched_priority < min)
+				sp.sched_priority = min;
+			pthread_attr_setinheritsched(&a, PTHREAD_EXPLICIT_SCHED);
+			pthread_attr_setschedpolicy(&a, pol);
+			pthread_attr_setschedparam(&a, &sp);
+		}
+	}
 	cb->__ret = 0;
 	cb->__err = EINPROGRESS;
 	cb->__req = r;

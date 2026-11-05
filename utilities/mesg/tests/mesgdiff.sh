@@ -7,12 +7,12 @@ U=$1
 case $U in /*) ;; *) U=$PWD/$U ;; esac
 TL=$(cd "$(dirname "$0")/../../testlib" && pwd) || exit 2
 command -v mesg >/dev/null || { echo "mesgdiff: no mesg"; exit 2; }
-# tl, the test language (../../testlib/tl.c), for ptyrun.tl
+# tl, the test language (../../tl/tl.c), for ptyrun.tl
 cc=${CC:-}
 [ -n "$cc" ] || for c in c17 c99 cc; do command -v $c >/dev/null 2>&1 && { cc=$c; break; }; done
 TLBIN=${TMPDIR:-/tmp}/tl.$$
 trap 'rm -f "$TLBIN"' EXIT
-$cc -o "$TLBIN" "$TL/tl.c" || exit 2
+$cc -o "$TLBIN" "$TL/../tl/tl.c" || exit 2
 fail=0 n=0
 for seq in "y" "n" "y y" "n n" "y n" "n y" "n -" "y -" "go+w n" "o+w -" "g+w -" "go-w -"; do
     for m in "$U" mesg; do

@@ -1,6 +1,7 @@
 /* Scheduling of threads, and their CPU-time clocks. */
 #include <errno.h>
 #include <pthread.h>
+#include <string.h>
 #include "pthread_impl.h"
 #include "syscall.h"
 #include "lock.h"
@@ -25,7 +26,7 @@ int pthread_getschedparam(pthread_t t, int *__RESTRICT policy, struct sched_para
 	LOCK(&t->killlock);
 	if (!t->tid)
 		r = -ESRCH;
-	else if ((r = __syscall2(SYS_sched_getparam, t->tid, p)) >= 0) {
+	else if (memset(p, 0, sizeof *p), (r = __syscall2(SYS_sched_getparam, t->tid, p)) >= 0) {
 		r = __syscall1(SYS_sched_getscheduler, t->tid);
 		if (r >= 0) {
 			*policy = (int)r;
@@ -43,7 +44,15 @@ int pthread_setschedprio(pthread_t t, int prio)
 	int r;
 	__block_all_sigs(&set);
 	LOCK(&t->killlock);
-	r = t->tid ? (int)-__syscall2(SYS_sched_setparam, t->tid, &prio) : ESRCH;
+	if (!t->tid)
+		r = ESRCH;
+	else {     /* the whole struct: a sporadic server's other members stay */
+		struct sched_param sp = {0};
+		r = (int)-__syscall2(SYS_sched_getparam, t->tid, &sp);
+		sp.sched_priority = prio;
+		if (!r)
+			r = (int)-__syscall2(SYS_sched_setparam, t->tid, &sp);
+	}
 	UNLOCK(&t->killlock);
 	__restore_sigs(&set);
 	return r;

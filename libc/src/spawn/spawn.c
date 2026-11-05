@@ -51,7 +51,8 @@ static _Noreturn void child(int ep, const char *path, int usepath, const posix_s
 	if ((fl & POSIX_SPAWN_SETSID) && setsid() < 0) goto fail;
 	if ((fl & POSIX_SPAWN_SETPGROUP) && setpgid(0, at->__pgrp) < 0) goto fail;
 	if (fl & (POSIX_SPAWN_SETSCHEDULER | POSIX_SPAWN_SETSCHEDPARAM)) {
-		struct sched_param sp = { .sched_priority = at->__prio };
+		struct sched_param sp;
+		posix_spawnattr_getschedparam(at, &sp);
 		if (fl & POSIX_SPAWN_SETSCHEDULER) {
 			if (sched_setscheduler(0, at->__policy, &sp) < 0) goto fail;
 		} else if (sched_setparam(0, &sp) < 0) goto fail;

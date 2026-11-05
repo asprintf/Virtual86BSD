@@ -100,6 +100,17 @@ t "-S then -t" "a
 b" 0 sh -c 'touch -t 201901010000 d/b; "$1" -S -t d; touch -t 202101010000 d/b' sh "$U"
 t "-t then -S" "b
 a" 0 "$U" -t -S d
+# file operands are sorted as directory entries are (automake's
+# "ls -t configure conftest.file" sanity check needs it)
+t "-t on file operands" "d/b
+d/a" 0 "$U" -t d/a d/b
+t "-tr on file operands" "d/a
+d/b" 0 "$U" -tr d/b d/a
+t "-f keeps the operands' order" "d/b
+d/a" 0 "$U" -f d/b d/a
+t "-t on directory operands" "e2:
+
+e1:" 0 sh -c 'mkdir -p e1 e2 && touch -t 201901010000 e1 && touch -t 202101010000 e2 && "$1" -t e1 e2; s=$?; rmdir e1 e2; exit $s' sh "$U"
 t "-t -S -c: -c is last of S,t,c,u" "a" 0 sh -c 'touch d/a; "$1" -t -S -c d | head -n 1; touch -t 202001010000 d/a' sh "$U"
 t "-f order is directory order, includes ." "." 0 sh -c '"$1" -f d | grep -x "\."' sh "$U"
 t "-1 keeps long format" "1" 0 sh -c '"$1" -l -1 d | head -n 1 | grep -c "^total "' sh "$U"

@@ -1,6 +1,6 @@
-/* <sys/socket.h>.  SOCK_CLOFORK and MSG_CMSG_CLOFORK are emulated
- * (clofork.h).  struct msghdr and struct cmsghdr have the POSIX types
- * (int msg_iovlen, socklen_t msg_controllen and cmsg_len), where the
+/* <sys/socket.h>.  SOCK_CLOFORK and MSG_CMSG_CLOFORK go to a kernel that
+ * has close-on-fork, else they are emulated (clofork.h).  struct msghdr
+ * and struct cmsghdr have the POSIX types (int msg_iovlen, socklen_t msg_controllen and cmsg_len), where the
  * kernel reads 64-bit fields: the padding is cleared on the way in. */
 #include <errno.h>
 #include <string.h>
@@ -23,12 +23,16 @@ static int clofork(int fd, int on)
 
 int socket(int domain, int type, int proto)
 {
+	if ((type & SOCK_CLOFORK) && __clofork_native())
+		return (int)__sys3(SYS_socket, domain, type, proto);
 	int fd = (int)__sys3(SYS_socket, domain, type & ~SOCK_CLOFORK, proto);
 	return clofork(fd, type & SOCK_CLOFORK);
 }
 
 int socketpair(int domain, int type, int proto, int fd[2])
 {
+	if ((type & SOCK_CLOFORK) && __clofork_native())
+		return (int)__sys4(SYS_socketpair, domain, type, proto, fd);
 	if (__sys4(SYS_socketpair, domain, type & ~SOCK_CLOFORK, proto, fd) < 0)
 		return -1;
 	if (type & SOCK_CLOFORK) {
@@ -57,6 +61,8 @@ int accept4(int fd, struct sockaddr *__RESTRICT a, socklen_t *__RESTRICT n, int 
 		errno = EINVAL;
 		return -1;
 	}
+	if ((flags & SOCK_CLOFORK) && __clofork_native())
+		return (int)__sys_cp4(SYS_accept4, fd, a, n, flags);
 	return clofork((int)__sys_cp4(SYS_accept4, fd, a, n, flags & TYPEFLAGS), flags & SOCK_CLOFORK);
 }
 
@@ -148,7 +154,8 @@ ssize_t recvmsg(int fd, struct msghdr *m, int flags)
 	struct cmsghdr *c;
 	ssize_t r;
 	kmsg(&k, m);
-	r = __sys_cp3(SYS_recvmsg, fd, &k, flags & ~MSG_CMSG_CLOFORK);
+	int native = (flags & MSG_CMSG_CLOFORK) && __clofork_native();
+	r = __sys_cp3(SYS_recvmsg, fd, &k, native ? flags : flags & ~MSG_CMSG_CLOFORK);
 	if (r < 0)
 		return r;
 	m->msg_namelen = (socklen_t)k.namelen_unused;
@@ -156,7 +163,7 @@ ssize_t recvmsg(int fd, struct msghdr *m, int flags)
 	m->msg_flags = (int)k.flags;
 	for (c = CMSG_FIRSTHDR(m); c; c = CMSG_NXTHDR(m, c)) {
 		c->__pad1 = 0;
-		if ((flags & MSG_CMSG_CLOFORK) && c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_RIGHTS) {
+		if ((flags & MSG_CMSG_CLOFORK) && !native && c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_RIGHTS) {
 			int *fds = (int *)CMSG_DATA(c);
 			size_t i, n = (c->cmsg_len - CMSG_LEN(0)) / sizeof(int);
 			for (i = 0; i < n; i++)

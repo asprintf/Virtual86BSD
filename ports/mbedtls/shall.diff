@@ -1,0 +1,84 @@
+Mbed TLS 3.6.7 for Shall: applied by ports/mbedtls/build.sh (patch -p1).
+- include/mbedtls/mbedtls_config.h: without MBEDTLS_HAVE_ASM, MBEDTLS_AESNI_C and
+  MBEDTLS_PADLOCK_C, as c17 has no inline assembly (the portable C code is used).
+- library/timing.c: clock_gettime() where POSIX.1-2024 has no gettimeofday().
+
+diff -ru a/include/mbedtls/mbedtls_config.h b/include/mbedtls/mbedtls_config.h
+--- a/include/mbedtls/mbedtls_config.h	2026-11-04 18:44:42.241007628 +0100
++++ b/include/mbedtls/mbedtls_config.h	2026-11-04 18:44:42.260155806 +0100
+@@ -49,7 +49,7 @@
+  *
+  * Comment to disable the use of assembly code.
+  */
+-#define MBEDTLS_HAVE_ASM
++//#define MBEDTLS_HAVE_ASM   /* Shall: c17 has no inline assembly (asm) */
+ 
+ /**
+  * \def MBEDTLS_NO_UDBL_DIVISION
+@@ -2356,7 +2356,7 @@
+  *
+  * This modules adds support for the AES-NI instructions on x86.
+  */
+-#define MBEDTLS_AESNI_C
++//#define MBEDTLS_AESNI_C   /* Shall: c17 has no inline assembly (asm) */
+ 
+ /**
+  * \def MBEDTLS_AESCE_C
+@@ -3129,7 +3129,7 @@
+  *
+  * This modules adds support for the VIA PadLock on x86.
+  */
+-#define MBEDTLS_PADLOCK_C
++//#define MBEDTLS_PADLOCK_C   /* Shall: c17 has no inline assembly (asm) */
+ 
+ /**
+  * \def MBEDTLS_PEM_PARSE_C
+diff -ru a/library/timing.c b/library/timing.c
+--- a/library/timing.c	2026-11-04 18:45:41.759629819 +0100
++++ b/library/timing.c	2026-11-04 18:45:41.777596123 +0100
+@@ -35,9 +35,17 @@
+  * platform matches the ifdefs above, it will be used. */
+ #include <time.h>
+ #include <sys/time.h>
++#if defined(_POSIX_VERSION) && _POSIX_VERSION >= 202405L
++/* POSIX.1-2024 has no gettimeofday(): a monotonic clock_gettime() */
++#define MBEDTLS_TIMING_CLOCK_GETTIME
++struct _hr_time {
++    struct timespec start;
++};
++#else
+ struct _hr_time {
+     struct timeval start;
+ };
++#endif
+ #endif /* _WIN32 && !EFIX64 && !EFI32 */
+ 
+ /**
+@@ -85,6 +93,19 @@
+ {
+     struct _hr_time *t = (struct _hr_time *) val;
+ 
++#if defined(MBEDTLS_TIMING_CLOCK_GETTIME)
++    if (reset) {
++        clock_gettime(CLOCK_MONOTONIC, &t->start);
++        return 0;
++    } else {
++        unsigned long delta;
++        struct timespec now;
++        clock_gettime(CLOCK_MONOTONIC, &now);
++        delta = (now.tv_sec  - t->start.tv_sec) * 1000ul
++                + (now.tv_nsec - t->start.tv_nsec) / 1000000;
++        return delta;
++    }
++#else
+     if (reset) {
+         gettimeofday(&t->start, NULL);
+         return 0;
+@@ -96,6 +117,7 @@
+                 + (now.tv_usec - t->start.tv_usec) / 1000;
+         return delta;
+     }
++#endif
+ }
+ 
+ #endif /* _WIN32 && !EFIX64 && !EFI32 */

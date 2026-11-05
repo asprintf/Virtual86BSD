@@ -61,10 +61,10 @@ fi
 
 # the command run inside: a fresh environment
 if [ $# -gt 0 ]; then
-	set -- /usr/bin/env -i HOME=/root TERM="${TERM:-vt100}" PATH=/usr/bin:/bin \
+	set -- /usr/bin/env -i HOME=/root TERM="${TERM:-vt100}" PATH=/usr/local/bin:/usr/bin:/bin \
 		C17_LIBC=shall ENV=/etc/profile "$@"
 else
-	set -- /usr/bin/env -i HOME=/root TERM="${TERM:-vt100}" PATH=/usr/bin:/bin \
+	set -- /usr/bin/env -i HOME=/root TERM="${TERM:-vt100}" PATH=/usr/local/bin:/usr/bin:/bin \
 		C17_LIBC=shall ENV=/etc/profile /bin/sh -i
 fi
 

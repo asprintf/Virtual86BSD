@@ -11,6 +11,7 @@
 #include <limits.h>
 #include <signal.h>
 #include <string.h>
+#include <sched.h>
 #include "pthread_impl.h"
 #include "libc.h"
 #include "syscall.h"
@@ -123,8 +124,21 @@ int __pthread_create(__pthread_t *res, const void *attrp, void *(*fn)(void *), v
 		self->next = new;
 		__libc.threads_minus_1++;
 		if (explicit) {
-			int prio = (int)attr._a_prio;
-			long e = __syscall3(SYS_sched_setscheduler, new->tid, attr._a_sched >> 8, &prio);
+			/* (the packing: pthread_attr.c) */
+			struct sched_param sp = {0};
+			int pol = (int)((attr._a_sched >> 8) & 0xff);
+			unsigned long pr = (unsigned long)attr._a_prio;
+			sp.sched_priority = (int)(unsigned)pr;
+			if (pol == SCHED_SPORADIC) {
+				unsigned long b = (unsigned long)attr._a_sched >> 16, rp = (unsigned long)attr._a_flags >> 2;
+				sp.sched_ss_low_priority = (int)(pr >> 32 & 0xff);
+				sp.sched_ss_max_repl = (int)(pr >> 40 & 0xff);
+				sp.sched_ss_init_budget.tv_sec = (time_t)(b / 1000000);
+				sp.sched_ss_init_budget.tv_nsec = (long)(b % 1000000 * 1000);
+				sp.sched_ss_repl_period.tv_sec = (time_t)(rp / 1000000);
+				sp.sched_ss_repl_period.tv_nsec = (long)(rp % 1000000 * 1000);
+			}
+			long e = __syscall3(SYS_sched_setscheduler, new->tid, pol, &sp);
 			if (e < 0) {
 				new->detach_state = DT_DETACHED;   /* it unmaps itself */
 				r = e;

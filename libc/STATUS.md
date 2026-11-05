@@ -28,10 +28,10 @@ the compiler (gcc / c17), not by this library.
 
 | Header | State | Notes |
 |---|---|---|
-| `<fcntl.h>` | done | `O_CLOFORK`/`FD_CLOFORK`/`F_DUPFD_CLOFORK` emulated (Linux lacks close-on-fork); `O_EXEC`/`O_SEARCH` = `O_PATH` |
+| `<fcntl.h>` | done | `O_CLOFORK`/`FD_CLOFORK`/`F_DUPFD_CLOFORK` native on Shall's kernel, emulated on Linux; `O_EXEC`/`O_SEARCH` = `O_PATH` |
 | `<poll.h>` | done | |
 | `<signal.h>` | done | signals 32–34 reserved for the library, `SIGRTMIN` 35; `sig2str`/`str2sig`; `psignal`/`psiginfo` write with one `writev(2)` (atomic, stderr unbuffered) |
-| `<sys/mman.h>` | done except typed memory (option not supported) | `shm_open` in `/dev/shm`; `POSIX_MADV_DONTNEED` is a no-op (Linux's discards data) |
+| `<sys/mman.h>` | done; typed memory where the kernel has it (Shall's), else the functions fail as for no typed memory | `shm_open` in `/dev/shm`; `POSIX_MADV_DONTNEED` is a no-op (Linux's discards data) |
 | `<sys/resource.h>` | done | |
 | `<sys/select.h>` | done | |
 | `<sys/stat.h>` | done | |
@@ -138,6 +138,65 @@ expressions (glibc's C.utf8: an error); `strfmon` with `+` fails when both
 signs are empty, as POSIX requires (in the POSIX locale); C.UTF-8 has no
 `combining` class and no transliterations.
 
+## Stage 17: the Open POSIX Test Suite on Shall's kernel
+
+The suite (LTP git 43bf9cf, 4 November 2026: 1873 conformance tests, 253
+of them compile-only, and 15 functional ones) was built inside the system
+by c17, linked dynamically with libc.so, and run on Shall's kernel in QEMU
+(300 s per test, as LTP); for comparison also in a chroot on Linux and
+with glibc.  The runner is `tools/pts.sh` (POSIX sh; LTP itself is GPL and
+stays outside the tree): `sh tools/pts.sh SRC OUT c17 300 [K/M]` with SRC
+LTP's `testcases/open_posix_testsuite`; a run cut short continues where it
+stopped, and K/M splits the list between machines.
+
+* 111 do not compile, all for interfaces POSIX.1-2024 removed or that are
+  not POSIX (see stage 14; `gettimeofday` alone is 22).
+* Of the other 1777: 1711 passed on Shall's kernel at first, 1741 after
+  the fixes below; glibc 1693 on Linux.  The run found, in this library:
+  * read-write locks did not give way to waiting writers under
+    `SCHED_FIFO`/`SCHED_RR` (Thread Execution Scheduling): a real-time
+    reader now does not take the lock while a real-time writer of higher
+    or equal priority is blocked on it (`pthread_rwlock.c`; readers are
+    still preferred otherwise, as glibc's default).  Tested in `s_prio`.
+  * `sched_getparam(pid, NULL)` crashed (the structure was written
+    before the kernel was asked): now `EINVAL`, as Linux.
+* and in the kernel (see `kernel/README.md`): timer overruns, a 1 ns
+  timer interval that froze the system, `sigqueue` with signal 0 and its
+  errors, sleeps continued after a stop, absolute `CLOCK_REALTIME` timers
+  and sleeps when the clock is set (and relative ones not), `SA_NOCLDWAIT` with `wait`, write-back
+  of an unlinked file's shared mapping, `msync(MS_INVALIDATE)` on locked
+  memory, futex wake-ups by priority (`sem_post` order), `SIGSEGV` for
+  `PROT_NONE`, `RLIMIT_AS`, and a limit on the number of mappings (whose
+  absence made `mmap/24-1` map for ever).
+* `shm_open/23-1` (a million `shm_open` calls from 1000 processes) passes
+  on Linux but needs more than its 300 s under QEMU's emulation.
+* `sched_setparam/23-2`, `25-2`, `25-3` and `sched_setscheduler/1-1` are
+  defects of the tests: they switch to `SCHED_SPORADIC` without valid
+  sporadic-server parameters, expect the sporadic parameters to apply to a
+  process that is not `SCHED_SPORADIC`, or keep an old `errno`.
+* Left, not bugs of Shall: tests of undefined behaviour (`pthread_join`
+  and others on a joined thread) and of implementation-defined
+  `aio_cancel` (a request in progress is cancelled here, as musl does).
+* The 26 that do not pass with glibc either were each looked at; none is
+  a fault of Shall.  7 need process contention scope (`PTHREAD_SCOPE_PROCESS`
+  gives `ENOTSUP`, as POSIX allows: one scope is enough); 3 need a limit
+  that is indeterminate here (`AIO_MAX` twice, `SEM_NSEMS_MAX`: no limit,
+  `sysconf` -1) and 1 a 32-bit `off_t` (`mmap/31-1`); 10 test errors POSIX
+  says "may" happen or behaviour it leaves undefined (`aio_error`/`aio_return`
+  on a bad or retrieved aiocb, `EBUSY` from destroying a barrier or
+  condition variable in use, an invalid mutex attribute object, `EPERM` for
+  reading another process's scheduling or CPU clock, which Shall allows to
+  all, as Linux); 5 are defects of the tests (`sched_setscheduler/19-2`
+  forgets `<unistd.h>`, so `_POSIX_SPORADIC_SERVER` is not seen: with it
+  the test passes on Shall's kernel; `aio_suspend/5-1` wants
+  `_SC_ASYNCHRONOUS_IO` to be exactly 200112L; `pthread_rwlock_unlock/4-1`,
+  `4-2` and `pthread_mutex_init/speculative/5-2` skip themselves on Linux,
+  and Shall's kernel calls itself Linux).
+* `clock_settime/8-1`, the 27th, was a bug of Shall's kernel (a relative
+  sleep on `CLOCK_REALTIME` was lengthened when the clock was set back),
+  now fixed; it fails with glibc here only because of the sandbox's clock
+  (the host's Linux passes the same check in `kernel/tests/k_timer`).
+
 ## Stage 16: option groups, and where Linux departs from POSIX
 
 * `_XOPEN_CRYPT`, `_XOPEN_REALTIME` and `_XOPEN_REALTIME_THREADS` are 1
@@ -217,7 +276,7 @@ against glibc as well.
   * `sem_unlink`, `shm_unlink`: `EACCES`, not `EPERM` (the sticky `/dev/shm`).
 * The other 8 are not bugs: `aio_cancel` cancelling a request in progress
   (implementation-defined; musl too), `_SC_PRIORITIZED_IO` unsupported
-  (the tests report UNTESTED), and `pthread_cancel`/`pthread_detach`/`pthread_join`
+  (the tests report UNTESTED; supported since, see the end), and `pthread_cancel`/`pthread_detach`/`pthread_join`
   on a thread already joined (undefined behaviour since POSIX.1-2008 TC1;
   glibc happens to keep the memory).
 
@@ -397,7 +456,7 @@ The hash constants (MD5, SHA-256, SHA-512) are computed by bc
 
 | Header | State | Notes |
 |---|---|---|
-| `<sys/socket.h>` | done | all functions incl. `accept4`; `SOCK_CLOFORK` and `MSG_CMSG_CLOFORK` (new in POSIX.1-2024) emulated like `O_CLOFORK`; `struct msghdr`/`cmsghdr` with the POSIX member types (`int msg_iovlen`, `socklen_t` lengths): their padding is cleared before the kernel reads 64-bit fields |
+| `<sys/socket.h>` | done | all functions incl. `accept4`; `SOCK_CLOFORK` and `MSG_CMSG_CLOFORK` (new in POSIX.1-2024) native or emulated like `O_CLOFORK`; `struct msghdr`/`cmsghdr` with the POSIX member types (`int msg_iovlen`, `socklen_t` lengths): their padding is cleared before the kernel reads 64-bit fields |
 | `<sys/un.h>`, `<netinet/in.h>`, `<netinet/tcp.h>`, `<arpa/inet.h>` | done | `inet_pton` strict as glibc's, `inet_addr` with the old short forms, `inet_ntop` as RFC 5952 |
 | `<netdb.h>` | done | `getaddrinfo`/`getnameinfo` (numeric, `/etc/hosts`, then DNS), the hosts, networks, protocols and services databases; results, orders and error codes as glibc's in every case of `tests/t_inet.c` |
 | `<net/if.h>` | done | names and indexes by ioctl, the list from `/proc/net/dev` |
@@ -528,9 +587,10 @@ Done through stage 16 (shared library, dynamic linker, static PIE, libc.so built
 Where Linux itself stands between this library and POSIX (what a kernel
 of Shall's own would settle):
 
-* `O_CLOFORK`/`FD_CLOFORK` are emulated (a table the library keeps):
-  not atomic against a `fork()` in another thread between `open()` and the
-  table entry, and invisible to descriptors passed by other means.
+* `O_CLOFORK`/`FD_CLOFORK` are emulated on Linux (a table the library
+  keeps): not atomic against a `fork()` in another thread between `open()`
+  and the table entry, and invisible to descriptors passed by other means.
+  Shall's kernel has them, and the library then leaves them to it.
 * Credentials and the nice value are kept per thread by Linux; set*id and
   `nice()`/`setpriority()` of the process itself reach every thread through
   the library (signals for set*id, so not atomically), but `setpriority()`
@@ -540,8 +600,47 @@ of Shall's own would settle):
   `O_EXEC`/`O_SEARCH` permission check Linux 5.8 (`faccessat2`).
 * Access times: Linux's default mount option `relatime` updates them less
   often than POSIX asks (`strictatime` does as POSIX says).
-* Options not offered: `_POSIX_SPORADIC_SERVER` and
+* Options not offered on Linux: `_POSIX_SPORADIC_SERVER` and
   `_POSIX_THREAD_SPORADIC_SERVER` (no such scheduling policy in Linux),
-  `_POSIX_TYPED_MEMORY_OBJECTS` (no such memory in Linux),
-  `_POSIX_PRIORITIZED_IO` (possible in the library, with the aio threads'
-  priorities), the 32-bit programming environments, and `fort77`.
+  `_POSIX_TYPED_MEMORY_OBJECTS` (no such memory in Linux): the three are
+  0 in `<unistd.h>` and `sysconf()` asks the kernel (Shall's has them).
+  Not offered: the 32-bit programming environments (ILP32_OFF32 and
+  ILP32_OFFBIG).  LPBIG_OFFBIG is offered: it is the LP64_OFF64
+  environment, whose types meet its minimum widths.  The FORTRAN Runtime
+  Utilities option (`_POSIX2_FORT_RUN`) is offered: it is `asa` alone.
+  (`fort77` is not in POSIX.1-2024: it was removed in Issue 8.)
+* `_POSIX_RAW_SOCKETS`: Linux has them for privileged processes; Shall's
+  kernel for root, on its loopback interface.
+
+## After stage 16 (with Shall's kernel)
+
+* Prioritized I/O (`_POSIX_PRIORITIZED_IO`, `_POSIX_PRIO_IO`,
+  `AIO_PRIO_DELTA_MAX` 20): the worker thread of an `aio_read`/`aio_write`
+  of a thread with `SCHED_FIFO` or `SCHED_RR` runs with that policy at the
+  thread's priority less `aio_reqprio`, so the scheduler serves requests
+  in priority order; for other policies `aio_reqprio` has no effect (POSIX
+  leaves that unspecified).  Tested in `s_aio` through a `SIGEV_THREAD`
+  notification, which runs in the worker.
+* `getaddrinfo` with `AI_ADDRCONFIG` on a system with only a loopback
+  interface: `AF_UNSPEC` is not narrowed (it was `EAI_NONAME`), as glibc.
+* Close-on-fork is the kernel's where it has it (see above).
+* The sporadic server ([SS], [TSP]): `SCHED_SPORADIC` is 4 (a number Linux
+  does not use, and refuses), `struct sched_param` has POSIX's
+  `sched_ss_low_priority`, `sched_ss_repl_period`, `sched_ss_init_budget`
+  and `sched_ss_max_repl` after `sched_priority`; the kernel reads and
+  writes the long form for this policy only, so `sched_getparam` and
+  `pthread_getschedparam` clear the structure first, and
+  `pthread_setschedprio` passes the whole of it.  `pthread_attr_t` keeps
+  its size: a server's other parameters are packed into bits the others
+  leave free (budget and period in microseconds; `pthread_attr.c`), and
+  `posix_spawnattr_t` keeps them in its padding.  `sysconf(_SC_SPORADIC_SERVER)`,
+  `_SC_THREAD_SPORADIC_SERVER` and `_SC_SS_REPL_MAX` (32) ask whether the
+  kernel takes the policy.  Tested in `tests/s_sporadic.c` (a 20 ms budget
+  every 100 ms against a busy SCHED_FIFO thread between its priorities:
+  about 200 ms of each second).
+* Typed memory objects ([TYM]): `posix_typed_mem_open("/NAME", oflag,
+  tflag)` opens `/dev/tym/NAME` (O_CLOEXEC and O_CLOFORK honoured) and
+  gives the kernel tflag; `posix_typed_mem_get_info` and `posix_mem_offset`
+  ask the kernel (the latter through `/dev/tymctl`).  Without them
+  (Linux): ENOENT, ENODEV, EACCES.  `sysconf(_SC_TYPED_MEMORY_OBJECTS)`
+  looks for `/dev/tymctl`.  Tested in `tests/s_typedmem.c`.

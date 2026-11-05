@@ -1,0 +1,90 @@
+SQLite 3.54.1, amalgamation (sqlite-autoconf-3540100.tar.gz), for POSIX.1-2024:
+the same changes as posix-src.diff, in the generated sqlite3.c and shell.c.
+Applied by ports/sqlite/build.sh (patch -p1).
+
+diff -ru a/autosetup/jimsh0.c b/autosetup/jimsh0.c
+--- a/autosetup/jimsh0.c	2026-11-04 16:08:38.000000000 +0100
++++ b/autosetup/jimsh0.c	2026-11-04 16:15:03.304173205 +0100
+@@ -8047,7 +8047,16 @@
+     else
+ #endif
+     {
++#if defined(_POSIX_VERSION) && _POSIX_VERSION >= 202405L
++        /* gettimeofday() is gone from POSIX.1-2024: clock_gettime() */
++        struct timespec rt;
++
++        clock_gettime(CLOCK_REALTIME, &rt);
++        tv.tv_sec = rt.tv_sec;
++        tv.tv_usec = rt.tv_nsec / 1000;
++#else
+         gettimeofday(&tv, NULL);
++#endif
+ 
+         now = tv.tv_sec * 1000000LL + tv.tv_usec;
+     }
+diff -ru a/shell.c b/shell.c
+--- a/shell.c	2026-11-04 16:08:38.000000000 +0100
++++ b/shell.c	2026-11-04 16:16:08.357120449 +0100
+@@ -7353,8 +7353,7 @@
+ */
+ 
+ #include <stdio.h>
+-#include <memory.h>
+-#include <string.h>
++#include <string.h>   /* not <memory.h>: no such header in ISO C or POSIX */
+ #include <assert.h>
+ #ifndef OMIT_BASE85_CHECKER
+ # include <ctype.h>
+@@ -10073,7 +10072,9 @@
+ #if !defined(_WIN32) && !defined(WIN32)
+ #  include <unistd.h>
+ #  include <dirent.h>
+-#  include <utime.h>
++#  if !defined(_POSIX_VERSION) || _POSIX_VERSION<202405L
++#    include <utime.h>   /* gone from POSIX.1-2024; nothing here uses it */
++#  endif
+ #  include <sys/time.h>
+ #  define STRUCT_STAT struct stat
+ #  include <limits.h>
+@@ -25498,6 +25499,11 @@
+     t = (sqlite3_int64)(r*86400000.0);
+   }
+   return t*1000;
++#elif defined(_POSIX_VERSION) && _POSIX_VERSION>=202405L
++  /* gettimeofday() is gone from POSIX.1-2024 */
++  struct timespec sNow;
++  (void)clock_gettime(CLOCK_REALTIME, &sNow);
++  return ((i64)sNow.tv_sec)*1000000 + sNow.tv_nsec/1000;
+ #else
+   struct timeval sNow;
+   (void)gettimeofday(&sNow,0);
+diff -ru a/sqlite3.c b/sqlite3.c
+--- a/sqlite3.c	2026-11-04 16:08:38.000000000 +0100
++++ b/sqlite3.c	2026-11-04 16:15:03.287141206 +0100
+@@ -40625,9 +40625,16 @@
+ #include <sys/time.h>
+ static int kvvfsCurrentTimeInt64(sqlite3_vfs *pVfs, sqlite3_int64 *pTimeOut){
+   static const sqlite3_int64 unixEpoch = 24405875*(sqlite3_int64)8640000;
++#if defined(_POSIX_VERSION) && _POSIX_VERSION>=202405L
++  /* gettimeofday() is gone from POSIX.1-2024 */
++  struct timespec sNow;
++  (void)clock_gettime(CLOCK_REALTIME, &sNow);
++  *pTimeOut = unixEpoch + 1000*(sqlite3_int64)sNow.tv_sec + sNow.tv_nsec/1000000;
++#else
+   struct timeval sNow;
+   (void)gettimeofday(&sNow, 0);  /* Cannot fail given valid arguments */
+   *pTimeOut = unixEpoch + 1000*(sqlite3_int64)sNow.tv_sec + sNow.tv_usec/1000;
++#endif
+   return SQLITE_OK;
+ }
+ #endif /* SQLITE_OS_KV || SQLITE_OS_UNIX */
+@@ -47854,7 +47861,8 @@
+   time_t t;
+   time(&t);
+   *piNow = ((sqlite3_int64)t)*1000 + unixEpoch;
+-#elif OS_VXWORKS
++#elif OS_VXWORKS || (defined(_POSIX_VERSION) && _POSIX_VERSION>=202405L)
++  /* POSIX.1-2024 has no gettimeofday() */
+   struct timespec sNow;
+   clock_gettime(CLOCK_REALTIME, &sNow);
+   *piNow = unixEpoch + 1000*(sqlite3_int64)sNow.tv_sec + sNow.tv_nsec/1000000;

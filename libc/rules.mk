@@ -262,6 +262,7 @@ OBJS = \
 	$(B)/obj/misc/termios.o \
 	$(B)/obj/misc/time_ops.o \
 	$(B)/obj/misc/tty.o \
+	$(B)/obj/misc/typed_mem.o \
 	$(B)/obj/misc/uname.o \
 	$(B)/obj/monetary/strfmon.o \
 	$(B)/obj/mqueue/mqueue.o \
@@ -935,6 +936,10 @@ $(B)/obj/misc/time_ops.o: src/misc/time_ops.c $(HDRS)
 $(B)/obj/misc/tty.o: src/misc/tty.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ src/misc/tty.c
+
+$(B)/obj/misc/typed_mem.o: src/misc/typed_mem.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ src/misc/typed_mem.c
 
 $(B)/obj/misc/uname.o: src/misc/uname.c $(HDRS)
 	mkdir -p $(B)/obj/misc

@@ -32,11 +32,11 @@ export U8
 T=${TMPDIR:-/tmp}/test_more.$$
 mkdir -m 700 "$T" || exit 2
 trap 'rm -rf "$T" "$T.tl"' EXIT
-# tl: the test language, built here (../testlib/tl.c; ../testlib/tl.md)
+# tl: the test language, built here (../tl/tl.c; ../tl/tl.md)
 TL=$(cd ../testlib && pwd) || exit 2; export TL
 cc=${cc:-${CC:-}}
 [ -n "$cc" ] || for c in c17 c99 cc; do command -v $c >/dev/null 2>&1 && { cc=$c; break; }; done
-$cc -o "$T.tl" "$TL/tl.c" || { echo "cannot compile ../testlib/tl.c"; exit 2; }
+$cc -o "$T.tl" "$TL/../tl/tl.c" || { echo "cannot compile ../tl/tl.c"; exit 2; }
 TLBIN=$T.tl; export TLBIN
 tl() { "$TLBIN" "$@"; }
 cd "$T" || exit 2

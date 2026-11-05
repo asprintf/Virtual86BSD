@@ -1,5 +1,7 @@
 /* Self-checking: mutex protocols PTHREAD_PRIO_INHERIT and
- * PTHREAD_PRIO_PROTECT (priority ceilings), robust or not.  The effective
+ * PTHREAD_PRIO_PROTECT (priority ceilings), robust or not, and read-write
+ * locks under SCHED_FIFO (a reader does not pass a waiting writer of
+ * higher or equal priority).  The effective
  * priority of a thread is read from /proc/thread-self/stat (field 18,
  * -1 - rt_priority for real-time threads); the checks that need real-time
  * threads are skipped where they may not be created. */
@@ -96,6 +98,45 @@ static int rt_thread(pthread_t *t, int prio, void *(*f)(void *), void *arg)
 	r = pthread_create(t, &at, f, arg);
 	pthread_attr_destroy(&at);
 	return r;
+}
+
+/* read-write locks: a writer waits (timed or not) while the main thread
+ * reads; readers of other priorities try to read */
+static pthread_rwlock_t rwl = PTHREAD_RWLOCK_INITIALIZER;
+static volatile int wr_state;
+static void *rw_writer(void *a)
+{
+	int r;
+	wr_state = 1;
+	if (a) {
+		struct timespec ts;
+		clock_gettime(CLOCK_REALTIME, &ts);
+		ts.tv_nsec += 200000000;
+		if (ts.tv_nsec >= 1000000000) { ts.tv_sec++; ts.tv_nsec -= 1000000000; }
+		r = pthread_rwlock_timedwrlock(&rwl, &ts);
+	} else
+		r = pthread_rwlock_wrlock(&rwl);
+	if (r == 0)
+		pthread_rwlock_unlock(&rwl);
+	wr_state = 2;
+	return (void *)(long)r;
+}
+static void *rw_tryreader(void *a)
+{
+	int r = pthread_rwlock_tryrdlock(&rwl);
+	(void)a;
+	if (r == 0)
+		pthread_rwlock_unlock(&rwl);
+	return (void *)(long)r;
+}
+static long rt_try(int prio)
+{
+	pthread_t t;
+	void *res = (void *)-1L;
+	if (rt_thread(&t, prio, rw_tryreader, 0) != 0)
+		return -1;
+	pthread_join(t, &res);
+	return (long)res;
 }
 
 /* PTHREAD_PRIO_INHERIT: the holder (prio 10) is raised to its waiter's 30 */
@@ -274,6 +315,31 @@ int main(void)
 		pthread_join(t[0], 0);
 		pthread_join(t[1], &res);
 		CHECK(seen == 3 && (long)res == 0);
+
+		/* a FIFO writer at 20 waits for the main thread's read lock */
+		CHECK(pthread_rwlock_rdlock(&rwl) == 0);
+		wr_state = 0;
+		CHECK(rt_thread(&t[2], 20, rw_writer, 0) == 0);
+		while (wr_state == 0) ms(1);
+		ms(50);
+		CHECK(wr_state == 1);
+		CHECK(rt_try(30) == 0);           /* higher than the writer: reads */
+		CHECK(rt_try(20) == EBUSY);       /* equal: does not */
+		CHECK(rt_try(10) == EBUSY);       /* lower: does not */
+		CHECK(pthread_rwlock_tryrdlock(&rwl) == 0 && pthread_rwlock_unlock(&rwl) == 0);  /* SCHED_OTHER: may */
+		CHECK(pthread_rwlock_unlock(&rwl) == 0);
+		CHECK(pthread_join(t[2], &res) == 0 && (long)res == 0);
+		CHECK(rt_try(10) == 0);
+		/* a timed writer that gives up no longer holds readers back */
+		CHECK(pthread_rwlock_rdlock(&rwl) == 0);
+		wr_state = 0;
+		CHECK(rt_thread(&t[2], 20, rw_writer, (void *)1) == 0);
+		while (wr_state == 0) ms(1);
+		ms(20);
+		CHECK(rt_try(10) == EBUSY);
+		CHECK(pthread_join(t[2], &res) == 0 && (long)res == ETIMEDOUT);
+		CHECK(rt_try(10) == 0);
+		CHECK(pthread_rwlock_unlock(&rwl) == 0);
 	} else
 		os("prio: real-time threads not allowed: boost checks skipped\n");
 

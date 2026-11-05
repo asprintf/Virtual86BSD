@@ -307,8 +307,16 @@ static void rule_line(Src *src, char *lhs, char *rhs, const char *cmd, int dcolo
     free(el);
     free(er);
     end_rule();
-    if (!tw.n)
-        file_fatal(src->name, src->line, "missing target");
+    if (!tw.n) {
+        /* No target written: an error.  Targets that expand to nothing
+           (an empty macro, "$(TCLSH_CMD):"): POSIX doesn't say; as GNU and
+           BSD make do, the rule is ignored, and so are its commands. */
+        const char *p = lhs;
+        while (is_blank((unsigned char)*p))
+            p++;
+        if (!*p)
+            file_fatal(src->name, src->line, "missing target");
+    }
     cur.active = 1;
     for (int i = 0; i < tw.n; i++) {
         const char *t = tw.v[i];

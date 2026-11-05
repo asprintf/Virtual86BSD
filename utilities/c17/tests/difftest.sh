@@ -25,7 +25,7 @@ trap 'rm -rf "$T" "$T.tl"' EXIT
 TL=$(cd ../testlib && pwd) || exit 2
 cc=${cc:-${CC:-}}
 [ -n "$cc" ] || for c in c17 c99 cc; do command -v $c >/dev/null 2>&1 && { cc=$c; break; }; done
-$cc -o "$T.tl" "$TL/tl.c" || { echo "cannot compile ../testlib/tl.c"; exit 2; }
+$cc -o "$T.tl" "$TL/../tl/tl.c" || { echo "cannot compile ../tl/tl.c"; exit 2; }
 TLBIN=$T.tl
 cd "$T" || exit 2
 good() { pass=$((pass+1)); }

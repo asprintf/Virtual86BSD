@@ -593,7 +593,12 @@ static bool const_value(Expr *e, int64_t *v) {
 
 /* --------------------------------------------------------- operands */
 
-enum { OP_NONE, OP_REG, OP_XMM, OP_ST, OP_IMM, OP_MEM };
+enum { OP_NONE, OP_REG, OP_XMM, OP_ST, OP_IMM, OP_MEM, OP_CR, OP_SEG };
+
+/* .code32: 32-bit protected-mode code (a kernel's entry from a boot
+   loader): no REX prefixes, 32-bit address registers, and an absolute
+   address is a plain disp32. */
+static bool code32;
 
 typedef struct {
   int kind;
@@ -662,6 +667,16 @@ static bool parse_register(Operand *op) {
     op->size = 16;
     return true;
   }
+  if (name[0] == 'c' && name[1] == 'r' && isdigit((unsigned char)name[2]) &&
+      (!name[3] || (isdigit((unsigned char)name[3]) && !name[4]))) {
+    int n = atoi(name + 2);
+    if (n > 15)
+      return false;
+    op->kind = OP_CR;
+    op->reg = n;
+    op->size = 8;
+    return true;
+  }
   if (!strcmp(name, "rip")) {
     op->kind = OP_REG;
     op->reg = -2;
@@ -712,8 +727,8 @@ static bool parse_mem_tail(Operand *op) {
     }
     if (r.reg == -2)
       op->rip = true;
-    else if (r.size != 8) {
-      asm_error("base register must be 64-bit");
+    else if (r.size != (code32 ? 4 : 8)) {
+      asm_error(code32 ? "base register must be 32-bit" : "base register must be 64-bit");
       return false;
     } else
       op->base = r.reg;
@@ -723,7 +738,7 @@ static bool parse_mem_tail(Operand *op) {
     if (*p == '%') {
       p++;
       Operand r = {0};
-      if (!parse_register(&r) || r.kind != OP_REG || r.size != 8 || r.reg == 4) {
+      if (!parse_register(&r) || r.kind != OP_REG || r.size != (code32 ? 4 : 8) || r.reg == 4) {
         asm_error("bad index register");
         return false;
       }
@@ -769,9 +784,15 @@ static bool parse_operand(Operand *op) {
     }
     if (op->reg == -3) {  /* segment override: %fs:disp(...) */
       int seg = op->seg;
-      if (!consume_ch(':')) {
-        asm_error("segment registers are not supported as operands");
-        return false;
+      if (!consume_ch(':')) {  /* the segment register itself */
+        static int segpfx[] = {0x26, 0x2e, 0x36, 0x3e, 0x64, 0x65};
+        op->kind = OP_SEG;
+        for (int i = 0; i < 6; i++)
+          if (segpfx[i] == seg)
+            op->reg = i;
+        op->seg = 0;
+        op->size = 2;
+        return true;
       }
       memset(op, 0, sizeof(*op));
       op->seg = seg;
@@ -786,8 +807,16 @@ static bool parse_operand(Operand *op) {
     }
     return true;
   }
-  /* memory: disp(base,index,scale), or a bare expression */
-  if (*p != '(') {
+  /* memory: disp(base,index,scale), or a bare expression; "(expr)" whose
+     parenthesis holds no register is an expression (as in gas) */
+  bool paren_expr = false;
+  if (*p == '(') {
+    char *q = p + 1;
+    while (*q == ' ' || *q == '\t')
+      q++;
+    paren_expr = *q != '%' && *q != ',';
+  }
+  if (*p != '(' || paren_expr) {
     if (!parse_expr(&op->e))
       return false;
   }
@@ -864,6 +893,15 @@ static void emit_modrm(int reg, Operand *rm, int imm_size) {
   }
   bool has_disp_sym = !absolute(e);
   int64_t disp = has_disp_sym ? 0 : e->val;
+  if (rm->base < 0 && rm->index < 0 && code32) {
+    /* 32-bit mode: mod 00, r/m 101 is a plain disp32 */
+    emit8(0x05 | (reg & 7) << 3);
+    if (has_disp_sym)
+      emit_expr(e, 4, false);
+    else
+      emit32((uint32_t)disp);
+    return;
+  }
   if (rm->base < 0 && rm->index < 0) {
     /* absolute address: SIB with no base and no index */
     emit8(0x04 | (reg & 7) << 3);
@@ -934,7 +972,9 @@ static void emit_insn(Insn *in) {
       rex |= 1;
     }
   }
-  if (rex || in->force_rex)
+  if ((rex || in->force_rex) && code32)
+    asm_error("instruction not encodable in 32-bit mode");
+  else if (rex || in->force_rex)
     emit8(0x40 | rex);
   for (int i = 0; i < in->oplen; i++)
     emit8(in->op[i]);
@@ -949,7 +989,9 @@ static void emit_opreg(bool opsize16, bool rexw, int opbase, int reg, bool force
   if (opsize16)
     emit8(0x66);
   int rex = (rexw ? 8 : 0) | (reg >= 8 ? 1 : 0);
-  if (rex || force_rex)
+  if ((rex || force_rex) && code32)
+    asm_error("instruction not encodable in 32-bit mode");
+  else if (rex || force_rex)
     emit8(0x40 | rex);
   emit8(opbase + (reg & 7));
 }
@@ -958,7 +1000,7 @@ static bool fits8(int64_t v) { return v >= -128 && v <= 127; }
 static bool fits32(int64_t v) { return v >= INT32_MIN && v <= INT32_MAX; }
 
 static void emit_imm(Operand *imm, int size) {
-  emit_expr(&imm->e, size, size == 4);
+  emit_expr(&imm->e, size, size == 4 && !code32);
 }
 
 /* ----------------------------------------------------- instructions */
@@ -1156,6 +1198,131 @@ static void branch(int opc1, int opc2, Operand *target, bool is_call) {
   emit32(0);
 }
 
+/* Instructions for a kernel: port I/O, descriptor tables, control
+   registers, far jumps, FPU/SSE state. */
+static bool assemble_system(char *m, Operand *ops, int nops) {
+  Operand *a = &ops[0], *b = &ops[1];
+  unsigned char op[3];
+  Insn in = {0};
+
+  /* in/out: "inb %dx, %al", "inl $port, %eax", "outw %ax, %dx", ... */
+  bool isin = !strcmp(m, "in") || !strcmp(m, "inb") || !strcmp(m, "inw") || !strcmp(m, "inl");
+  bool isout = !strcmp(m, "out") || !strcmp(m, "outb") || !strcmp(m, "outw") ||
+               !strcmp(m, "outl");
+  if ((isin || isout) && nops == 2) {
+    Operand *port = isin ? a : b, *acc = isin ? b : a;
+    int size = suffix_size(m[isin ? 2 : 3]);
+    if (!is_reg(acc) || acc->reg != 0 || acc->high8 || (size && acc->size != size) ||
+        acc->size == 8)
+      return false;
+    size = acc->size;
+    int base = isin ? 0xe4 : 0xe6;
+    if (size != 1)
+      base++;
+    if (size == 2)
+      emit8(0x66);
+    if (is_reg(port) && port->reg == 2 && port->size == 2) {
+      emit8(base + 8);  /* EC/ED/EE/EF */
+      return true;
+    }
+    if (port->kind == OP_IMM) {
+      emit8(base);
+      emit_imm(port, 1);
+      return true;
+    }
+    return false;
+  }
+
+  /* descriptor tables, TLB, FPU/SSE state: one memory (or register) operand */
+  static struct { char *n; int op2; int ext; bool reg_ok; bool rexw; } grp[] = {
+      {"sgdt", 0x01, 0, false, false}, {"sidt", 0x01, 1, false, false},
+      {"lgdt", 0x01, 2, false, false}, {"lidt", 0x01, 3, false, false},
+      {"sgdtq", 0x01, 0, false, false}, {"sidtq", 0x01, 1, false, false},
+      {"lgdtq", 0x01, 2, false, false}, {"lidtq", 0x01, 3, false, false},
+      {"sgdtl", 0x01, 0, false, false}, {"sidtl", 0x01, 1, false, false},
+      {"lgdtl", 0x01, 2, false, false}, {"lidtl", 0x01, 3, false, false},
+      {"invlpg", 0x01, 7, false, false}, {"smsw", 0x01, 4, true, false},
+      {"lmsw", 0x01, 6, true, false}, {"sldt", 0x00, 0, true, false},
+      {"str", 0x00, 1, true, false}, {"lldt", 0x00, 2, true, false},
+      {"ltr", 0x00, 3, true, false}, {"verr", 0x00, 4, true, false},
+      {"verw", 0x00, 5, true, false},
+      {"fxsave", 0xae, 0, false, false}, {"fxrstor", 0xae, 1, false, false},
+      {"fxsave64", 0xae, 0, false, true}, {"fxrstor64", 0xae, 1, false, true},
+      {"fxsaveq", 0xae, 0, false, true}, {"fxrstorq", 0xae, 1, false, true},
+      {"ldmxcsr", 0xae, 2, false, false}, {"stmxcsr", 0xae, 3, false, false},
+      {"clflush", 0xae, 7, false, false},
+  };
+  for (size_t i = 0; i < sizeof(grp) / sizeof(*grp); i++) {
+    if (strcmp(m, grp[i].n))
+      continue;
+    if (nops != 1 || !(is_mem(a) || (grp[i].reg_ok && is_reg(a))))
+      return false;
+    op[0] = 0x0f; op[1] = grp[i].op2;
+    in.op = op; in.oplen = 2; in.reg = grp[i].ext; in.rm = a; in.rexw = grp[i].rexw;
+    emit_insn(&in);
+    return true;
+  }
+
+  /* mov to and from a control register: 0F 20 /r, 0F 22 /r; the
+     register operand is the mode's full width */
+  if ((!strcmp(m, "mov") || !strcmp(m, "movq") || !strcmp(m, "movl")) && nops == 2 &&
+      (a->kind == OP_CR || b->kind == OP_CR)) {
+    Operand *cr = a->kind == OP_CR ? a : b, *gp = a->kind == OP_CR ? b : a;
+    if (!is_reg(gp) || gp->size != (code32 ? 4 : 8) || cr == gp)
+      return false;
+    op[0] = 0x0f; op[1] = cr == a ? 0x20 : 0x22;
+    in.op = op; in.oplen = 2; in.reg = cr->reg; in.rm = gp;
+    emit_insn(&in);
+    return true;
+  }
+
+  /* mov to and from a segment register: 8E /r, 8C /r */
+  if ((!strcmp(m, "mov") || !strcmp(m, "movw") || !strcmp(m, "movl") || !strcmp(m, "movq")) &&
+      nops == 2 && (a->kind == OP_SEG || b->kind == OP_SEG)) {
+    Operand *sr = a->kind == OP_SEG ? a : b, *o = sr == a ? b : a;
+    if (o->kind == OP_SEG || !is_rm(o))
+      return false;
+    op[0] = sr == b ? 0x8e : 0x8c;
+    in.op = op; in.oplen = 1; in.reg = sr->reg; in.rm = o;
+    in.rexw = is_reg(o) && o->size == 8 && sr == a;
+    in.opsize16 = (is_reg(o) && o->size == 2 && sr == a) || (is_mem(o) && m[3] == 'w' && sr == a);
+    emit_insn(&in);
+    return true;
+  }
+  /* push and pop of %fs and %gs */
+  if ((!strcmp(m, "push") || !strcmp(m, "pushq") || !strcmp(m, "pop") || !strcmp(m, "popq")) &&
+      nops == 1 && a->kind == OP_SEG && a->reg >= 4) {
+    emit8(0x0f);
+    emit8((m[1] == 'u' ? 0xa0 : 0xa1) + (a->reg == 5 ? 8 : 0));
+    return true;
+  }
+
+  /* far jump and call: "ljmp $sel, $offset" (32-bit mode), "ljmp *mem" */
+  if (!strcmp(m, "ljmp") || !strcmp(m, "lcall") || !strcmp(m, "ljmpl") ||
+      !strcmp(m, "lcalll") || !strcmp(m, "ljmpq") || !strcmp(m, "lcallq")) {
+    bool call = m[1] == 'c';
+    if (nops == 2 && a->kind == OP_IMM && b->kind == OP_IMM) {
+      if (!code32) {
+        asm_error("a direct far %s needs 32-bit mode", call ? "call" : "jump");
+        return true;
+      }
+      emit8(call ? 0x9a : 0xea);
+      emit_imm(b, 4);
+      emit_imm(a, 2);
+      return true;
+    }
+    if (nops == 1 && a->indirect && is_mem(a)) {
+      op[0] = 0xff;
+      in.op = op; in.oplen = 1; in.reg = call ? 3 : 5; in.rm = a;
+      in.rexw = m[strlen(m) - 1] == 'q';
+      emit_insn(&in);
+      return true;
+    }
+    return false;
+  }
+  return false;
+}
+
 static bool assemble_insn(char *mn, Operand *ops, int nops) {
   char m[32];
   snprintf(m, sizeof(m), "%s", mn);
@@ -1190,6 +1357,20 @@ static bool assemble_insn(char *mn, Operand *ops, int nops) {
       {"fcos", {0xd9, 0xff}, 2}, {"fpatan", {0xd9, 0xf3}, 2}, {"fptan", {0xd9, 0xf2}, 2},
       {"ftst", {0xd9, 0xe4}, 2}, {"fxam", {0xd9, 0xe5}, 2}, {"clc", {0xf8}, 1},
       {"stc", {0xf9}, 1}, {"cld", {0xfc}, 1}, {"std", {0xfd}, 1},
+      /* system instructions (a kernel) */
+      {"cli", {0xfa}, 1}, {"sti", {0xfb}, 1}, {"pushfq", {0x9c}, 1}, {"popfq", {0x9d}, 1},
+      {"pushfl", {0x9c}, 1}, {"popfl", {0x9d}, 1}, {"pushf", {0x9c}, 1}, {"popf", {0x9d}, 1},
+      {"iretq", {0x48, 0xcf}, 2}, {"iretl", {0xcf}, 1}, {"iret", {0xcf}, 1},
+      {"lretq", {0x48, 0xcb}, 2}, {"lretl", {0xcb}, 1}, {"lret", {0xcb}, 1},
+      {"rdmsr", {0x0f, 0x32}, 2}, {"wrmsr", {0x0f, 0x30}, 2}, {"rdpmc", {0x0f, 0x33}, 2},
+      {"swapgs", {0x0f, 0x01, 0xf8}, 3}, {"rdtscp", {0x0f, 0x01, 0xf9}, 3},
+      {"clts", {0x0f, 0x06}, 2}, {"invd", {0x0f, 0x08}, 2}, {"wbinvd", {0x0f, 0x09}, 2},
+      {"sysretq", {0x48, 0x0f, 0x07}, 3}, {"sysretl", {0x0f, 0x07}, 2},
+      {"insb", {0x6c}, 1}, {"insw", {0x66, 0x6d}, 2}, {"insl", {0x6d}, 1},
+      {"outsb", {0x6e}, 1}, {"outsw", {0x66, 0x6f}, 2}, {"outsl", {0x6f}, 1},
+      {"lodsw", {0x66, 0xad}, 2}, {"lodsl", {0xad}, 1}, {"lodsq", {0x48, 0xad}, 2},
+      {"fnclex", {0xdb, 0xe2}, 2}, {"fclex", {0x9b, 0xdb, 0xe2}, 3},
+      {"fyl2xp1", {0xd9, 0xf9}, 2},
   };
   if (nops == 0)
     for (size_t i = 0; i < sizeof(simple) / sizeof(*simple); i++)
@@ -1198,6 +1379,9 @@ static bool assemble_insn(char *mn, Operand *ops, int nops) {
           emit8(simple[i].bytes[k]);
         return true;
       }
+
+  if (assemble_system(m, ops, nops))
+    return true;
 
   /* --- x87 */
   if (m[0] == 'f') {
@@ -2177,7 +2361,15 @@ static void directive(char *name) {
     nlines++;
     return;
   }
-  if (startswith(name, ".cfi_") || !strcmp(name, ".ident") || !strcmp(name, ".code64") ||
+  if (!strcmp(name, ".code32") || !strcmp(name, ".code64")) {
+    code32 = name[5] == '3';
+    return;
+  }
+  if (!strcmp(name, ".code16")) {
+    asm_error("16-bit code is not supported");
+    return;
+  }
+  if (startswith(name, ".cfi_") || !strcmp(name, ".ident") ||
       !strcmp(name, ".att_syntax") || !strcmp(name, ".end") || !strcmp(name, ".loc_mark_labels")) {
     while (*p)
       p++;
@@ -2190,9 +2382,176 @@ static void directive(char *name) {
   asm_error("unknown directive '%s'", name);
 }
 
+/* ------------------------------------------------------------- macros */
+
+/* .macro NAME [param[=default]]... / .endm: a textual macro; in the body,
+   \param is the argument, \() separates, \@ counts expansions. */
+typedef struct {
+  char *name;
+  char **params, **defaults;
+  int nparams;
+  Buf body;
+} Macro;
+
+static Macro *macros;
+static int nmacros, capmacros, macro_count, macro_depth;
+static Macro *macro_def;  /* the macro whose body is being collected */
+
+static void assemble_source(char *src);
+
+static Macro *find_macro(char *name) {
+  for (int i = 0; i < nmacros; i++)
+    if (!strcmp(macros[i].name, name))
+      return &macros[i];
+  return NULL;
+}
+
+static void define_macro(void) {
+  char *name = read_name();
+  if (!name) {
+    asm_error(".macro: name expected");
+    return;
+  }
+  if (nmacros == capmacros) {
+    capmacros = capmacros ? capmacros * 2 : 16;
+    macros = xrealloc(macros, sizeof(Macro) * capmacros);
+  }
+  Macro *mc = &macros[nmacros++];
+  memset(mc, 0, sizeof(*mc));
+  mc->name = name;
+  for (;;) {
+    skip_ws();
+    consume_ch(',');
+    skip_ws();
+    if (!*p)
+      break;
+    char *pn = read_name();
+    if (!pn) {
+      asm_error(".macro: bad parameter '%.20s'", p);
+      return;
+    }
+    char *def = NULL;
+    skip_ws();
+    if (*p == '=') {
+      p++;
+      skip_ws();
+      char *st = p;
+      while (*p && *p != ',' && *p != ' ' && *p != '\t')
+        p++;
+      def = xstrndup(st, p - st);
+    } else if (*p == ':') {  /* :req, :vararg: accepted, not checked */
+      p++;
+      read_name();
+    }
+    mc->params = xrealloc(mc->params, sizeof(char *) * (mc->nparams + 1));
+    mc->defaults = xrealloc(mc->defaults, sizeof(char *) * (mc->nparams + 1));
+    mc->params[mc->nparams] = pn;
+    mc->defaults[mc->nparams++] = def;
+  }
+  macro_def = mc;
+}
+
+/* While a macro body is being collected: true if stmt was taken */
+static bool collect_macro(char *stmt) {
+  if (!macro_def)
+    return false;
+  char *q = stmt;
+  while (*q == ' ' || *q == '\t')
+    q++;
+  if (startswith(q, ".endm") && !isalnum((unsigned char)q[5]) && q[5] != '_') {
+    macro_def = NULL;
+    return true;
+  }
+  if (startswith(q, ".macro") && (q[6] == ' ' || q[6] == '\t')) {
+    asm_error("nested .macro definitions are not supported");
+    return true;
+  }
+  buf_puts(&macro_def->body, stmt);
+  buf_putc(&macro_def->body, '\n');
+  return true;
+}
+
+static void expand_macro(Macro *mc) {
+  /* arguments: separated by commas, or by blanks if there are no commas */
+  char **args = xcalloc(mc->nparams + 1, sizeof(char *));
+  bool commas = strchr(p, ',') != NULL;
+  for (int n = 0;; n++) {
+    skip_ws();
+    if (!*p)
+      break;
+    char *st = p;
+    int depth = 0;
+    while (*p && (depth || (*p != ',' && (commas || (*p != ' ' && *p != '\t'))))) {
+      if (*p == '(')
+        depth++;
+      else if (*p == ')')
+        depth--;
+      p++;
+    }
+    char *e = p;
+    while (e > st && (e[-1] == ' ' || e[-1] == '\t'))
+      e--;
+    if (n < mc->nparams)
+      args[n] = xstrndup(st, e - st);
+    else {
+      asm_error("too many arguments to macro '%s'", mc->name);
+      return;
+    }
+    skip_ws();
+    if (*p == ',')
+      p++;
+  }
+  Buf out = {0};
+  char *b = mc->body.buf ? mc->body.buf : "";
+  int count = macro_count++;
+  while (*b) {
+    if (*b != '\\') {
+      buf_putc(&out, *b++);
+      continue;
+    }
+    if (b[1] == '(' && b[2] == ')') {
+      b += 3;
+      continue;
+    }
+    if (b[1] == '@') {
+      char num[24];
+      snprintf(num, sizeof(num), "%d", count);
+      buf_puts(&out, num);
+      b += 2;
+      continue;
+    }
+    int best = -1, bestlen = 0;
+    for (int i = 0; i < mc->nparams; i++) {
+      int l = strlen(mc->params[i]);
+      if (!strncmp(b + 1, mc->params[i], l) && !is_sym2((unsigned char)b[1 + l]) &&
+          l > bestlen)
+        best = i, bestlen = l;
+    }
+    if (best < 0) {
+      buf_putc(&out, *b++);
+      continue;
+    }
+    char *v = args[best] ? args[best] : mc->defaults[best] ? mc->defaults[best] : "";
+    buf_puts(&out, v);
+    b += 1 + bestlen;
+  }
+  buf_putc(&out, '\0');
+  if (macro_depth >= 100) {
+    asm_error("macro '%s' nested too deeply", mc->name);
+    return;
+  }
+  int save_line = lineno;
+  macro_depth++;
+  assemble_source(out.buf);
+  macro_depth--;
+  lineno = save_line;
+}
+
 /* --------------------------------------------------------- statements */
 
 static void statement(char *stmt) {
+  if (collect_macro(stmt))
+    return;
   p = stmt;
   for (;;) {
     skip_ws();
@@ -2235,6 +2594,19 @@ static void statement(char *stmt) {
     } else {
       p = save;
       asm_error("syntax error at '%.20s'", p);
+      return;
+    }
+    Macro *mc = find_macro(name);
+    if (mc) {
+      expand_macro(mc);
+      return;
+    }
+    if (!strcmp(name, ".macro")) {
+      define_macro();
+      return;
+    }
+    if (!strcmp(name, ".endm")) {
+      asm_error(".endm without .macro");
       return;
     }
     if (name[0] == '.') {
@@ -2990,6 +3362,9 @@ bool assemble(char *src, char *fname, char *outpath, bool debug) {
   files = NULL;
   nfiles = 0;
   main_file = NULL;
+  code32 = false;
+  nmacros = 0;
+  macro_def = NULL;
 
   named_section(".text");
   named_section(".data");
@@ -2998,6 +3373,8 @@ bool assemble(char *src, char *fname, char *outpath, bool debug) {
   prev_sec = NULL;
 
   assemble_source(src);
+  if (macro_def)
+    asm_error("missing .endm");
   if (errors)
     return false;
   if (debug)

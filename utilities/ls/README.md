@@ -19,6 +19,10 @@ dependencies beyond libc.
   turn long format off; the sort follows the last of -S and -t, where -c and
   -u count as -t once -t is given; -f ignores -r, -S and -t.
 * With no operand ls acts as if given `.` (so `ls -d` writes `.`).
+* Operands are written files first, then directories, each group sorted as
+  the entries of a directory are: by name, or by -t or -S, reversed by -r,
+  in the order given with -f (as other implementations do; automake's
+  configure checks `ls -t configure conftest.file`).
 * Long format as the standard specifies: the date with the time for the last
   six months, with the year otherwise or in the future; link targets with
   -F/-p indicators; `total` lines in 512-byte or (-k) 1024-byte units.

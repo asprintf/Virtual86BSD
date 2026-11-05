@@ -28,8 +28,10 @@
  *    the mask, plus S_IRWXU, and then set to the source's permissions
  *    modified by the mask; the contents of a directory that cannot be
  *    created are not copied.
- *  - -p: the owner and group are set first (a failure with EPERM is not
- *    reported; the set-ID bits are then cleared), then the mode, then the
+ *  - -p: the owner and group are set first (a failure with EPERM, or
+ *    EINVAL for an ID the system can't represent, such as one outside a
+ *    user namespace's mapping, is not reported; the set-ID bits are then
+ *    cleared), then the mode, then the
  *    times; directories get their times after their contents.
  *  - -P without -R copies a symbolic link operand as a symbolic link.
  *  - The prompt of -i is "cp: overwrite FILE? ".
@@ -284,7 +286,7 @@ static void preserve(int fd, int dirfd, const char *name, const struct stat *st)
     int r = fd >= 0 ? fchown(fd, st->st_uid, st->st_gid)
                     : fchownat(dirfd, name, st->st_uid, st->st_gid, lnk ? AT_SYMLINK_NOFOLLOW : 0);
     if (r != 0) {
-        if (errno != EPERM)
+        if (errno != EPERM && errno != EINVAL)
             err(dpath.s, errno);
         mode &= ~(mode_t)(S_ISUID | S_ISGID);
     }

@@ -98,11 +98,14 @@ are weak.  `tools/check-namespace.sh` enforces this on every `make check`.
 No GNU attributes (weak aliases, visibility) are used in C, since c17
 does not implement them; where an alias is needed it is made in assembly.
 
-**Close-on-fork.**  POSIX.1-2024's `O_CLOFORK`/`FD_CLOFORK` have no
-Linux equivalent, so the library keeps a bitmap of flagged descriptors
-(`src/internal/clofork.c`) and `fork()` closes them in the child.  Only
-the library sets flags, and `close()`/`dup2()`/`dup3()` clear the
-descriptor they free or replace, so reused descriptor numbers start clear.
+**Close-on-fork.**  POSIX.1-2024's `O_CLOFORK`/`FD_CLOFORK` go to the
+kernel when it has them (Shall's kernel; found out once, by whether
+`F_GETFD` reports `FD_CLOFORK` on a descriptor opened with `O_CLOFORK`).
+Linux has no equivalent, so there the library keeps a bitmap of flagged
+descriptors (`src/internal/clofork.c`) and `fork()` closes them in the
+child.  Only the library sets flags, and `close()`/`dup2()`/`dup3()`
+clear the descriptor they free or replace, so reused descriptor numbers
+start clear.
 
 **Cancellation points** go through `__syscall_cp*` macros and one
 assembly routine whose address range the `SIGCANCEL` handler checks, so

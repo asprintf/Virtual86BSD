@@ -1,13 +1,15 @@
 /* Self-checking: <aio.h> (reads, writes, fsync, notification by signal
  * and by thread, aio_suspend with timeout and interruption, aio_cancel
- * on blocked pipe reads, lio_listio, ordering of appends, fork) and
- * <devctl.h>. */
+ * on blocked pipe reads, lio_listio, ordering of appends, fork, prioritized
+ * I/O) and <devctl.h>. */
 #define _XOPEN_SOURCE 800
 #include <aio.h>
 #include <devctl.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <pthread.h>
+#include <sched.h>
 #include <semaphore.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -100,6 +102,9 @@ static void basic(int fd)
 	CHECK(aio_read(&rd) == -1 && errno == EINVAL);
 	rd.aio_offset = 0;
 	rd.aio_reqprio = -1;
+	errno = 0;
+	CHECK(aio_read(&rd) == -1 && errno == EINVAL);
+	rd.aio_reqprio = AIO_PRIO_DELTA_MAX + 1;
 	errno = 0;
 	CHECK(aio_read(&rd) == -1 && errno == EINVAL);
 	rd.aio_reqprio = 0;
@@ -329,6 +334,58 @@ static void forked(int fd)
 	close(p[0]); close(p[1]);
 }
 
+/* prioritized I/O: a request of a SCHED_FIFO thread runs at its priority
+   less aio_reqprio (the notification function runs where it ran) */
+static volatile int seen_pol = -1, seen_prio = -1;
+static void prio_notify(union sigval v)
+{
+	struct sched_param sp;
+	int pol;
+	(void)v;
+	if (pthread_getschedparam(pthread_self(), &pol, &sp) == 0)
+		seen_pol = pol, seen_prio = sp.sched_priority;
+	sem_post(&sem);
+}
+
+static void *prio_thread(void *p)
+{
+	int fd = *(int *)p;
+	static char b[8];
+	struct aiocb cb;
+	memset(&cb, 0, sizeof cb);
+	cb.aio_fildes = fd;
+	cb.aio_buf = b;
+	cb.aio_nbytes = 4;
+	cb.aio_reqprio = 7;
+	cb.aio_sigevent.sigev_notify = SIGEV_THREAD;
+	cb.aio_sigevent.sigev_notify_function = prio_notify;
+	CHECK(aio_read(&cb) == 0);
+	sem_wait(&sem);
+	waitfor(&cb);
+	CHECK(aio_return(&cb) == 4);
+	return 0;
+}
+
+static void prioritized(int fd)
+{
+	pthread_attr_t a;
+	pthread_t t;
+	struct sched_param sp;
+	CHECK(sysconf(_SC_PRIORITIZED_IO) > 0 && sysconf(_SC_AIO_PRIO_DELTA_MAX) == AIO_PRIO_DELTA_MAX);
+	CHECK(fpathconf(fd, _PC_PRIO_IO) > 0);
+	pthread_attr_init(&a);
+	pthread_attr_setinheritsched(&a, PTHREAD_EXPLICIT_SCHED);
+	pthread_attr_setschedpolicy(&a, SCHED_FIFO);
+	sp.sched_priority = 30;
+	pthread_attr_setschedparam(&a, &sp);
+	if (pthread_create(&t, &a, prio_thread, &fd)) {
+		os("prioritized I/O: no real-time threads allowed: not tested\n");
+		return;
+	}
+	pthread_join(t, 0);
+	CHECK(seen_pol == SCHED_FIFO && seen_prio == 23);
+}
+
 static void devctl(int fd)
 {
 	int p[2], n = -1, info = -1;
@@ -354,6 +411,7 @@ int main(void)
 	ordering();
 	fd = open(path, O_RDWR);
 	forked(fd);
+	prioritized(fd);
 	devctl(fd);
 	close(fd);
 	unlink(path);

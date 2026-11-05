@@ -6,9 +6,8 @@ Utilities option (interactive use, job control, history, `fc`, vi-mode
 editing). C11, POSIX interfaces only, about 11,000 lines.
 
 The shell grammar (2.10) is a yacc grammar, and arithmetic expansion is a
-lex scanner with a yacc grammar; both were generated with the `yacc` and
-`lex` of this project. The generated files are included, so building needs
-only a C compiler.
+lex scanner with a yacc grammar; the C files are generated from them in
+the build, by the `yacc` and `lex` of this project.
 
 ## Build and test
 
@@ -18,9 +17,12 @@ only a C compiler.
     make install   # into $(PREFIX)/bin; PREFIX=/usr/local, DESTDIR= for staging
     make clean
 
-To regenerate the parser and scanner, delete the generated files and run
-`make`; it uses `yacc` and `lex` from PATH, or `make YACC=... LEX=...` (for
-instance the ones in `../yacc` and `../lex`).
+The parser and scanner are generated in the build, by the yacc and lex of
+this collection: `make` builds `../yacc/yacc` and `../lex/lex` first when
+they are not there yet (so the directory needs `yacc/` and `lex/`
+beside it, as in the collection), and `make YACC=... LEX=...` names other
+ones.  The generated files are not part of the sources; `make clean`
+removes them.
 
 ## What is implemented
 

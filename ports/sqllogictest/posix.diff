@@ -1,0 +1,14 @@
+sqllogictest for POSIX: strcasecmp() is declared in <strings.h>.
+Applied by ports/sqllogictest/build.sh (patch -p1).
+
+diff -ru a/src/sqllogictest.c b/src/sqllogictest.c
+--- a/src/sqllogictest.c	2026-11-04 20:28:00.217676248 +0100
++++ b/src/sqllogictest.c	2026-11-04 20:28:00.241391746 +0100
+@@ -28,6 +28,7 @@
+ #include <ctype.h>
+ #ifndef _WIN32
+ #include <unistd.h>
++#include <strings.h>   /* strcasecmp: POSIX has it here, not in <string.h> */
+ #define stricmp strcasecmp
+ #endif
+ #include <string.h>

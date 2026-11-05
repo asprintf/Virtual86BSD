@@ -22,6 +22,12 @@ mkbox() {
     done
     edit "$f" 's/>\( Sat\)/\1/'
 }
+# the size mailx reports for dead.letter counts its Date: line, whose day
+# of the month has one digit or two: the count is made as on a two-digit day
+deadsize() {
+    _a=0; case $(date +%d) in 0*) _a=1 ;; esac
+    awk -v a=$_a '/dead\.letter" [0-9]+\/[0-9]+$/ { split($NF, f, "/"); $NF = f[1] "/" (f[2] + a) } { print }'
+}
 ME=$(id -un)
 # normalise the user's name and the current date in output
 # (the user's name as a word: not inside a longer name)

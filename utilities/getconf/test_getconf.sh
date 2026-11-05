@@ -62,7 +62,9 @@ $1 == "sys" {
 $1 == "str" {
     printf "#ifdef _CS_%s\n    errno = 0; n = confstr(_CS_%s, 0, 0);\n", $2, $2
     printf "    if (n == 0 && !errno) printf(\"%s\\tundefined\\n\");\n", $2
-    printf "    else if (n) { b = malloc(n); confstr(_CS_%s, b, n); printf(\"%s\\t%%s\\n\", b); free(b); }\n#endif\n", $2, $2
+    printf "    else if (n) { b = malloc(n); confstr(_CS_%s, b, n);\n", $2
+    print  "        for (char *q = b; *q; q++) if (*q == 10) *q = 124;  /* lists of names: | for newline */"
+    printf "        printf(\"%s\\t%%s\\n\", b); free(b); }\n#endif\n", $2
 }
 $1 == "path" {
     k = $2
@@ -79,7 +81,9 @@ checked=0 bad=0
 while IFS='	' read -r args value; do
     checked=$((checked + 1))
     got=$("$u" $args 2>/dev/null)
-    if [ $? != 0 ] || [ "$got" != "$value" ]; then
+    st=$?
+    got=$(printf '%s' "$got" | tr '\n' '|')   # (as ref writes lists of names)
+    if [ $st != 0 ] || [ "$got" != "$value" ]; then
         bad=$((bad + 1))
         echo "differs: $args: [$got], want [$value]"
     fi

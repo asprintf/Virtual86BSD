@@ -1,0 +1,81 @@
+Rogue 5.4.4 (github.com/Davidslv/rogue, master) for POSIX.1-2024 and
+the ncurses of today: applied by ports/rogue/build.sh (patch -p1).
+
+diff -ru a/fight.c b/fight.c
+--- a/fight.c	2025-11-07 17:29:32.000000000 +0100
++++ b/fight.c	2026-11-04 14:28:56.651176353 +0100
+@@ -357,7 +357,7 @@
+     else if (on(player, ISHALU))
+     {
+ 	move(tp->t_pos.y, tp->t_pos.x);
+-	ch = toascii(inch());
++	ch = (int) (inch() & 0177);  /* toascii() is gone from POSIX */
+ 	if (!isupper(ch))
+ 	    ch = rnd(26);
+ 	else
+diff -ru a/main.c b/main.c
+--- a/main.c	2025-11-07 17:29:32.000000000 +0100
++++ b/main.c	2026-11-04 14:29:02.928434730 +0100
+@@ -236,10 +236,8 @@
+     clearok(curscr, TRUE);
+     wrefresh(curscr);
+     getyx(curscr, y, x);
+-    mvcur(y, x, oy, ox);
++    mvcur(y, x, oy, ox);	/* ncurses records where mvcur leaves the cursor */
+     fflush(stdout);
+-    curscr->_cury = oy;
+-    curscr->_curx = ox;
+ }
+ 
+ /*
+diff -ru a/mdport.c b/mdport.c
+--- a/mdport.c	2025-11-07 17:29:32.000000000 +0100
++++ b/mdport.c	2026-11-04 14:29:12.324876062 +0100
+@@ -634,7 +634,34 @@
+ char *
+ md_getpass(char *prompt)
+ {
+-#ifndef HAVE_GETPASS
++#if !defined(HAVE_GETPASS) && !defined(_WIN32) && defined(HAVE_TERMIOS_H)
++    /* getpass() is gone from POSIX: read a line from the terminal with echo off */
++    static char password_buffer[9];
++    struct termios t, saved;
++    FILE *tty;
++    int c, n = 0, noecho = 0;
++
++    fflush(stdout);
++    if ((tty = fopen("/dev/tty", "r+")) == NULL)
++        return NULL;
++    if (tcgetattr(fileno(tty), &t) == 0)
++    {
++        saved = t;
++        t.c_lflag &= ~(ECHO | ECHOE | ECHOK | ECHONL);
++        noecho = tcsetattr(fileno(tty), TCSAFLUSH, &t) == 0;
++    }
++    fputs(prompt, tty);
++    fflush(tty);
++    while ((c = getc(tty)) != EOF && c != '\n')
++        if (n < (int) sizeof(password_buffer) - 1)
++            password_buffer[n++] = (char) c;
++    password_buffer[n] = '\0';
++    if (noecho)
++        tcsetattr(fileno(tty), TCSAFLUSH, &saved);
++    fputc('\n', tty);
++    fclose(tty);
++    return password_buffer;
++#elif !defined(HAVE_GETPASS)
+     static char password_buffer[9];
+     char *p = password_buffer;
+     int c, count = 0;
+diff -ru a/rooms.c b/rooms.c
+--- a/rooms.c	2025-11-07 17:29:32.000000000 +0100
++++ b/rooms.c	2026-11-04 14:28:56.652434357 +0100
+@@ -454,7 +454,7 @@
+ 		     * to check for monster, we have to strip out
+ 		     * standout bit
+ 		     */
+-		    if (isupper(toascii(ch)))
++		    if (isupper(ch & 0177))  /* toascii(ch) */
+ 		    {
+ 			if (on(player, SEEMONST))
+ 			{

@@ -385,12 +385,12 @@ int getaddrinfo(const char *__RESTRICT node, const char *__RESTRICT service, con
 		return ns;
 	if (flags & AI_ADDRCONFIG) {
 		/* only the families of which the host has (non-loopback)
-		 * addresses, as glibc */
+		 * addresses, as glibc; with neither (only a loopback),
+		 * AF_UNSPEC is not narrowed, as glibc */
 		int v4 = configured(AF_INET), v6 = configured(AF_INET6);
 		if (family == AF_UNSPEC) {
 			if (v4 && !v6) family = AF_INET;
 			else if (v6 && !v4) family = AF_INET6;
-			else if (!v4 && !v6) return EAI_NONAME;
 		} else if ((family == AF_INET && !v4) || (family == AF_INET6 && !v6))
 			return EAI_NONAME;
 	}

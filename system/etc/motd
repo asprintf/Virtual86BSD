@@ -1,2 +1,2 @@
-Shall: the POSIX.1-2024 utilities and C library, compiled by themselves.
+Shall 0.9: the POSIX.1-2024 utilities, C library and kernel, compiled by themselves.
 The sources are in /usr/src/shall; c17 compiles, make builds.

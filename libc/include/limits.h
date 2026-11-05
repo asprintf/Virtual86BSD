@@ -37,7 +37,7 @@
 /* Omitted (indeterminate; use sysconf()): AIO_*, ARG_MAX, CHILD_MAX,
  * OPEN_MAX, PTHREAD_THREADS_MAX, SEM_NSEMS_MAX, STREAM_MAX, TIMER_MAX,
  * MQ_OPEN_MAX. */
-#define AIO_PRIO_DELTA_MAX  0
+#define AIO_PRIO_DELTA_MAX  20
 #define ATEXIT_MAX          2147483647
 #define DELAYTIMER_MAX      0x7fffffff
 #define HOST_NAME_MAX       255

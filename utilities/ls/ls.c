@@ -377,14 +377,6 @@ static int cmp_name(const char *a, const char *b)
     return r;
 }
 
-/* For operand-level sorting: always by name (collating sequence), with -r. */
-static int cmp_entries_by_name(const void *a, const void *b)
-{
-    const entry_t *ea = a, *eb = b;
-    int r = cmp_name(ea->name, eb->name);
-    return opt_r ? -r : r;
-}
-
 static int cmp_entries(const void *a, const void *b)
 {
     const entry_t *ea = a, *eb = b;
@@ -857,7 +849,8 @@ int main(int argc, char *argv[])
 
     /*
      * Multiple operands: stat each, separate into non-dirs and dirs,
-     * output non-dirs first (sorted by name), then dirs (sorted by name).
+     * output non-dirs first, then dirs, each sorted as directory entries
+     * are (name, -t, -S, -r; -f: as given).
      */
     typedef struct {
         char       *name;
@@ -928,9 +921,10 @@ int main(int argc, char *argv[])
             k++;
         }
         n_nondirs = k;
-        /* Spec: non-dir operands sorted by collating sequence, not sort_mode. */
-        if (n_nondirs > 1)
-            qsort(nd, (size_t)n_nondirs, sizeof *nd, cmp_entries_by_name);
+        /* sorted as the entries of a directory are: by name, or by -t, -S
+           (with -r); -f leaves them in the order given */
+        if (n_nondirs > 1 && sort_mode != SORT_NONE)
+            qsort(nd, (size_t)n_nondirs, sizeof *nd, cmp_entries);
         /* No "total" line for plain file operands */
         output_entries(nd, (size_t)n_nondirs);
         need_nl_before_header = (n_dirs > 0);
@@ -941,30 +935,43 @@ int main(int argc, char *argv[])
         free(nd);
     }
 
-    /* Output directory operands, sorted by name. */
+    /* Output directory operands, sorted as the files are. */
     if (n_dirs > 0) {
-        /* Collect indices of directory operands */
+        entry_t *de = calloc((size_t)n_dirs, sizeof *de);
         int *di = malloc((size_t)n_dirs * sizeof *di);
-        if (!di) { perror("ls"); free(ops); return 2; }
+        if (!de || !di) { perror("ls"); free(ops); return 2; }
         int k = 0;
         for (int i = 0; i < n_files; i++)
-            if (ops[i].is_dir) di[k++] = i;
-
-        /* Sort by name (collating sequence) — insertion sort is fine for n_dirs */
-        for (int i = 1; i < n_dirs; i++) {
-            int key = di[i], j = i - 1;
-            while (j >= 0 && cmp_name(ops[di[j]].name, ops[key].name) > 0) {
-                di[j + 1] = di[j];
-                j--;
+            if (ops[i].is_dir) {
+                de[k].name = ops[i].name;   /* borrowed: not freed */
+                de[k].path = ops[i].name;
+                de[k].st = ops[i].st;
+                de[k].tgt = ops[i].tgt;
+                de[k].tgt_ok = ops[i].tgt_ok;
+                de[k].use_tgt = ops[i].tgt_ok;   /* a directory operand is followed */
+                di[k] = i;
+                k++;
             }
-            di[j + 1] = key;
-        }
-        /* Reverse if -r is set */
-        if (opt_r) {
-            for (int i = 0, j = n_dirs - 1; i < j; i++, j--) {
-                int tmp = di[i]; di[i] = di[j]; di[j] = tmp;
+        if (n_dirs > 1 && sort_mode != SORT_NONE) {
+            /* sort indices along with the entries: pair them up */
+            typedef struct { entry_t e; int i; } dsort_t;
+            dsort_t *pr = malloc((size_t)n_dirs * sizeof *pr);
+            if (!pr) { perror("ls"); free(ops); return 2; }
+            for (int i = 0; i < n_dirs; i++) { pr[i].e = de[i]; pr[i].i = di[i]; }
+            /* insertion sort with cmp_entries on the entry part */
+            for (int i = 1; i < n_dirs; i++) {
+                dsort_t key = pr[i];
+                int j = i - 1;
+                while (j >= 0 && cmp_entries(&pr[j].e, &key.e) > 0) {
+                    pr[j + 1] = pr[j];
+                    j--;
+                }
+                pr[j + 1] = key;
             }
+            for (int i = 0; i < n_dirs; i++) di[i] = pr[i].i;
+            free(pr);
         }
+        free(de);
 
         for (int i = 0; i < n_dirs; i++)
             list_dir(ops[di[i]].name, ops[di[i]].name);

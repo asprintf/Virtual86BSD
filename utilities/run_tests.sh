@@ -11,24 +11,16 @@
 #            and "make CC=..."), for example with sanitizers:
 #            ASAN_OPTIONS=detect_leaks=0 \
 #            CC="cc -fsanitize=address,undefined -g" sh run_tests.sh
-#            A compiler that does not take -std=c11 and the warning options
-#            (c17, as POSIX describes it) gets STDFLAGS= as well.
-#   STDFLAGS=... instead of the Makefiles' STDFLAGS (with CC)
+#   STDFLAGS=... more options for the compiler (with CC), e.g.
+#            STDFLAGS="-std=c11 -Wall -Wextra" for gcc or clang
 #   MAKE=... the make to build with (default: make)
 cd "$(dirname "$0")" || exit 2
 MAKE=${MAKE:-make}
 
-# with CC: the STDFLAGS to give make ("keep": the Makefiles' own)
+# with CC: the STDFLAGS to give make ("keep": the Makefiles' own, none)
 stdflags=keep
-if [ -n "$CC" ]; then
-    if [ "${STDFLAGS+set}" = set ]; then
-        stdflags=$STDFLAGS
-    else
-        t=${TMPDIR:-/tmp}/run_tests_cc.$$
-        printf 'int main(void) { return 0; }\n' > "$t.c"
-        $CC -std=c11 -Wall -Wextra -c -o "$t.o" "$t.c" >/dev/null 2>&1 || stdflags=
-        rm -f "$t.c" "$t.o"
-    fi
+if [ -n "$CC" ] && [ "${STDFLAGS+set}" = set ]; then
+    stdflags=$STDFLAGS
 fi
 
 if [ $# -gt 0 ]; then

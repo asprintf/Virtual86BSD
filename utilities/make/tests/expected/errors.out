@@ -34,3 +34,9 @@ rc=2
 -- -q with an error
 make: *** No rule to make target 'nosuch'.  Stop.
 rc=2
+-- no target written
+make: m7:1: *** missing target.  Stop.
+rc=2
+-- targets that expand to nothing: the rule is ignored
+all
+rc=0

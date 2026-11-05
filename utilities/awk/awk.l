@@ -428,8 +428,14 @@ static int after_rbrace(const Tok *t)
     size_t k = t->start;
     if (k == 0)
         return 0;
-    while (k > 0 && (src[k - 1] == ' ' || src[k - 1] == '\t' || src[k - 1] == '\r'))
-        k--;
+    for (;;) {   /* blanks, and backslash-newline continuations (automake's) */
+        if (k > 0 && (src[k - 1] == ' ' || src[k - 1] == '\t' || src[k - 1] == '\r'))
+            k--;
+        else if (k > 1 && src[k - 1] == '\n' && src[k - 2] == '\\')
+            k -= 2;
+        else
+            break;
+    }
     return k > 0 && src[k - 1] == '}';
 }
 

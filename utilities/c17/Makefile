@@ -6,12 +6,11 @@
 # is a C library.  Each C library it can use has a profile in libc/ (its
 # headers, its directory, the dynamic linker, the default linking); LIBC
 # names the default one: glibc (dynamic linking), musl (static) or shall
-# (Shall's own C library, static).  When
+# (Shall's own C library, dynamic).  When
 # c17 runs, C17_LIBC=name chooses another.
 
 .POSIX:
 
-CC       = cc
 CFLAGS   = -O2
 LDFLAGS  =
 PREFIX   = /usr/local
@@ -19,8 +18,10 @@ BINDIR   = $(PREFIX)/bin
 LIBDIR   = $(PREFIX)/lib/c17
 LIBC     = glibc
 
-# required by the sources: the language standard; and the warnings
-STDFLAGS = -std=c11 -Wall -Wno-switch
+# STDFLAGS: more options for the compiler, none needed (the sources are
+# C11 with POSIX interfaces); with gcc or clang, for example,
+# STDFLAGS="-std=c11 -Wall -Wextra".  CC is make's own (POSIX: c17).
+STDFLAGS =
 LDLIBS   =
 
 PROG     = c17
@@ -49,14 +50,17 @@ cpp.o: ../lib/cpp.c
 
 # the run-time library (complex arithmetic, and what the C libraries'
 # static archives expect of the compiler) is compiled by the c17 just built
+# (RTC17: another c17 that writes the same code, when this one cannot run
+# here, as when it is linked with a C library not installed yet)
+RTC17    = ./$(PROG)
 RTOBJS   = rt_complex.o rt_float128.o rt_float128s.o rt_unwind.o rt_bits.o
 
 libc17rt.a: rt_complex.c rt_float128.c rt_float128.s rt_unwind.c rt_bits.c $(PROG)
-	C17_LIBDIR=. ./$(PROG) -c -o rt_complex.o rt_complex.c
-	C17_LIBDIR=. ./$(PROG) -c -o rt_float128.o rt_float128.c
-	C17_LIBDIR=. ./$(PROG) -c -o rt_float128s.o rt_float128.s
-	C17_LIBDIR=. ./$(PROG) -c -o rt_unwind.o rt_unwind.c
-	C17_LIBDIR=. ./$(PROG) -c -o rt_bits.o rt_bits.c
+	C17_LIBDIR=. $(RTC17) -c -o rt_complex.o rt_complex.c
+	C17_LIBDIR=. $(RTC17) -c -o rt_float128.o rt_float128.c
+	C17_LIBDIR=. $(RTC17) -c -o rt_float128s.o rt_float128.s
+	C17_LIBDIR=. $(RTC17) -c -o rt_unwind.o rt_unwind.c
+	C17_LIBDIR=. $(RTC17) -c -o rt_bits.o rt_bits.c
 	rm -f $@
 	ar -rc $@ $(RTOBJS)
 

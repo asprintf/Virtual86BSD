@@ -19,11 +19,11 @@ U=${U:-$PWD/gettext}
 T=${TMPDIR:-/tmp}/test_gettext.$$
 mkdir -m 700 "$T" || exit 2
 trap 'chmod -R u+rwx "$T" 2>/dev/null; rm -rf "$T" "$T.tl"' EXIT
-# tl: the test language, built here (../testlib/tl.c; ../testlib/tl.md)
+# tl: the test language, built here (../tl/tl.c; ../tl/tl.md)
 TL=$(cd ../testlib && pwd) || exit 2; export TL
 cc=${cc:-${CC:-}}
 [ -n "$cc" ] || for c in c17 c99 cc; do command -v $c >/dev/null 2>&1 && { cc=$c; break; }; done
-$cc -o "$T.tl" "$TL/tl.c" || { echo "cannot compile ../testlib/tl.c"; exit 2; }
+$cc -o "$T.tl" "$TL/../tl/tl.c" || { echo "cannot compile ../tl/tl.c"; exit 2; }
 TLBIN=$T.tl; export TLBIN
 tl() { "$TLBIN" "$@"; }
 cd "$T" || exit 2
@@ -140,7 +140,9 @@ t "NLSPATH: %L" "hallo (de)" 0 env NLSPATH="$T/nls/%L.mo" "$U" -d dom hello
 t "NLSPATH: the first template that names a messages object" "bonjour" 0 env NLSPATH="$T/nls/none%N:$T/nls/%N.mo:$T/nls/%L.mo" "$U" -d dom hello
 t "NLSPATH: an empty template is %N" "bonjour" 0 sh -c 'cd nls && NLSPATH=":x" "$1" -d dom.mo hello' sh "$U"
 t "NLSPATH: %% is a %" "bonjour" 0 sh -c 'cp nls/dom.mo "nls/a%b" && NLSPATH="$1/nls/a%%b" "$2" -d dom hello' sh "$T" "$U"
-t "NLSPATH: %l %t %c" "bonjour" 0 sh -c 'cp nls/dom.mo "nls/x-$(printf %s "$LC_ALL" | sed "s/\\..*//")-$(printf %s "$LC_ALL" | sed "s/.*\\.//").mo" && NLSPATH="$1/nls/x-%l%t-%c.mo" "$2" -d dom hello' sh "$T" "$U"
+# (%l the language, %t the territory, %c the codeset of the locale name
+# language[_territory][.codeset]: C.UTF-8 has no territory, nl_NL.UTF-8 one)
+t "NLSPATH: %l %t %c" "bonjour" 0 sh -c 'l=$(printf %s "$LC_ALL" | sed "s/[_.@].*//"); te=$(printf %s "$LC_ALL" | sed -n "s/^[^_.@]*_\\([^.@]*\\).*/\\1/p"); c=$(printf %s "$LC_ALL" | sed -n "s/^[^.]*\\.\\([^@]*\\).*/\\1/p"); cp nls/dom.mo "nls/x-$l-$te-$c.mo" && NLSPATH="$1/nls/x-%l-%t-%c.mo" "$2" -d dom hello' sh "$T" "$U"
 t "NLSPATH: an object without the message: the msgid" "nur de" 0 env NLSPATH="$T/nls/%L.mo" "$U" -d dom "nur de"
 t "NLSPATH: no object: LANGUAGE then" "hallo (de)" 0 env NLSPATH="$T/nls/none" LANGUAGE=de "$U" -d dom hello
 # messages objects

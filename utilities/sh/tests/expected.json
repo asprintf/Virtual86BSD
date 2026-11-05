@@ -795,6 +795,18 @@
   "body\nexit-trap\n",
   0
  ],
+ "cases2.txt:builtins: trap after the left side of an and-list": [
+  "caught\n",
+  3
+ ],
+ "cases2.txt:builtins: trap between the iterations of a for loop": [
+  "caught\n",
+  3
+ ],
+ "cases2.txt:builtins: trap between the iterations of a while loop": [
+  "caught\n",
+  3
+ ],
  "cases2.txt:builtins: trap during wait": [
   "trapped\ndone\n",
   0

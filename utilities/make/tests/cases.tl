@@ -551,7 +551,25 @@ var CASES = [
                    "\techo partial > out; sleep 5\n",
        "m2": ".PRECIOUS: keep\n"
              "keep:\n"
-             "\techo partial > keep; sleep 5\n"})
+             "\techo partial > keep; sleep 5\n"}),
+    c("no-commands-keeps-time",
+      "\n"
+      "T 100 y; T 300 c; T 200 h; T 400 o; $M; echo rc=$?; T 500 y; $M; echo rc=$?; rm h; $M; echo rc=$?\n",
+      {"Makefile": ".POSIX:\n"
+                   "all: o\n"
+                   "o: h\n"
+                   "\t@echo making o; touch o\n"
+                   "h: c\n"
+                   "c: y\n"
+                   "\t@echo making c; touch c\n"}),
+    c("empty-target-list",
+      "\n"
+      "$M; echo rc=$?\n",
+      {"Makefile": "E =\n"
+                   "all: ; @echo all\n"
+                   "$(E): x\n"
+                   "\t@echo never\n"
+                   "$(E) $(E):: y\n"})
 ];
 
 /* Known, deliberate differences: case -> {reference: reason} */

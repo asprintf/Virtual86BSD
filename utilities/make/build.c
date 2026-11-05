@@ -927,7 +927,11 @@ static int update(Node *n, Node *parent)
     n->state = ST_DONE;
     n->ok = 1;
     n->made = 1;
-    n->newer = 1;
+    /* an existing file keeps its time (as GNU and BSD make): with no
+       commands nothing changed it, so what depends on it compares with
+       that; one that doesn't exist counts as newer than everything */
+    if (!n->exists || n->phony)
+        n->newer = 1;
     return U_OK;
 }
 

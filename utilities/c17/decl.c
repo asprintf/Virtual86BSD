@@ -1110,7 +1110,9 @@ static void struct_members_parse(Token **rest, Token *tok, Type *ty) {
     } else if (!is_object_complete(m->ty)) {
       error_tok(m->tok, "field has incomplete type '%s'", type_name(m->ty));
     } else if (is_su(m->ty) && su_def(m->ty)->is_flexible) {
-      if (m->next || ty->kind == TY_STRUCT)
+      /* C17 6.7.2.1p3: not a member of a structure; a union may have one,
+         anywhere (SQLite: union { SrcList s; u8 space[N]; }) */
+      if (ty->kind == TY_STRUCT)
         warn_tok(m->tok, "invalid use of structure with flexible array member");
     }
   }

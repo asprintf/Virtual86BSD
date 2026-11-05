@@ -39,6 +39,17 @@
 #include <ctype.h>
 #include <errno.h>
 #include <float.h>
+/* C11's; for a C99 compiler (POSIX.1-2008's c99), what they are for IEEE
+   binary32 and binary64, and C99's DECIMAL_DIG for the widest type */
+#ifndef FLT_DECIMAL_DIG
+#define FLT_DECIMAL_DIG 9
+#endif
+#ifndef DBL_DECIMAL_DIG
+#define DBL_DECIMAL_DIG 17
+#endif
+#ifndef LDBL_DECIMAL_DIG
+#define LDBL_DECIMAL_DIG DECIMAL_DIG
+#endif
 #include <inttypes.h>
 #include <limits.h>
 #include <locale.h>

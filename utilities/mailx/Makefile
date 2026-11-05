@@ -4,14 +4,15 @@
 
 .POSIX:
 
-CC       = cc
 CFLAGS   = -O2
 LDFLAGS  =
 PREFIX   = /usr/local
 BINDIR   = $(PREFIX)/bin
 
-# required by the sources: the language standard; and the warnings
-STDFLAGS = -std=c11 -Wall -Wextra
+# STDFLAGS: more options for the compiler, none needed (the sources are
+# C11 with POSIX interfaces); with gcc or clang, for example,
+# STDFLAGS="-std=c11 -Wall -Wextra".  CC is make's own (POSIX: c17).
+STDFLAGS =
 LDLIBS   =
 
 PROG     = mailx

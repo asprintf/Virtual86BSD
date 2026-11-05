@@ -1,0 +1,99 @@
+SQLite 3.54.1, source tree (git tag version-3.54.1 of github.com/sqlite/sqlite,
+= sqlite-src-3540100.zip), for POSIX.1-2024: gettimeofday(), <utime.h> and
+<memory.h> are not there.  Applied by ports/sqlite/build.sh (patch -p1).
+
+diff -ru a/autosetup/jimsh0.c b/autosetup/jimsh0.c
+--- a/autosetup/jimsh0.c	2026-11-04 16:07:51.958572837 +0100
++++ b/autosetup/jimsh0.c	2026-11-04 16:17:08.853532911 +0100
+@@ -8047,7 +8047,16 @@
+     else
+ #endif
+     {
++#if defined(_POSIX_VERSION) && _POSIX_VERSION >= 202405L
++        /* gettimeofday() is gone from POSIX.1-2024: clock_gettime() */
++        struct timespec rt;
++
++        clock_gettime(CLOCK_REALTIME, &rt);
++        tv.tv_sec = rt.tv_sec;
++        tv.tv_usec = rt.tv_nsec / 1000;
++#else
+         gettimeofday(&tv, NULL);
++#endif
+ 
+         now = tv.tv_sec * 1000000LL + tv.tv_usec;
+     }
+diff -ru a/ext/misc/base85.c b/ext/misc/base85.c
+--- a/ext/misc/base85.c	2026-11-04 16:07:51.991746023 +0100
++++ b/ext/misc/base85.c	2026-11-04 16:17:08.850777629 +0100
+@@ -76,8 +76,7 @@
+ */
+ 
+ #include <stdio.h>
+-#include <memory.h>
+-#include <string.h>
++#include <string.h>   /* not <memory.h>: no such header in ISO C or POSIX */
+ #include <assert.h>
+ #ifndef OMIT_BASE85_CHECKER
+ # include <ctype.h>
+diff -ru a/ext/misc/fileio.c b/ext/misc/fileio.c
+--- a/ext/misc/fileio.c	2026-11-04 16:07:51.991746023 +0100
++++ b/ext/misc/fileio.c	2026-11-04 16:17:08.851796237 +0100
+@@ -86,7 +86,9 @@
+ #if !defined(_WIN32) && !defined(WIN32)
+ #  include <unistd.h>
+ #  include <dirent.h>
+-#  include <utime.h>
++#  if !defined(_POSIX_VERSION) || _POSIX_VERSION<202405L
++#    include <utime.h>   /* gone from POSIX.1-2024; nothing here uses it */
++#  endif
+ #  include <sys/time.h>
+ #  define STRUCT_STAT struct stat
+ #  include <limits.h>
+diff -ru a/src/os_kv.c b/src/os_kv.c
+--- a/src/os_kv.c	2026-11-04 16:07:52.026496149 +0100
++++ b/src/os_kv.c	2026-11-04 16:17:08.844290589 +0100
+@@ -1071,9 +1071,16 @@
+ #include <sys/time.h>
+ static int kvvfsCurrentTimeInt64(sqlite3_vfs *pVfs, sqlite3_int64 *pTimeOut){
+   static const sqlite3_int64 unixEpoch = 24405875*(sqlite3_int64)8640000;
++#if defined(_POSIX_VERSION) && _POSIX_VERSION>=202405L
++  /* gettimeofday() is gone from POSIX.1-2024 */
++  struct timespec sNow;
++  (void)clock_gettime(CLOCK_REALTIME, &sNow);
++  *pTimeOut = unixEpoch + 1000*(sqlite3_int64)sNow.tv_sec + sNow.tv_nsec/1000000;
++#else
+   struct timeval sNow;
+   (void)gettimeofday(&sNow, 0);  /* Cannot fail given valid arguments */
+   *pTimeOut = unixEpoch + 1000*(sqlite3_int64)sNow.tv_sec + sNow.tv_usec/1000;
++#endif
+   return SQLITE_OK;
+ }
+ #endif /* SQLITE_OS_KV || SQLITE_OS_UNIX */
+diff -ru a/src/os_unix.c b/src/os_unix.c
+--- a/src/os_unix.c	2026-11-04 16:07:52.026496149 +0100
++++ b/src/os_unix.c	2026-11-04 16:17:08.846071609 +0100
+@@ -7200,7 +7200,8 @@
+   time_t t;
+   time(&t);
+   *piNow = ((sqlite3_int64)t)*1000 + unixEpoch;
+-#elif OS_VXWORKS
++#elif OS_VXWORKS || (defined(_POSIX_VERSION) && _POSIX_VERSION>=202405L)
++  /* POSIX.1-2024 has no gettimeofday() */
+   struct timespec sNow;
+   clock_gettime(CLOCK_REALTIME, &sNow);
+   *piNow = unixEpoch + 1000*(sqlite3_int64)sNow.tv_sec + sNow.tv_nsec/1000000;
+diff -ru a/src/shell.c.in b/src/shell.c.in
+--- a/src/shell.c.in	2026-11-04 16:07:52.030496150 +0100
++++ b/src/shell.c.in	2026-11-04 16:17:08.848931234 +0100
+@@ -842,6 +842,11 @@
+     t = (sqlite3_int64)(r*86400000.0);
+   }
+   return t*1000;
++#elif defined(_POSIX_VERSION) && _POSIX_VERSION>=202405L
++  /* gettimeofday() is gone from POSIX.1-2024 */
++  struct timespec sNow;
++  (void)clock_gettime(CLOCK_REALTIME, &sNow);
++  return ((i64)sNow.tv_sec)*1000000 + sNow.tv_nsec/1000;
+ #else
+   struct timeval sNow;
+   (void)gettimeofday(&sNow,0);

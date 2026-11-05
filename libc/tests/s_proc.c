@@ -155,6 +155,16 @@ int main(void)
 	CHECK(sysconf(-5) == -1 && errno == EINVAL);
 	CHECK(confstr(_CS_PATH, buf, sizeof buf) == 14 && !strcmp(buf, "/bin:/usr/bin"));
 	CHECK(confstr(_CS_PATH, buf, 4) == 14 && !strcmp(buf, "/bi"));
+	/* the options of <unistd.h> and sysconf() agree; LPBIG_OFFBIG is
+	   the LP64_OFF64 environment (the same, empty, c17 options) */
+	CHECK(_POSIX2_FORT_RUN == 202405L && sysconf(_SC_2_FORT_RUN) == 202405L);
+	CHECK(_POSIX_V8_LPBIG_OFFBIG == 1 && sysconf(_SC_V8_LPBIG_OFFBIG) == 1 &&
+	      sysconf(_SC_V7_LPBIG_OFFBIG) == 1 && sysconf(_SC_V8_ILP32_OFF32) == -1);
+	CHECK(confstr(_CS_POSIX_V8_LPBIG_OFFBIG_CFLAGS, buf, sizeof buf) == 1 && !buf[0]);
+	CHECK(confstr(_CS_POSIX_V8_WIDTH_RESTRICTED_ENVS, buf, sizeof buf) > 0 &&
+	      !strcmp(buf, "POSIX_V8_LP64_OFF64\nPOSIX_V8_LPBIG_OFFBIG"));
+	CHECK(confstr(_CS_POSIX_V7_WIDTH_RESTRICTED_ENVS, buf, sizeof buf) > 0 &&
+	      !strcmp(buf, "POSIX_V7_LP64_OFF64\nPOSIX_V7_LPBIG_OFFBIG"));
 	{ uid_t r, e, s; CHECK(getresuid(&r, &e, &s) == 0 && r == getuid() && e == geteuid()); }
 
 	/* poll, select */

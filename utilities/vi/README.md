@@ -16,7 +16,7 @@ curses; about 12,000 lines.
 
 The screen tests and the vi differential tests drive the editor on a
 pseudo-terminal, through the terminal emulator of tl, the test language
-(`../testlib/tl.c`, built by the tests).
+(`../tl/tl.c`, built by the tests).
 
 ## What is implemented
 

@@ -1,0 +1,25 @@
+curl 8.23.0 for Shall: <curl/system.h> knows c17 (not GCC, so it fell back to
+"old 32-bit style" types: curl_socklen_t int, where socklen_t is unsigned).
+Applied by ports/curl/build.sh (patch -p1).
+
+diff -ru a/include/curl/system.h b/include/curl/system.h
+--- a/include/curl/system.h	2026-11-04 20:07:20.159394096 +0100
++++ b/include/curl/system.h	2026-11-04 20:07:34.927315022 +0100
+@@ -352,6 +352,17 @@
+ #  define CURL_PULL_SYS_TYPES_H      1
+ #  define CURL_PULL_SYS_SOCKET_H     1
+ 
++#elif defined(__c17__) && defined(__LP64__)
++/* Shall's c17 (POSIX c17): not GCC, so none of the above, but LP64 */
++#  define CURL_TYPEOF_CURL_OFF_T     long
++#  define CURL_FORMAT_CURL_OFF_T     "ld"
++#  define CURL_FORMAT_CURL_OFF_TU    "lu"
++#  define CURL_SUFFIX_CURL_OFF_T     L
++#  define CURL_SUFFIX_CURL_OFF_TU    UL
++#  define CURL_TYPEOF_CURL_SOCKLEN_T socklen_t
++#  define CURL_PULL_SYS_TYPES_H      1
++#  define CURL_PULL_SYS_SOCKET_H     1
++
+ #else
+ /* generic "safe guess" on old 32-bit style */
+ #  define CURL_TYPEOF_CURL_OFF_T     long long

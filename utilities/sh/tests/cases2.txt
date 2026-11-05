@@ -283,6 +283,12 @@ trap 'echo hi' USR2; trap -p USR2; trap - USR2
 trap 'x' NOSUCHSIG 2>/dev/null; echo $?
 #### builtins: trap ignore then child
 trap '' USR1; sh -c 'kill -USR1 $$; echo child-survived'; trap - USR1
+#### builtins: trap between the iterations of a while loop
+trap 'echo caught; exit 3' USR1; (sleep 1; kill -USR1 $$) & while :; do sleep 1; done
+#### builtins: trap between the iterations of a for loop
+trap 'echo caught; exit 3' USR1; (sleep 1; kill -USR1 $$) & for i in 1 2 3 4 5; do sleep 1; done; echo not caught
+#### builtins: trap after the left side of an and-list
+trap 'echo caught; exit 3' USR1; (sleep 1; kill -USR1 $$) & sleep 2 && sleep 3; echo not caught
 #### builtins: trap during wait
 trap 'echo trapped' USR1; (sleep 1; kill -USR1 $$) & sleep 2; wait; echo done
 #### builtins: kill with signal name

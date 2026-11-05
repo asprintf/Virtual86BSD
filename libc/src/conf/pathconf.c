@@ -21,7 +21,7 @@ static long value(int name, long namemax)
 	case _PC_NO_TRUNC: return 1;
 	case _PC_PATH_MAX: return PATH_MAX;
 	case _PC_PIPE_BUF: return PIPE_BUF;
-	case _PC_PRIO_IO: return -1;
+	case _PC_PRIO_IO: return 1;
 	case _PC_REC_INCR_XFER_SIZE: return 4096;
 	case _PC_REC_MAX_XFER_SIZE: return 4096;
 	case _PC_REC_MIN_XFER_SIZE: return 4096;

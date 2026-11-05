@@ -32,12 +32,12 @@ suite() {
 
 [ -x ./lex ] || { echo "lex: not built (run make first)"; exit 2; }
 
-# tl: the test language, built here (../testlib/tl.c; ../testlib/tl.md)
+# tl: the test language, built here (../tl/tl.c; ../tl/tl.md)
 cc=${CC:-}
 [ -n "$cc" ] || for c in c17 c99 cc; do command -v $c >/dev/null 2>&1 && { cc=$c; break; }; done
 TLBIN=${TMPDIR:-/tmp}/tl.$$; export TLBIN
 trap 'rm -f "$TLBIN"' EXIT
-$cc -o "$TLBIN" ../testlib/tl.c || { echo "cannot compile ../testlib/tl.c"; exit 2; }
+$cc -o "$TLBIN" ../tl/tl.c || { echo "cannot compile ../tl/tl.c"; exit 2; }
 
 suite regression '"$TLBIN" tests/run.tl ./lex'
 

@@ -1044,6 +1044,8 @@ static int eval_for(Node *n, int flags)
             sh_error("%s: is read only", n->u.nfor.var);
         }
         st = eval_tree(n->u.nfor.body, flags & ~EV_EXIT);
+        if (gotsig)
+            run_pending_traps();
         if (evalskip && loop_check())
             break;
     }
@@ -1058,6 +1060,8 @@ static int eval_while(Node *n, int flags, int until)
     loopnest++;
     for (;;) {
         int c = eval_tree(n->u.loop.cond, (flags & ~EV_EXIT) | EV_TESTED);
+        if (gotsig)
+            run_pending_traps();
         if (evalskip) {
             if (loop_check()) break;
             continue;
@@ -1065,6 +1069,8 @@ static int eval_while(Node *n, int flags, int until)
         if (until ? c == 0 : c != 0)
             break;
         st = eval_tree(n->u.loop.body, flags & ~EV_EXIT);
+        if (gotsig)
+            run_pending_traps();
         if (evalskip && loop_check())
             break;
     }
@@ -1172,6 +1178,12 @@ static int eval_tree1(Node *n, int flags)
         st = eval_tree(n->u.bin.a, (flags & ~EV_EXIT) | EV_TESTED);
         if (evalskip)
             return exitstatus;
+        if (gotsig) {
+            exitstatus = st;
+            run_pending_traps();
+            if (evalskip)
+                return exitstatus;
+        }
         if ((n->type == N_AND) == (st == 0))
             return eval_tree(n->u.bin.b, flags);
         return exitstatus = st;

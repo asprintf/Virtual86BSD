@@ -17,7 +17,9 @@
  * library: the names in its locale archive (the GNU C library's file
  * /usr/lib/locale/locale-archive) and the directories of /usr/lib/locale
  * and of LOCPATH (when locale is not set-user-ID or set-group-ID), each
- * one that newlocale() accepts; sorted, each once.  The charmaps (-m):
+ * one that newlocale() accepts, and C.utf8 when the C library has it
+ * without a file (Shall's built-in C.UTF-8) and no name of it was found;
+ * sorted, each once.  The charmaps (-m):
  * the files of /usr/share/i18n/charmaps, less .gz or .bz2, sorted (make
  * can set the places: -DLOCALE_DIR=... -DCHARMAP_DIR=...).
  *
@@ -460,6 +462,23 @@ static void dir_names(const char *dir)
     closedir(d);
 }
 
+/* C.UTF-8, C.utf8, c.utf-8 ...: the UTF-8 C locale */
+static int is_c_utf8(const char *n)
+{
+    if ((n[0] != 'C' && n[0] != 'c') || n[1] != '.')
+        return 0;
+    n += 2;
+    const char *u = "utf8";
+    for (; *n; n++) {
+        if (*n == '-')
+            continue;
+        if (!*u || tolower((unsigned char)*n) != *u)
+            return 0;
+        u++;
+    }
+    return !*u;
+}
+
 static void list_locales(void)
 {
     add_name("C");
@@ -473,6 +492,14 @@ static void list_locales(void)
             dir_names(t);
         free(copy);
     }
+    /* a C library with a built-in UTF-8 C locale (Shall's has C.UTF-8, which
+       is no file): listed as glibc lists its C.utf8, unless a file has it */
+    int have_cutf8 = 0;
+    for (size_t i = 0; i < nnames; i++)
+        if (is_c_utf8(names[i]))
+            have_cutf8 = 1;
+    if (!have_cutf8)
+        add_locale("C.utf8");
     if (nnames > 1)
         qsort(names, nnames, sizeof *names, by_name);
     for (size_t i = 0; i < nnames; i++)
@@ -498,6 +525,14 @@ static void list_charmaps(void)
         }
         closedir(d);
     }
+    /* a C library with a built-in UTF-8 C locale (Shall's has C.UTF-8, which
+       is no file): listed as glibc lists its C.utf8, unless a file has it */
+    int have_cutf8 = 0;
+    for (size_t i = 0; i < nnames; i++)
+        if (is_c_utf8(names[i]))
+            have_cutf8 = 1;
+    if (!have_cutf8)
+        add_locale("C.utf8");
     if (nnames > 1)
         qsort(names, nnames, sizeof *names, by_name);
     for (size_t i = 0; i < nnames; i++)

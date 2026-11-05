@@ -3,6 +3,7 @@
 #include <signal.h>
 #include <sys/resource.h>
 #include <errno.h>
+#include <sched.h>
 #include "syscall.h"
 #include "libc.h"
 
@@ -11,13 +12,16 @@
 #define CPUS_CONF (-0x20000)
 #define CPUS_ONLN (-0x20001)
 #define PAGESZ    (-0x20002)
+#define SPORADIC  (-0x20003)
+#define SSREPL    (-0x20004)
+#define TYM       (-0x20005)
 
 static const long values[] = {
 	[_SC_2_C_BIND] = VER, [_SC_2_C_DEV] = VER, [_SC_2_CHAR_TERM] = 1,
-	[_SC_2_FORT_RUN] = -1, [_SC_2_LOCALEDEF] = VER, [_SC_2_SW_DEV] = VER,
+	[_SC_2_FORT_RUN] = VER, [_SC_2_LOCALEDEF] = VER, [_SC_2_SW_DEV] = VER,
 	[_SC_2_UPE] = VER, [_SC_2_VERSION] = VER,
 	[_SC_ADVISORY_INFO] = VER, [_SC_AIO_LISTIO_MAX] = -1, [_SC_AIO_MAX] = -1,
-	[_SC_AIO_PRIO_DELTA_MAX] = 0, [_SC_ARG_MAX] = -2 /* computed */,
+	[_SC_AIO_PRIO_DELTA_MAX] = 20, [_SC_ARG_MAX] = -2 /* computed */,
 	[_SC_ASYNCHRONOUS_IO] = VER, [_SC_ATEXIT_MAX] = ATEXIT_MAX, [_SC_BARRIERS] = VER,
 	[_SC_BC_BASE_MAX] = BC_BASE_MAX, [_SC_BC_DIM_MAX] = BC_DIM_MAX,
 	[_SC_BC_SCALE_MAX] = BC_SCALE_MAX, [_SC_BC_STRING_MAX] = BC_STRING_MAX,
@@ -34,13 +38,13 @@ static const long values[] = {
 	[_SC_MQ_PRIO_MAX] = MQ_PRIO_MAX, [_SC_NGROUPS_MAX] = NGROUPS_MAX,
 	[_SC_NPROCESSORS_CONF] = CPUS_CONF, [_SC_NPROCESSORS_ONLN] = CPUS_ONLN,
 	[_SC_NSIG] = _NSIG, [_SC_OPEN_MAX] = RLIM(RLIMIT_NOFILE), [_SC_PAGE_SIZE] = PAGESZ,
-	[_SC_PRIORITIZED_IO] = -1, [_SC_PRIORITY_SCHEDULING] = VER, [_SC_RAW_SOCKETS] = VER,
+	[_SC_PRIORITIZED_IO] = VER, [_SC_PRIORITY_SCHEDULING] = VER, [_SC_RAW_SOCKETS] = VER,
 	[_SC_RE_DUP_MAX] = RE_DUP_MAX, [_SC_READER_WRITER_LOCKS] = VER,
 	[_SC_REALTIME_SIGNALS] = VER, [_SC_REGEXP] = 1, [_SC_RTSIG_MAX] = SIGRTMAX - SIGRTMIN + 1,
 	[_SC_SAVED_IDS] = 1, [_SC_SEM_NSEMS_MAX] = -1, [_SC_SEM_VALUE_MAX] = SEM_VALUE_MAX,
 	[_SC_SEMAPHORES] = VER, [_SC_SHARED_MEMORY_OBJECTS] = VER, [_SC_SHELL] = 1,
 	[_SC_SIGQUEUE_MAX] = RLIM(11 /* RLIMIT_SIGPENDING */), [_SC_SPAWN] = VER,
-	[_SC_SPIN_LOCKS] = VER, [_SC_SPORADIC_SERVER] = -1, [_SC_SS_REPL_MAX] = -1,
+	[_SC_SPIN_LOCKS] = VER, [_SC_SPORADIC_SERVER] = SPORADIC, [_SC_SS_REPL_MAX] = SSREPL,
 	[_SC_STREAM_MAX] = -1, [_SC_SYMLOOP_MAX] = SYMLOOP_MAX, [_SC_SYNCHRONIZED_IO] = VER,
 	[_SC_THREAD_ATTR_STACKADDR] = VER, [_SC_THREAD_ATTR_STACKSIZE] = VER,
 	[_SC_THREAD_CPUTIME] = VER, [_SC_THREAD_DESTRUCTOR_ITERATIONS] = PTHREAD_DESTRUCTOR_ITERATIONS,
@@ -48,13 +52,13 @@ static const long values[] = {
 	[_SC_THREAD_PRIO_PROTECT] = VER, [_SC_THREAD_PRIORITY_SCHEDULING] = VER,
 	[_SC_THREAD_PROCESS_SHARED] = VER, [_SC_THREAD_ROBUST_PRIO_INHERIT] = VER,
 	[_SC_THREAD_ROBUST_PRIO_PROTECT] = VER, [_SC_THREAD_SAFE_FUNCTIONS] = VER,
-	[_SC_THREAD_SPORADIC_SERVER] = -1, [_SC_THREAD_STACK_MIN] = PTHREAD_STACK_MIN,
+	[_SC_THREAD_SPORADIC_SERVER] = SPORADIC, [_SC_THREAD_STACK_MIN] = PTHREAD_STACK_MIN,
 	[_SC_THREAD_THREADS_MAX] = -1, [_SC_THREADS] = VER, [_SC_TIMEOUTS] = VER,
 	[_SC_TIMER_MAX] = -1, [_SC_TIMERS] = VER, [_SC_TTY_NAME_MAX] = TTY_NAME_MAX,
-	[_SC_TYPED_MEMORY_OBJECTS] = -1, [_SC_TZNAME_MAX] = TZNAME_MAX,
+	[_SC_TYPED_MEMORY_OBJECTS] = TYM, [_SC_TZNAME_MAX] = TZNAME_MAX,
 	[_SC_V8_ILP32_OFF32] = -1, [_SC_V8_ILP32_OFFBIG] = -1, [_SC_V8_LP64_OFF64] = 1,
-	[_SC_V8_LPBIG_OFFBIG] = -1, [_SC_V7_ILP32_OFF32] = -1, [_SC_V7_ILP32_OFFBIG] = -1,
-	[_SC_V7_LP64_OFF64] = 1, [_SC_V7_LPBIG_OFFBIG] = -1, [_SC_VERSION] = VER,
+	[_SC_V8_LPBIG_OFFBIG] = 1, [_SC_V7_ILP32_OFF32] = -1, [_SC_V7_ILP32_OFFBIG] = -1,
+	[_SC_V7_LP64_OFF64] = 1, [_SC_V7_LPBIG_OFFBIG] = 1, [_SC_VERSION] = VER,
 	[_SC_XOPEN_CRYPT] = 1, [_SC_XOPEN_ENH_I18N] = 1, [_SC_XOPEN_REALTIME] = 1,
 	[_SC_XOPEN_REALTIME_THREADS] = 1, [_SC_XOPEN_SHM] = 1, [_SC_XOPEN_UNIX] = 1,
 	[_SC_XOPEN_UUCP] = 1, [_SC_XOPEN_VERSION] = 800,
@@ -85,6 +89,12 @@ long sysconf(int name)
 	}
 	case CPUS_CONF: case CPUS_ONLN: return ncpus();
 	case PAGESZ: return (long)__libc.page_size;
+	/* the sporadic server: where the kernel takes the policy (Shall's
+	   kernel; Linux has no such policy and says EINVAL) */
+	case SPORADIC: return __syscall1(SYS_sched_get_priority_max, SCHED_SPORADIC) > 0 ? VER : -1;
+	case SSREPL: return __syscall1(SYS_sched_get_priority_max, SCHED_SPORADIC) > 0 ? 32 : -1;
+	/* typed memory: where the kernel offers it (Shall's: /dev/tymctl) */
+	case TYM: return __syscall2(SYS_access, "/dev/tymctl", 0) == 0 ? VER : -1;
 	default: {
 		struct rlimit l;
 		if (getrlimit(-0x10000 - (int)v, &l)) return -1;

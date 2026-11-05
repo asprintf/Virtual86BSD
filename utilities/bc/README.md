@@ -3,9 +3,8 @@
 An implementation of the bc arbitrary-precision calculator as specified
 in XCU bc (POSIX.1-2024), in C99 plus POSIX threads.  The grammar is a
 yacc grammar (bc.y, close to the standard's own grammar) and the tokens
-are a lex scanner (scan.l); both were generated with the yacc and lex
-of this collection.  The generated bc.tab.c, bc.tab.h and scan.c are
-included, so building needs only a C compiler.
+are a lex scanner (scan.l); bc.tab.c, bc.tab.h and scan.c are generated
+from them in the build, by the yacc and lex of this collection.
 
 ## Build and test
 
@@ -15,9 +14,12 @@ included, so building needs only a C compiler.
     make install   # into $(PREFIX)/bin; PREFIX=/usr/local, DESTDIR= for staging
     make clean
 
-To regenerate the parser and scanner, delete the generated files and run
-`make`; it uses `yacc` and `lex` from PATH, or `make YACC=... LEX=...` (for
-instance the ones in `../yacc` and `../lex`).
+The parser and scanner are generated in the build, by the yacc and lex of
+this collection: `make` builds `../yacc/yacc` and `../lex/lex` first when
+they are not there yet (so the directory needs `yacc/` and `lex/`
+beside it, as in the collection), and `make YACC=... LEX=...` names other
+ones.  The generated files are not part of the sources; `make clean`
+removes them.
 
 Usage: bc [-l] [file...].  The files are read in order, then the
 standard input.  -l loads the math library and sets scale to 20.
