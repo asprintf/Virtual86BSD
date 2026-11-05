@@ -14,9 +14,9 @@ what POSIX asks of the interfaces and utilities, but young as a kernel
 (see "Where things stand").  1.0 is to add a conformance document and
 mkext2, fsck and login inside the system.
 
-Shall was made by Joost Winter with Claude, Anthropic's AI model, which
-wrote most of the code from the text of the standard (POSIX.1-2024, The
-Open Group's edition), under his direction: he set the goals and made
+Shall was made by Joost Orchidee Winter with Claude, Anthropic's AI model,
+which wrote most of the code from the text of the standard (POSIX.1-2024,
+The Open Group's edition), under his direction: he set the goals and made
 the decisions, and the results were checked by the test suites described
 below, by differential testing against other implementations, and by
 external suites (the Open POSIX Test Suite, the test suites of the ports).
