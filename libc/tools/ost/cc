@@ -1,0 +1,46 @@
+#!/bin/sh
+# cc - os-test's compiler command, for POSIX c17 on Shall.
+# os-test calls the compiler the way gcc and clang are called; c17 takes
+# only POSIX's options (and -G, -dM).  This turns the one into the other:
+#   -pthread -std=* -fPIC -Wxxx    dropped (c17 needs none of them)
+#   -shared                        -G
+#   -Werror (all warnings)         a compilation with a warning fails
+# and c17's "error: x.h: No such file or directory" is shown as gcc's
+# "fatal error: ...", which os-test's scripts look for (missing_header).
+werror=0
+for a do
+	shift
+	case $a in
+	-pthread|-std=*|-fPIC|-Wno-error*) ;;
+	-Werror) werror=1 ;;
+	-W*) ;;
+	-shared) set -- "$@" -G ;;
+	*) set -- "$@" "$a" ;;
+	esac
+done
+# OST_SHIM (a diagnostic run): each .c operand is compiled with shim.h
+# (beside this script) first
+if [ -n "$OST_SHIM" ]; then
+	n=0
+	for a do
+		shift
+		case $a in
+		*.c) n=$((n + 1)); w=${TMPDIR:-/tmp}/shim.$$.$n.c
+		     case $a in /*) p=$a ;; *) p=$(pwd)/$a ;; esac
+		     printf '#include "%s"\n#include "%s"\n' "$(dirname "$0")/shim.h" "$p" > "$w"
+		     set -- "$@" "$w" ;;
+		*) set -- "$@" "$a" ;;
+		esac
+	done
+fi
+err=${TMPDIR:-/tmp}/cc.$$
+c17 "$@" 2> "$err"
+st=$?
+if [ $st = 0 ] && [ $werror = 1 ] && grep -q 'warning:' "$err"; then
+	sed 's/warning:/error:/' "$err" >&2
+	rm -f "$err" ${TMPDIR:-/tmp}/shim.$$.*.c
+	exit 1
+fi
+sed 's/: error: \(.*: No such file or directory\)$/: fatal error: \1/' "$err" >&2
+rm -f "$err" ${TMPDIR:-/tmp}/shim.$$.*.c
+exit $st
