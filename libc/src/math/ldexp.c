@@ -5,7 +5,7 @@
 long double scalblnl(long double x, long n)
 {
 	long double r;
-	if (x == 0 || x - x != 0)
+	if (x == 0 || __ld_nonfinite(x))
 		return x + x;
 	r = __x87_scale(x, (long double)n);
 	if (r == 0)
@@ -18,7 +18,7 @@ long double ldexpl(long double x, int n) { return scalblnl(x, n); }
 
 static long double scale(long double x, long n)
 {
-	if (x == 0 || x - x != 0)
+	if (x == 0 || __ld_nonfinite(x))
 		return x + x;
 	return __x87_scale(x, (long double)n);
 }

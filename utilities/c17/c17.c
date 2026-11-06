@@ -8,6 +8,7 @@ bool opt_pic;
 bool opt_g;
 int opt_O = 1;  /* -O 0 disables the code generator's fast paths */
 bool opt_E;
+static bool opt_dM;   /* extension: with -E, the macros defined at the end */
 bool opt_fcommon;
 bool input_is_preprocessed;
 StrArray input_paths;
@@ -103,10 +104,11 @@ static char *find_libdir(void) {
      crt1 FILE        the start file (crt1.o); crti, crtn: optional
      interp PATH      the dynamic linker: dynamic linking is possible
      link MODE        static or dynamic: the default
+     define NAME=VAL  a macro its headers or c17's need (as -D)
    C17_LIBC names a profile in $libdir/libc, or is the pathname of one, or
    of a directory with include/ and lib/ (a static library); without it,
    the profile chosen when c17 was built (make LIBC=name). */
-static StrArray libc_inc, libc_lib;
+static StrArray libc_inc, libc_lib, libc_defs;
 static char *libc_crt[3], *libc_interp, *libc_name;
 static bool libc_dynamic;
 
@@ -139,6 +141,8 @@ static void read_profile(char *path) {
         libc_crt[1] = xstrdup(val);
       else if (!strcmp(key, "crtn"))
         libc_crt[2] = xstrdup(val);
+      else if (!strcmp(key, "define"))
+        strarray_push(&libc_defs, xstrdup(val));
       else if (!strcmp(key, "interp"))
         libc_interp = xstrdup(val);
       else if (!strcmp(key, "link") && (!strcmp(val, "static") || !strcmp(val, "dynamic")))
@@ -190,6 +194,8 @@ static struct cpp *setup_preprocessor(void) {
     cpp_define(p, "__PIC__=2");
     cpp_define(p, "__pic__=2");
   }
+  for (int i = 0; i < libc_defs.len; i++)
+    cpp_define(p, libc_defs.data[i]);
   for (int i = 0; i < opt_defines.len; i++)
     if (opt_defines.data[i][0] != '\x01')
       cpp_define(p, opt_defines.data[i]);
@@ -223,7 +229,10 @@ static bool translate(char *input, FILE *out) {
     return false;
   }
   if (opt_E) {
-    cpp_print(pt, out);
+    if (opt_dM)
+      cpp_print_macros(p, out);
+    else
+      cpp_print(pt, out);
     return true;
   }
 
@@ -515,6 +524,10 @@ static void parse_args(int argc, char **argv) {
       end_of_opts = true;
       continue;
     }
+    if (!strcmp(arg, "-dM")) {
+      opt_dM = true;
+      continue;
+    }
 
     /* Options taking an argument: attached or separate */
     char opt = arg[1];
@@ -610,6 +623,8 @@ int main(int argc, char **argv) {
   libdir = find_libdir();
   find_libc();
   /* -G: position-independent code, and without -c a shared library */
+  if (opt_dM && !opt_E)
+    fatal("-dM: only with -E");
   link_dynamic = opt_G || (opt_dynamic ? true : opt_static ? false : libc_dynamic);
   if (link_dynamic && !opt_G && !libc_interp)
     fatal("-B dynamic: the C library %s has no dynamic linker ('interp')", libc_name);

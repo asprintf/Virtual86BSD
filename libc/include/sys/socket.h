@@ -102,21 +102,26 @@ struct linger {
 #define MSG_DONTROUTE    0x4
 #define MSG_CTRUNC       0x8
 #define MSG_TRUNC        0x20
-#define MSG_DONTWAIT     0x40
 #define MSG_EOR          0x80
 #define MSG_WAITALL      0x100
 #define MSG_NOSIGNAL     0x4000
 #define MSG_CMSG_CLOEXEC 0x40000000
 #define MSG_CMSG_CLOFORK ((int)0x80000000)   /* native on Shall's kernel, else emulated */
+/* not POSIX: in the namespace XSI reserves (MSG_, PF_) */
+#if __XSI_VISIBLE
+#define MSG_DONTWAIT     0x40
+#endif
 
 #define AF_UNSPEC 0
 #define AF_UNIX   1
 #define AF_INET   2
 #define AF_INET6  10
+#if __XSI_VISIBLE
 #define PF_UNSPEC AF_UNSPEC
 #define PF_UNIX   AF_UNIX
 #define PF_INET   AF_INET
 #define PF_INET6  AF_INET6
+#endif
 #if __EXT_VISIBLE
 #define AF_LOCAL   AF_UNIX
 #define PF_LOCAL   AF_UNIX

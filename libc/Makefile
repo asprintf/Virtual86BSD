@@ -61,7 +61,14 @@ PREFIX   = /usr/local
 install: all
 	mkdir -p $(DESTDIR)$(PREFIX)/include $(DESTDIR)$(PREFIX)/lib
 	cp -R include/. $(DESTDIR)$(PREFIX)/include
-	cp $(B)/lib/libc.a $(CRT) $(EMPTY) $(SHARED) $(DESTDIR)$(PREFIX)/lib
+	@# each file is copied beside its place and renamed into it: copying
+	@# over the libc.so that running programs map would change it under
+	@# them (they crash, and so does the copy: in a running Shall)
+	@for f in $(B)/lib/libc.a $(CRT) $(EMPTY) $(SHARED); do \
+		n=$${f##*/}; d=$(DESTDIR)$(PREFIX)/lib; \
+		echo "cp $$f $$d/$$n"; \
+		cp $$f $$d/.$$n.new && mv -f $$d/.$$n.new $$d/$$n || exit 1; \
+	done
 
 clean:
 	rm -rf build tests/out

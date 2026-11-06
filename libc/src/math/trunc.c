@@ -29,6 +29,8 @@ long double ceill(long double x)
 
 long double roundl(long double x)
 {
+	if (__ld_nonfinite(x))
+		return x + 0;           /* no inf - inf */
 	long double t = truncl(x);
 	if (__ld_abs(x - t) >= 0.5L)
 		t += x < 0 ? -1 : 1;
@@ -44,11 +46,12 @@ float ceilf(float x) { return ceill(x); }
 double round(double x) { return roundl(x); }
 float roundf(float x) { return roundl(x); }
 
-/* lround, llround: out of range, FE_INVALID and the smallest value */
+/* lround, llround: out of range, EDOM, FE_INVALID and the smallest value */
 long lroundl(long double x)
 {
 	long double t = roundl(x);
 	if (!(t >= -0x1p63L && t < 0x1p63L)) {
+		errno = EDOM;             /* a domain error (POSIX): NaN, infinite, too large */
 		feraiseexcept(FE_INVALID);
 		return (long)(-0x7fffffffffffffffLL - 1);
 	}

@@ -51,7 +51,10 @@ sub-second modification times, and the -o keywords.
 
 * Patterns follow 2.14.3 exactly, so a leading period in a pathname
   component must be matched explicitly: `'*'` does not match "." or
-  "./a".  MirBSD pax matches those.
+  "./a".  MirBSD pax matches those.  Also 2.14.3's rule for a slash
+  inside brackets: `'a[b/c]d'` matches only the name "a[b/c]d" (pax
+  escapes such a '[' before it calls fnmatch(), which, following
+  POSIX, keeps it a bracket expression).
 * Trailing slashes on directory member names are removed when reading,
   so lists, patterns and -s see "dir", not "dir/" (as in MirBSD pax).
 * Member names are used as they are.  Absolute names and ".." are not

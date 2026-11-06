@@ -129,6 +129,9 @@ struct sock {
   struct list ilink;     /* in the table of bound internet sockets */
   struct tcb *tcb;       /* TCP over the wire (net/tcp.c) */
   bool autobound;        /* connect() chose the port */
+  bool la_by_connect;    /* a datagram socket's address is the one connect()
+                            chose (la_unbound before it) */
+  struct inaddr la_unbound;
   bool conn_failed;      /* a connect() that did not come about */
   int raw_ttl;
 };

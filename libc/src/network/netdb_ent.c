@@ -3,6 +3,7 @@
  * and /etc/services.  The results are in static storage. */
 #include <arpa/inet.h>
 #include <netdb.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,12 +24,23 @@ static const char *networks_path = "/etc/networks", *protocols_path = "/etc/prot
 static struct db hosts = {&__hosts_path}, nets = {&networks_path}, protos = {&protocols_path},
                  servs = {&__services_path};
 
+/* a database that cannot be opened is an empty one: these functions
+   have no errors (POSIX), so errno is kept */
+static FILE *db_open(struct db *d)
+{
+	int e = errno;
+	FILE *f = fopen(*d->path, "re");
+	if (!f)
+		errno = e;
+	return f;
+}
+
 static void db_set(struct db *d, int stay)
 {
 	if (d->f)
 		rewind(d->f);
 	else
-		d->f = fopen(*d->path, "re");
+		d->f = db_open(d);
 	d->stayopen |= stay;
 }
 
@@ -43,7 +55,7 @@ static void db_end(struct db *d)
 /* the next line with at least `min' fields: 1, or 0 */
 static int db_next(struct db *d, int min)
 {
-	if (!d->f && !(d->f = fopen(*d->path, "re")))
+	if (!d->f && !(d->f = db_open(d)))
 		return 0;
 	while (fgets(d->line, sizeof d->line, d->f)) {
 		d->n = __netdb_fields(d->line, d->fl, MAXALIASES + 2);

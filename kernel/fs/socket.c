@@ -706,6 +706,12 @@ long sys_connect(long fd, long uaddr, long len) {
     if (len >= 2 && copy_from_user(&fam, (void *)uaddr, 2) == 0 && fam == 0 && s->type == SOCK_DGRAM) {
       s->has_ra = false; /* AF_UNSPEC: disconnect */
       s->state = SS_UNCONNECTED;
+      if (s->la_by_connect) { /* the address connect() chose goes too */
+        uint16_t port = s->la.port;
+        s->la = s->la_unbound;
+        s->la.port = port;
+        s->la_by_connect = false;
+      }
       return 0;
     }
     if ((e = in_get(s, uaddr, len, &dst)))
@@ -732,6 +738,16 @@ long sys_connect(long fd, long uaddr, long len) {
         return e;
       if (!s->raw) { /* bound to the address it sends from, as Linux */
         struct inaddr src;
+        /* an address an earlier connect() chose is chosen again for the
+           new destination; one given to bind() stays */
+        if (s->la_by_connect) {
+          uint16_t port = s->la.port;
+          s->la = s->la_unbound;
+          s->la.port = port;
+        } else if (in_any(&s->la)) {
+          s->la_unbound = s->la;
+          s->la_by_connect = true;
+        }
         in_src(s, &dst, &src);
         s->la = src;
       }

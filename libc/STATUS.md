@@ -73,7 +73,7 @@ from the current rules, `%C` for years below 1000, `strftime` `+` flag,
 |---|---|---|
 | `<dirent.h>` | done | `struct dirent`/`posix_dent` have the kernel's `linux_dirent64` layout, so `posix_getdents` is `getdents64`; `DT_MQ`/`DT_SEM`/`DT_SHM`/`DT_TMO` are never returned (no such file types on Linux); a removed directory reads as empty |
 | `<pwd.h>`, `<grp.h>` | done | the files `/etc/passwd` and `/etc/group` only (no name-service switch); `setgroups` declared in `<grp.h>` only without feature-test macros (it is not POSIX) |
-| `<utmpx.h>` | done | `struct utmpx` is POSIX (`ut_tv` a `struct timeval`, plus `ut_host` and `ut_exit` as glibc); the database is `/run/utmp` (or `/var/run/utmp`) in the traditional 384-byte Linux record format, converted on reading and writing; `RUN_LVL` only without feature-test macros |
+| `<utmpx.h>` | done | `struct utmpx` is POSIX (`ut_tv` a `struct timeval`, plus `ut_host` and `ut_exit` as glibc); the database is `/run/utmp` (or `/var/run/utmp`) in the traditional 384-byte Linux record format, converted on reading and writing; the first `pututxline` creates it (mode 0644) where there is none, as POSIX has it write for a process with the privileges (0.9.1); `RUN_LVL` only without feature-test macros |
 | `<unistd.h>` | `getlogin`, `getlogin_r` added | the `USER_PROCESS` entry for the terminal on fd 0, 1 or 2; else the audit login uid |
 | `<regex.h>` | done | own engine, see below; `REG_MINIMAL` and the `?` repetition modifier (new in POSIX.1-2024); `\?`, `\+`, `\|` in BREs act as in EREs; back-references also in EREs; `REG_STARTEND` extension; error messages as glibc's |
 | `<fnmatch.h>` | done | incl. `FNM_CASEFOLD`/`FNM_IGNORECASE` |
@@ -137,6 +137,130 @@ U+10FFFF is rejected; `fnmatch("??", "é")` does not match in UTF-8
 expressions (glibc's C.utf8: an error); `strfmon` with `+` fails when both
 signs are empty, as POSIX requires (in the POSIX locale); C.UTF-8 has no
 `combining` class and no transliterations.
+
+## Stage 18: os-test
+
+[os-test](https://gitlab.com/sortix/os-test) (Sortix, ISC licensed,
+outside the tree; a snapshot of 5 November 2026: 5816 tests in 14
+suites) was built inside the system by c17 and run on Shall's kernel in
+QEMU; the include and namespace suites only compile.  Its makefiles need
+GNU or BSD make, so `tools/ost/` runs it with POSIX sh (`ost.sh`), with a
+compiler command (`cc`) that turns gcc's options into c17's.  For
+comparison it ran on the host as its makefiles do, with gcc 13 and glibc
+2.39 on Linux 6.18.  Judged by os-test's own `misc/html` (expectations in
+`<suite>.expect`, "none" where they are unknown):
+
+| suite | Shall | glibc/Linux |
+|---|---|---|
+| basic | 1151/1187 | 1077/1187 |
+| fnmatch | 61/67 | 49/67 |
+| include | 3758/3758 | 3471/3758 |
+| io | 55/55 | 53/55 |
+| limits | 124/126 | 119/126 |
+| malloc | 3/3 | 3/3 |
+| namespace | 159/159 | 130/159 |
+| paths | 48/48 | 48/48 |
+| process | 24/24 | 21/24 |
+| pty | 28/29 | 25/29 |
+| regex | 93/96 | 83/96 |
+| signal | 28/32 | 29/32 |
+| stdio | 25/25 | 25/25 |
+| udp | 59/207 | 95/207 |
+| total | 5616/5816 | 5228/5816 |
+
+The first run gave 5501.  It found, and this round fixed:
+
+* In this library: the mathematical functions raised `FE_INVALID` for an
+  infinite argument (`x - x != 0` as the test for "not finite", in some
+  30 functions, now `__ld_nonfinite`; `roundl`'s `inf - inf`);
+  `strtod("inf")` raised `FE_DIVBYZERO`, and so did an overflowing
+  `strtod`, `fma`, `csqrt`, `clog` and `cproj` (now `FE_OVERFLOW` or
+  none); `lrint`/`lround` of a NaN, an infinity or a value out of range
+  set no `EDOM`, `logb(0)` no `ERANGE` (both required by POSIX; glibc
+  sets neither); `bindtextdomain(NULL, ...)` set `errno`; the network
+  databases, utmpx and syslog set `errno` when their file or `/dev/log`
+  does not exist (an empty database: no error); `strfmon` put a '.' for
+  the empty `mon_decimal_point` of the POSIX locale (as glibc).
+* In the headers: `<sys/shm.h>` lacked `SHM_FAILED` and `intptr_t`
+  (POSIX.1-2024); `<dlfcn.h>` defines `Dl_info` always (Austin Group
+  interpretation 1847, for TC1); `_XOPEN_UUCP` is the UUCP option's, not
+  XSI's; and the namespace: `<signal.h>` showed `SS_ONSTACK`,
+  `MINSIGSTKSZ`, `SIGSTKSZ`, `TRAP_*` without XSI and `POLL_*` (gone with
+  STREAMS) without the extensions, `<sys/socket.h>` `PF_*` and
+  `MSG_DONTWAIT` without XSI, `<sys/resource.h>` `struct rusage`,
+  `PRIO_*`, `RUSAGE_*`, `RLIMIT_CPU` without XSI, `<sys/stat.h>` `mknod`
+  without XSI, `<termios.h>` the output delays without XSI and `ECHOCTL`,
+  `ECHOPRT`, `ECHOKE` without the extensions.
+* `make install` copied over the installed `libc.so`, which running
+  programs map: in a running Shall they (and the copy) crashed.  Each
+  file is now copied beside its place and renamed into it.
+* In c17 (`utilities/c17`): `INFINITY`, `NAN` and `HUGE_VAL` were `1.0/0.0`
+  and `0.0/0.0`, evaluated when the program runs, so using them raised
+  exceptions: c17 has `__builtin_inf`, `__builtin_huge_val`,
+  `__builtin_nan` (and their `f`, `l`) now, which `<math.h>` uses;
+  `<stdatomic.h>` included `<stdint.h>` and `<stddef.h>` (their macros
+  polluted it) and had only macros for the functions that are not generic
+  (now functions too, in `libc17rt.a`); `-E -dM`, the macros defined at
+  the end, which the namespace suite needs.
+* In the kernel (`kernel/README.md`): a pseudoterminal's slave opened
+  with `O_NOCTTY` still became the controlling terminal; a process group
+  whose members are zombies was taken not to exist (`tcsetpgrp`,
+  `setpgid`); `open` of a directory with `O_CREAT` (without `O_DIRECTORY`)
+  did not fail with `EISDIR` (POSIX.1-2024); `waitpid` for a process group
+  did not wake when the last child left it; `poll` on a hung-up terminal
+  gave `POLLOUT` with `POLLHUP` (they exclude each other) and no `POLLERR`.
+
+A second round (6 November) took the easy ones of what was left: `pow(0,
+-inf)` now has the pole error (`ERANGE`) that POSIX allows, `fma` the
+domain error (`EDOM`) of an infinity times zero, also with a NaN `z`
+("may"); `pthread_attr_getstack` before a stack is set gives no address
+and the size (unspecified; was `EINVAL`); in the kernel, `F_GETLK` and
+`F_OFD_GETLK` of `F_UNLCK` answer `F_UNLCK` (was `EINVAL`), and a new
+pseudoterminal has the size 0x0 until its controller sets one, as on Linux
+and the BSDs (the console stays 24x80).  The table is after it; the
+overview of all three external suites is `docs/conformance.md`.  In
+0.9.1 a UDP socket's address that connect() chose is chosen again by the
+next connect() (it kept 127.0.0.1 after a reconnect from the loopback):
+`connect-loopback-reconnect-wan-getsockname` now gives one of the outcomes
+os-test lists as not yet judged, so it moves from the udp failures to
+the 69 without an expectation.  Also in 0.9.1, `fnmatch()` follows the
+2024 text where os-test showed it did not (glibc, musl and the BSDs do
+neither): a backslash escapes in the name of a class, collating symbol or
+equivalence class too (2.14.1: "regardless of whether or not the
+<backslash> is inside a bracket expression"), and with `FNM_PATHNAME` a
+bracket expression with a `/` in it stays one and matches no slash
+(2.14.3's rule that makes its `[` ordinary is for filename expansion: the
+shell and `glob()` split at slashes first, `pax` escapes such a `[` in its
+pattern operands).  The fnmatch suite, run again with this library on the
+host (not in QEMU), passes 61 of 67: 6 more, the table counts them.
+
+What is left (200):
+
+* 85 do not compile: 83 call `usleep` (78 of them in udp) or
+  `gettimeofday`, which POSIX removed (2008, 2024) and Shall does not
+  have; 2 (limits) use `_POSIX_TEXTDOMAIN_MAX`, which POSIX does not
+  define (its minimum is `{_POSIX_NAME_MAX} - 3`): defects of the tests.
+  Compiled with a shim (`shim.h`) for a diagnostic run, 39 of the 83 pass,
+  32 have no known expectation, 12 fail (glibc: 38, 33, 12): the UDP
+  questions below and `pututxline` without a utmp file (since 0.9.1 the
+  first `pututxline` creates the database, and the image has `/run`).
+* 69 have no expectation yet (udp's open questions, `sigaction` flags
+  after `exec`).
+* basic, 35 (and `pututxline`, which does not compile): 11 are QEMU's software x87 (`sinl`, `cosl`, `tanl`, a few
+  complex functions; `remquo`'s quotient bits from `fprem1`), right on a
+  real processor (checked in a chroot); 18 are the last ulp of long double
+  results, which glibc misses too (correct rounding is not required); 3
+  (`fma`, `fmaf`, `fmal`) are a defect of the test: its case 24 expects
+  `fma(0, inf, 10.1)` to leave `errno` alone, where POSIX says a domain
+  error shall occur (`EDOM`; glibc never sets it); `strfmon` aligns a
+  positive amount with the negative one, as glibc (os-test reads the
+  alignment rule otherwise); `sockatmark` needs TCP urgent data, which
+  the kernel does not have.
+* fnmatch, 6, and regex, 3: all os-test's "nonstandard" tests (invalid
+  UTF-8, `\{,n\}` in a BRE).
+* udp, 2: binding to the LAN's broadcast address is refused (Linux allows
+  it); connecting again to 0.0.0.0 connects to the loopback, as on some
+  systems, where os-test wants it to fail or to disconnect.
 
 ## Stage 17: the Open POSIX Test Suite on Shall's kernel
 
@@ -575,7 +699,7 @@ first in the search.
 
 All headers of POSIX.1-2024 exist, and the POSIX utilities and c17 run on this library (stage 10).
 
-Done through stage 16 (shared library, dynamic linker, static PIE, libc.so built by c17 as well; the Open POSIX Test Suite; multi-character collating elements; option groups; the nice value, pwrite and O_EXEC/O_SEARCH made to conform on Linux).  Possible next steps: symbol visibility and versioning for libc.so; bcrypt/yescrypt.
+Done through stage 18 (shared library, dynamic linker, static PIE, libc.so built by c17 as well; the Open POSIX Test Suite; os-test; multi-character collating elements; option groups; the nice value, pwrite and O_EXEC/O_SEARCH made to conform on Linux).  Possible next steps: symbol visibility and versioning for libc.so; bcrypt/yescrypt.
 
 ## Open items
 

@@ -56,7 +56,7 @@ long double __exp2l_hl(long double hi, long double lo, long double s)
 static int intkind(long double y)
 {
 	long double t;
-	if (y - y != 0)
+	if (__ld_nonfinite(y))
 		return 0;
 	if (__ld_abs(y) >= 0x1p64L)
 		return 2;
@@ -79,16 +79,18 @@ long double powl(long double x, long double y)
 	if (x == 0) {
 		int neg = k == 1 && 1 / x < 0;
 		if (y < 0)
-			return y - y != 0 ? 1 / __ld_abs(x) : __math_divzero(neg);
+			/* (0, -inf): +inf, and the pole error POSIX allows ("may"),
+			   as for a negative finite y */
+			return __ld_nonfinite(y) ? __math_divzero(0) : __math_divzero(neg);
 		return neg ? -0.0L : 0.0L;
 	}
 	ax = __ld_abs(x);
-	if (y - y != 0) {                       /* y = +-inf */
+	if (__ld_nonfinite(y)) {                       /* y = +-inf */
 		if (ax == 1)
 			return 1;
 		return (ax > 1) == (y > 0) ? y * y : 0;
 	}
-	if (x - x != 0) {                       /* x = +-inf */
+	if (__ld_nonfinite(x)) {                       /* x = +-inf */
 		int neg = x < 0 && k == 1;
 		if (y < 0)
 			return neg ? -0.0L : 0.0L;

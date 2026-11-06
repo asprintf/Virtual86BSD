@@ -16,6 +16,15 @@
 #include <errno.h>
 #include "stdio_impl.h"
 #include "locale_impl.h"
+#include <float.h>
+#include <math.h>
+
+/* too large: infinity, with FE_OVERFLOW (not the FE_DIVBYZERO of 1/0) */
+static long double overflow(void)
+{
+	volatile long double big = LDBL_MAX;
+	return big * 2;
+}
 
 #define MAXDIG 12000
 
@@ -115,7 +124,7 @@ static long double convert(struct big *A, struct big *B, long bexp, int P, int e
 	if (big_cmp(A, B) < 0) { k--; big_shl(A, 1); }
 	/* now B' = B * 2^k (relative), A >= B, A < 2B */
 	k += bexp;
-	if (k > emax) { errno = ERANGE; return 1.0L / 0.0L; }
+	if (k > emax) { errno = ERANGE; return overflow(); }
 	lsb = k - (P - 1);
 	if (lsb < emin - (P - 1)) lsb = emin - (P - 1);
 	nbits = k - lsb + 1;                /* mantissa bits to produce, <= P */
@@ -137,7 +146,7 @@ static long double convert(struct big *A, struct big *B, long bexp, int P, int e
 		if (nbits == P && (P == 64 ? N == 0 : N >> P)) {
 			N = P == 64 ? 1ULL << 63 : N >> 1;
 			lsb++;
-			if (lsb + P - 1 > emax) { errno = ERANGE; return 1.0L / 0.0L; }
+			if (lsb + P - 1 > emax) { errno = ERANGE; return overflow(); }
 		}
 	}
 	/* underflow: an inexact result that is still tiny after rounding */
@@ -184,7 +193,7 @@ long double __floatscan(FILE *f, int prec, int pok)
 			shunget(f);
 			if (pok) for (; i > 3; i--) shunget(f);
 		}
-		return neg ? -1.0L / 0.0L : 1.0L / 0.0L;
+		return neg ? -HUGE_VALL : HUGE_VALL;   /* "inf": no exception */
 	}
 	if (!i) {
 		/* nan, nan(n-char-sequence) */
@@ -260,7 +269,7 @@ long double __floatscan(FILE *f, int prec, int pok)
 			if (!A.n) return neg ? -0.0L : 0.0L;
 			if (lost) { big_mul_add(&A, 16, 1); ex -= 4; }   /* sticky, far below */
 			bd[0] = 1;
-			if (ex > 20000) { errno = ERANGE; r = 1.0L / 0.0L; }
+			if (ex > 20000) { errno = ERANGE; r = overflow(); }
 			else if (ex < -20000) { errno = ERANGE; r = 0; }
 			else r = convert(&A, &B, (long)ex, P, emin, emax, 0);
 			return neg ? -r : r;
@@ -306,7 +315,7 @@ long double __floatscan(FILE *f, int prec, int pok)
 	digits[nd] = 0;
 
 	/* out of range in any precision */
-	if (nd + e10 > 4935) { errno = ERANGE; return neg ? -1.0L / 0.0L : 1.0L / 0.0L; }
+	if (nd + e10 > 4935) { errno = ERANGE; return neg ? -overflow() : overflow(); }
 	if (nd + e10 < -4955) { errno = ERANGE; return neg ? -0.0L : 0.0L; }
 
 	{

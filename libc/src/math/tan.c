@@ -3,7 +3,7 @@
 long double tanl(long double x)
 {
 	long double r, t;
-	if (x - x != 0)
+	if (__ld_nonfinite(x))
 		return __math_invalid(x);
 	if (__ld_abs(x) < 0x1p-32L)
 		return __math_l(x);

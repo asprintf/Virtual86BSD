@@ -46,7 +46,7 @@ int pthread_attr_setstacksize(pthread_attr_t *a, size_t s)
 
 int pthread_attr_getstack(const pthread_attr_t *__RESTRICT a, void **__RESTRICT addr, size_t *__RESTRICT s)
 {
-	if (!a->_a_stackaddr) return EINVAL;
+	/* (before a stack is set, unspecified: no address, the size) */
 	*addr = (void *)a->_a_stackaddr;
 	*s = (size_t)a->_a_stacksize;
 	return 0;

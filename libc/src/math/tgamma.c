@@ -26,7 +26,7 @@ long double tgammal(long double x)
 	long double s, g;
 	if (x != x)
 		return x + x;
-	if (x - x != 0)
+	if (__ld_nonfinite(x))
 		return x > 0 ? x : __math_invalid(x);
 	if (x == 0)
 		return __math_divzero(__signbitl(x));

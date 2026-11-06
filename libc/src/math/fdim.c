@@ -5,7 +5,7 @@ T fdim##S(T x, T y) \
 { \
 	if (x != x || y != y) \
 		return x + y; \
-	if (x - x != 0 || y - y != 0) \
+	if (__ld_nonfinite(x) || __ld_nonfinite(y)) \
 		return x > y ? x - y : 0; \
 	return x > y ? R(x - y) : 0; \
 } \

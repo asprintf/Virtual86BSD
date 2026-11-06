@@ -46,6 +46,8 @@ in `libc/` (installed in `$(PREFIX)/lib/c17/libc`):
     crtn crtn.o
     interp /lib64/ld-linux-x86-64.so.2      # the dynamic linker
     link dynamic                            # the default: static or dynamic
+    define NAME=VALUE                       # a macro (as -D), for one of c17's
+                                            # headers: musl's __c17_int_fast16=int
 
 `libc/glibc` and `libc/musl` are for Debian, Ubuntu and their
 derivatives (musl from the package musl-dev); on other distributions
@@ -234,7 +236,9 @@ builtins `__builtin_va_*`, `__builtin_offsetof`,
 `__builtin_constant_p`, `__builtin_unreachable`, `__builtin_alloca`,
 `__builtin_complex`, `__builtin_return_address` and
 `__builtin_frame_address` (any constant level: c17 always keeps a frame
-pointer). `tls_model` is honoured as described for `-G`. c17 does not
+pointer), and `__builtin_inf`, `__builtin_huge_val`, `__builtin_nan("")`
+(with `f` and `l`: constants, which raise no floating-point exception
+when used, for `<math.h>`'s `INFINITY`, `HUGE_VAL` and `NAN`). `tls_model` is honoured as described for `-G`. c17 does not
 define `__GNUC__`.
 
 ## Choices where the standard leaves room
@@ -261,7 +265,9 @@ define `__GNUC__`.
 * `-g`: line tables only (no variables or types); `-g` with `-s` strips.
 * `-O`: only `0` changes anything.
 * Extensions: `-S` (write the assembly to `file.s`), `-w` (no
-  warnings), `-v` (show the link editor's inputs), `.s` operands.
+  warnings), `-v` (show the link editor's inputs), `-dM` with `-E`
+  (instead of the preprocessed text, a `#define` line for each macro
+  defined at the end of the file), `.s` operands.
 * Implementation-defined behaviour: `char` is signed; `short` 2, `int`
   4, `long`, `long long` and pointers 8 bytes; `long double` is the x87
   80-bit type in 16 bytes; two's complement, conversions to narrower
@@ -365,7 +371,7 @@ of a later parameter (`int a[n][n]`, as glibc's `<regex.h>` does; now
 | `libc/` | the profiles of the C libraries: `glibc`, `musl` |
 | `rt_complex.c` | `libc17rt.a`: complex multiplication and division |
 | `rt_float128.c`, `rt_float128.s` | `libc17rt.a`: binary128 arithmetic and comparison |
-| `rt_unwind.c`, `rt_bits.c` | `libc17rt.a`: the unwinding interface without an unwinder; `__popcountdi2` |
+| `rt_unwind.c`, `rt_bits.c`, `rt_atomic.c` | `libc17rt.a`: the unwinding interface without an unwinder; `__popcountdi2`; the non-generic functions of `<stdatomic.h>` |
 | `test_c17.sh` | the tests |
 | `tests/run/` | programs with their expected output |
 | `tests/chibicc/`, `tests/diag/`, `tests/pp/`, `tests/asm/` | test suites (see Testing) |

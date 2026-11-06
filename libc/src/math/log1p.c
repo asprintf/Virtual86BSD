@@ -19,7 +19,7 @@ long double log1pl(long double x)
 		return __math_divzero(1);
 	if (x < -1)
 		return __math_invalid(x);
-	if (x - x != 0)
+	if (__ld_nonfinite(x))
 		return x;
 	if (__ld_abs(x) < 0x1p-64L)
 		return __math_l(x);

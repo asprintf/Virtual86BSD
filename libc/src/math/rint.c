@@ -23,6 +23,7 @@ long lrintl(long double x)
 {
 	long double t = __x87_rint(x);
 	if (!(t >= -0x1p63L && t < 0x1p63L)) {
+		errno = EDOM;             /* a domain error (POSIX): NaN, infinite, too large */
 		feraiseexcept(FE_INVALID);
 		return (long)(-0x7fffffffffffffffLL - 1);
 	}

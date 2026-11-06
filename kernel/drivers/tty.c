@@ -528,8 +528,10 @@ static unsigned tty_poll(struct file *f) {
   unsigned m = (!t->pty || room_for(t) >= 1024) ? POLLOUT | POLLWRNORM : 0;
   if (L(t, ICANON) ? t->nlines > 0 : t->ilen > 0)
     m |= POLLIN | POLLRDNORM;
+  /* hung up: readable (end-of-file), not writable (POLLHUP and POLLOUT
+     exclude each other), and writes fail (EIO): POLLERR */
   if (t->hungup)
-    m |= POLLHUP | POLLIN;
+    m = (m & ~(unsigned)(POLLOUT | POLLWRNORM)) | POLLHUP | POLLIN | POLLERR;
   return m;
 }
 
@@ -539,13 +541,15 @@ static void set_ctty(struct tty *t, struct proc *p) {
   t->pgrp = p->pgid;
 }
 
+static const struct file_ops pts_fops;
+
 void tty_maybe_set_ctty(struct file *f) {
   if (!f->fops || !f->priv)
     return;
   extern const struct file_ops tty_fops_ext;
   struct proc *p = cur_proc();
   struct tty *t = TT(f);
-  if (!t || f->fops != &tty_fops_ext)
+  if (!t || (f->fops != &tty_fops_ext && f->fops != &pts_fops))
     return;
   /* as Linux: /dev/console never becomes a controlling terminal */
   if (f->ino && f->ino->rdev == MKDEV(5, 1))
@@ -660,7 +664,7 @@ static long tty_ioctl(struct file *f, unsigned cmd, uint64_t arg) {
     bool ok = false;
     list_for_each(q, &all_procs) {
       struct proc *o = list_entry(q, struct proc, all_link);
-      if (o->state == P_ALIVE && o->pgid == g) {
+      if (o->state != P_DEAD && o->pgid == g) {   /* (zombies are members) */
         if (o->sid != p->sid)
           return -EPERM;
         ok = true;
@@ -963,6 +967,9 @@ static int ptmx_open(struct inode *ino, struct file *f) {
     return -ENOMEM;
   p->index = i;
   tty_defaults(&p->slave);
+  /* a new pseudoterminal has no size until its controller sets one (as on
+     Linux and the BSDs); the console is 24x80 */
+  p->slave.ws.row = p->slave.ws.col = 0;
   p->slave.t.cflag = B38400 | CS8 | CREAD; /* as Linux's pty driver */
   snprintf(p->slave.name, sizeof(p->slave.name), "pts/%d", i);
   p->slave.output = pty_slave_out;
@@ -1015,10 +1022,9 @@ static int pts_open(struct inode *ino, struct file *f) {
   p->slave.hungup = false;
   f->priv = &p->slave;
   f->fops = &pts_fops;
-  /* the controlling terminal rule applies to pty slaves too */
-  struct proc *pr = cur_proc();
-  if (!(f->flags & O_NOCTTY) && pr->sid == pr->pid && !pr->ctty && p->slave.sid == 0)
-    set_ctty(&p->slave, pr);
+  /* (the controlling terminal rule applies to pty slaves too: in
+     tty_maybe_set_ctty, which do_open calls without O_NOCTTY, which the
+     file's flags do not keep) */
   return 0;
 }
 

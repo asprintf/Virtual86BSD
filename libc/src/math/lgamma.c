@@ -54,7 +54,7 @@ long double __lgammal_r(long double x, int *sign)
 	*sign = 1;
 	if (x != x)
 		return x + x;
-	if (x - x != 0)
+	if (__ld_nonfinite(x))
 		return __ld_abs(x);
 	if (x == 0) {
 		if (__signbitl(x))
@@ -79,7 +79,7 @@ long double __lgammal_r(long double x, int *sign)
 long double lgammal(long double x)
 {
 	long double r = __lgammal_r(x, &__signgam);
-	return x - x != 0 ? r : __math_l(r);
+	return __ld_nonfinite(x) ? r : __math_l(r);
 }
 
 double lgamma(double x)

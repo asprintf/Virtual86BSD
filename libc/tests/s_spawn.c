@@ -236,8 +236,20 @@ int main(int argc, char **argv)
 	CHECK(fnmatch("*.c", ".x.c", FNM_PERIOD) == FNM_NOMATCH);
 	CHECK(fnmatch("a/*", "a/.x", FNM_PERIOD | FNM_PATHNAME) == FNM_NOMATCH);
 	CHECK(fnmatch("a/.*", "a/.x", FNM_PERIOD | FNM_PATHNAME) == 0);
+	/* a bracket expression with a slash stays one, but matches no slash
+	   (the '[' made ordinary is 2.14.3's rule, for glob() and the shell) */
 	CHECK(fnmatch("a[b/c]d", "a/d", FNM_PATHNAME) == FNM_NOMATCH);
-	CHECK(fnmatch("a[b/c]d", "a[b/c]d", FNM_PATHNAME) == 0);
+	CHECK(fnmatch("a[b/c]d", "abd", FNM_PATHNAME) == 0);
+	CHECK(fnmatch("a[b/c]d", "a[b/c]d", FNM_PATHNAME) == FNM_NOMATCH);
+	CHECK(fnmatch("[./]", ".", FNM_PATHNAME) == 0);
+	CHECK(fnmatch("a[b/c]d", "a/d", 0) == 0);
+	/* escapes in class, symbol and equivalence class names (2.14.1) */
+	CHECK(fnmatch("[[:al\\num:]]", "a", 0) == 0);
+	CHECK(fnmatch("[[.\\a.]]", "a", 0) == 0);
+	CHECK(fnmatch("[[=\\a=]]", "a", 0) == 0);
+	CHECK(fnmatch("[[.\\\\.]-[.a.]]", "]", 0) == 0);
+	CHECK(fnmatch("[[.\\].]]", "]", 0) == 0);
+	CHECK(fnmatch("[[.\\.]]", "\\", FNM_NOESCAPE) == 0);
 
 	CHECK(chdir(cwd) == 0);
 	{ char cmd[100] = "chmod 755 "; strcat(cmd, dir); strcat(cmd, "/t/e; rm -rf "); strcat(cmd, dir); CHECK(system(cmd) == 0); }

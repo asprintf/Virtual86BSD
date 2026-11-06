@@ -1,5 +1,6 @@
 #include <string.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <stdint.h>
 #include "utx_impl.h"
 
@@ -9,12 +10,22 @@ enum { O_TYPE = 0, O_PID = 4, O_LINE = 8, O_ID = 40, O_USER = 44, O_HOST = 76,
 
 static const char *const paths[] = { "/run/utmp", "/var/run/utmp" };
 
+/* The database file, or -1.  Opened for writing (pututxline), a database
+   that does not exist yet is created, in the first of the two directories
+   that exists: POSIX has pututxline write the entry when the process has
+   the privileges (here: may create the file there). */
 int __utx_open(int flags)
 {
 	unsigned i;
-	int fd;
+	int fd, e = errno;
 	for (i = 0; i < sizeof paths / sizeof *paths; i++)
 		if ((fd = open(paths[i], flags | O_CLOEXEC)) >= 0) return fd;
+	if ((flags & O_ACCMODE) == O_RDONLY || errno != ENOENT) return -1;
+	for (i = 0; i < sizeof paths / sizeof *paths; i++) {
+		errno = e;
+		if ((fd = open(paths[i], flags | O_CREAT | O_CLOEXEC, 0644)) >= 0) return fd;
+		if (errno != ENOENT) return -1;     /* the directory exists: not allowed */
+	}
 	return -1;
 }
 

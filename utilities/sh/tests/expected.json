@@ -728,7 +728,7 @@
   0
  ],
  "cases2.txt:builtins: readonly unset fails": [
-  "1 1\n",
+  "1\n1 1\n",
   0
  ],
  "cases2.txt:builtins: return from dot inside function": [
@@ -1497,6 +1497,22 @@
  ],
  "cases2.txt:parse: until with multiple commands in condition": [
   "3\n",
+  0
+ ],
+ "cases2.txt:alias: a here-document in the value": [
+  "here-document\nafter\n",
+  0
+ ],
+ "cases2.txt:alias: a backslash at the end of the value joins the next line": [
+  "foo\n",
+  0
+ ],
+ "cases2.txt:alias: after a value ending in a blank, the token that replaces the next one": [
+  "y\n. x echo . x\n",
+  0
+ ],
+ "cases2.txt:alias: the () of a function definition from an alias": [
+  "F\n",
   0
  ]
 }

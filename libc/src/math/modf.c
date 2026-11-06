@@ -6,7 +6,7 @@ long double modfl(long double x, long double *ip)
 	*ip = t;
 	if (x != x)
 		return x + x;
-	if (x - x != 0)
+	if (__ld_nonfinite(x))
 		return x < 0 ? -0.0L : 0.0L;
 	return copysignl(x - t, x);
 }

@@ -6,7 +6,9 @@
 typedef float float_t;
 typedef double double_t;
 
-#if defined(__GNUC__) && !defined(__c17__)
+/* constants, raising no floating-point exception (GCC, Clang and c17
+   have these built-ins) */
+#if defined(__GNUC__) || defined(__c17__)
 # define HUGE_VAL  (__builtin_huge_val())
 # define HUGE_VALF (__builtin_huge_valf())
 # define HUGE_VALL (__builtin_huge_vall())

@@ -4,8 +4,8 @@
 static long double loghypot(long double x, long double y)
 {
 	long double ax = fabsl(x), ay = fabsl(y), t, h1, l1, h2, l2;
-	if ((ax - ax != 0 && ax == ax) || (ay - ay != 0 && ay == ay))
-		return 1.0L / 0.0L;
+	if ((__ld_nonfinite(ax) && ax == ax) || (__ld_nonfinite(ay) && ay == ay))
+		return HUGE_VALL;
 	if (ax != ax || ay != ay)
 		return ax + ay;
 	if (ax < ay) {

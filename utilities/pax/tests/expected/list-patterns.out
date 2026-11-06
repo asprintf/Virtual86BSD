@@ -45,3 +45,7 @@ rc=1
 -- -c unmatched not reported
 10
 rc=0
+-- a bracket with a slash is ordinary
+q/a[b/c]d
+q/abd
+q/acd

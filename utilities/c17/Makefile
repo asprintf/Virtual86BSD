@@ -53,14 +53,15 @@ cpp.o: ../lib/cpp.c
 # (RTC17: another c17 that writes the same code, when this one cannot run
 # here, as when it is linked with a C library not installed yet)
 RTC17    = ./$(PROG)
-RTOBJS   = rt_complex.o rt_float128.o rt_float128s.o rt_unwind.o rt_bits.o
+RTOBJS   = rt_complex.o rt_float128.o rt_float128s.o rt_unwind.o rt_bits.o rt_atomic.o
 
-libc17rt.a: rt_complex.c rt_float128.c rt_float128.s rt_unwind.c rt_bits.c $(PROG)
+libc17rt.a: rt_complex.c rt_float128.c rt_float128.s rt_unwind.c rt_bits.c rt_atomic.c $(PROG)
 	C17_LIBDIR=. $(RTC17) -c -o rt_complex.o rt_complex.c
 	C17_LIBDIR=. $(RTC17) -c -o rt_float128.o rt_float128.c
 	C17_LIBDIR=. $(RTC17) -c -o rt_float128s.o rt_float128.s
 	C17_LIBDIR=. $(RTC17) -c -o rt_unwind.o rt_unwind.c
 	C17_LIBDIR=. $(RTC17) -c -o rt_bits.o rt_bits.c
+	C17_LIBDIR=. $(RTC17) -c -o rt_atomic.o rt_atomic.c
 	rm -f $@
 	ar -rc $@ $(RTOBJS)
 

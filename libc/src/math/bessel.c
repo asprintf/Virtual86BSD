@@ -115,7 +115,7 @@ static long double jnl(int n, long double x)
 	}
 	if (x != x)
 		return x;
-	if (x - x != 0)
+	if (__ld_nonfinite(x))
 		return 0;
 	if (x == 0)
 		return n ? 0 : 1;
@@ -177,12 +177,12 @@ static long double ynl(int n, long double x)
 		return __math_invalid(x);
 	if (x == 0)
 		return sign * __math_divzero(1);
-	if (x - x != 0)
+	if (__ld_nonfinite(x))
 		return 0;
 	y01(x, &a, &b);
 	if (n == 0)
 		return a;
-	for (k = 1; k < n && b - b == 0; k++) {
+	for (k = 1; k < n && !__ld_nonfinite(b); k++) {
 		t = 2 * k / x * b - a;
 		a = b;
 		b = t;

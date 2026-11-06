@@ -13,6 +13,8 @@ typedef unsigned long rlim_t;
 #define RLIM_SAVED_CUR RLIM_INFINITY
 #define RLIM_SAVED_MAX RLIM_INFINITY
 
+/* XSI: priorities, resource usage, RLIMIT_CPU */
+#if __XSI_VISIBLE
 #define PRIO_PROCESS 0
 #define PRIO_PGRP    1
 #define PRIO_USER    2
@@ -21,6 +23,7 @@ typedef unsigned long rlim_t;
 #define RUSAGE_CHILDREN (-1)
 
 #define RLIMIT_CPU    0
+#endif
 #define RLIMIT_FSIZE  1
 #define RLIMIT_DATA   2
 #define RLIMIT_STACK  3
@@ -33,6 +36,7 @@ struct rlimit {
 	rlim_t rlim_max;
 };
 
+#if __XSI_VISIBLE
 /* The kernel's layout. */
 struct rusage {
 	struct timeval ru_utime;
@@ -40,6 +44,7 @@ struct rusage {
 	long ru_maxrss, ru_ixrss, ru_idrss, ru_isrss, ru_minflt, ru_majflt, ru_nswap,
 	     ru_inblock, ru_oublock, ru_msgsnd, ru_msgrcv, ru_nsignals, ru_nvcsw, ru_nivcsw;
 };
+#endif
 
 __BEGIN_DECLS
 int getrlimit(int, struct rlimit *);

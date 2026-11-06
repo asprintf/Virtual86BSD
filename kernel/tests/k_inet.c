@@ -229,6 +229,31 @@ int main(void)
 	u1 = socket(AF_INET, SOCK_DGRAM, 0);
 	CHECK(send(u1, "?", 1, 0) == -1 && errno == EDESTADDRREQ);
 	close(u1);
+	/* the address connect() chose is chosen again by the next connect():
+	   from the loopback to 192.0.2.1 (TEST-NET-1) not 127.0.0.1 (when
+	   there is a network to reach it through), and gone on AF_UNSPEC */
+	{
+		struct sockaddr_in la, d = { .sin_family = AF_INET, .sin_port = htons(9) };
+		u1 = socket(AF_INET, SOCK_DGRAM, 0);
+		d.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		CHECK(connect(u1, (struct sockaddr *)&d, sizeof d) == 0);
+		sl = sizeof la;
+		CHECK(getsockname(u1, (struct sockaddr *)&la, &sl) == 0 && la.sin_addr.s_addr == htonl(INADDR_LOOPBACK));
+		p = la.sin_port;
+		d.sin_addr.s_addr = htonl(0xc0000201);
+		if (connect(u1, (struct sockaddr *)&d, sizeof d) == 0) {
+			sl = sizeof la;
+			CHECK(getsockname(u1, (struct sockaddr *)&la, &sl) == 0 &&
+			      la.sin_addr.s_addr != htonl(INADDR_LOOPBACK) && la.sin_port == p);
+		}
+		d.sin_family = AF_UNSPEC;
+		CHECK(connect(u1, (struct sockaddr *)&d, sizeof d) == 0);
+		sl = sizeof la;
+		/* (the port: kept here, 0 on Linux) */
+		CHECK(getsockname(u1, (struct sockaddr *)&la, &sl) == 0 && la.sin_addr.s_addr == htonl(INADDR_ANY) &&
+		      (la.sin_port == p || la.sin_port == 0));
+		close(u1);
+	}
 	/* UDP over IPv6 */
 	u1 = socket(AF_INET6, SOCK_DGRAM, 0);
 	u2 = socket(AF_INET6, SOCK_DGRAM, 0);

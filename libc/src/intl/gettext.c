@@ -444,7 +444,9 @@ char *bindtextdomain(const char *dom, const char *dir)
 {
 	struct binding *b;
 	char *r;
-	if (!dom || !*dom || strlen(dom) > TEXTDOMAIN_MAX) { errno = EINVAL; return 0; }
+	if (!dom || !*dom)
+		return 0;               /* no change, errno kept (POSIX) */
+	if (strlen(dom) > TEXTDOMAIN_MAX) { errno = EINVAL; return 0; }
 	LOCK(&lock);
 	b = bind(dom, dir, 0, 1);
 	r = b ? (b->dir ? b->dir : DEFDIR) : 0;
@@ -456,7 +458,9 @@ char *bind_textdomain_codeset(const char *dom, const char *cs)
 {
 	struct binding *b;
 	char *r;
-	if (!dom || !*dom || strlen(dom) > TEXTDOMAIN_MAX) { errno = EINVAL; return 0; }
+	if (!dom || !*dom)
+		return 0;               /* no change, errno kept (POSIX) */
+	if (strlen(dom) > TEXTDOMAIN_MAX) { errno = EINVAL; return 0; }
 	LOCK(&lock);
 	b = bind(dom, 0, cs, 0);
 	r = b ? b->codeset : 0;

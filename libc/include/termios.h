@@ -58,6 +58,7 @@ struct termios {
 #define IUTF8   0040000
 
 #define OPOST  0000001
+#if __XSI_VISIBLE
 #define ONLCR  0000004
 #define OCRNL  0000010
 #define ONOCR  0000020
@@ -86,6 +87,7 @@ struct termios {
 #define FFDLY  0100000
 #define FF0    0000000
 #define FF1    0100000
+#endif
 
 #define B0      0000000
 #define B50     0000001
@@ -128,9 +130,11 @@ struct termios {
 #define ECHONL  0000100
 #define NOFLSH  0000200
 #define TOSTOP  0000400
+#if __EXT_VISIBLE
 #define ECHOCTL 0001000
 #define ECHOPRT 0002000
 #define ECHOKE  0004000
+#endif
 #define IEXTEN  0100000
 
 #define TCSANOW   0

@@ -240,7 +240,8 @@ export E1=v; unset E1; sh -c 'echo "[${E1-u}]"'
 #### builtins: export name only then assign
 export LATER; LATER=1; sh -c 'echo $LATER'
 #### builtins: readonly unset fails
-readonly RO=1; unset RO 2>/dev/null; echo $? $RO
+(readonly RO=1; unset RO 2>/dev/null; echo not reached); echo $?
+(readonly RO=1; command unset RO 2>/dev/null; echo $? $RO)
 #### builtins: set -- resets
 set -- a b; set --; echo $#
 #### builtins: set plus options
@@ -544,3 +545,23 @@ sleep 1 & p=$!; kill -s INT $p; kill -s QUIT $p; wait $p; echo st=$?
 (sleep 1; echo done) | cat & p=$!; kill -s INT $p; wait $p; echo st=$?
 #### functions: assignments exported while the function runs
 f() { sh -c 'echo "[$V]"'; }; V=x f; echo "after: [${V-unset}]"; export -p | grep -c ' V=' || true
+#### alias: a here-document in the value
+alias c='cat <<\END' d='c
+here-document
+END'
+d
+echo after
+#### alias: a backslash at the end of the value joins the next line
+alias e='echo ' bs='\'
+e bs
+ foo
+#### alias: after a value ending in a blank, the token that replaces the next one
+alias e='echo ' w=x x=y
+e w
+alias echo='e x x ' x=.
+echo echo
+#### alias: the () of a function definition from an alias
+alias f='f ' p='()'
+f p
+{ echo F; }
+f

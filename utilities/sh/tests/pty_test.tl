@@ -119,7 +119,7 @@ func t_jobs() {
     send(t, "jobs\n");
     check("stopped job listed", expect(t, "\\[[0-9]\\] \\+ Stopped[[:space:]]+sleep 30"), buf(t));
     send(t, "bg\n");
-    check("bg resumes", expect(t, "sleep 30 &"), buf(t));
+    check("bg resumes", expect(t, "\\[1\\] sleep 30"), buf(t));
     clear(t);
     send(t, "fg\n", 0.6);
     send(t, "\003", 0.6);

@@ -331,7 +331,10 @@ const struct OptDesc optdesc[NOPTS] = {
 
 static void option_changed(int i)
 {
-    if (i == O_MONITOR)
+    extern int jobs_started;
+    /* (-m on the command line takes effect in jobs_init, after the
+       signal dispositions at entry have been recorded) */
+    if (i == O_MONITOR && jobs_started)
         set_job_control(opts[i]);
     else if (i == O_NOTIFY)
         set_notify(opts[i]);

@@ -22,11 +22,11 @@ long double expm1l(long double x)
 	if (x != x)
 		return x + x;
 	if (x > 11356.6L) {
-		if (x - x != 0)
+		if (__ld_nonfinite(x))
 			return x;
 		return __math_oflow(0);
 	}
-	if (x - x != 0)
+	if (__ld_nonfinite(x))
 		return -1;
 	if (__ld_abs(x) < 0x1p-64L)
 		return __math_l(x);

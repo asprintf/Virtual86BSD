@@ -9,17 +9,19 @@ compiles, assembles and links -- the kernel too; make, ar, yacc, lex and
 sh do the rest.  On a Linux host it makes a small system you can chroot
 into, or boot in QEMU with its own kernel.
 
-This is version 0.9 (November 2026; `VERSION`), a preview: complete in
+This is version 0.9.1 (November 2026; `VERSION`), a preview: complete in
 what POSIX asks of the interfaces and utilities, but young as a kernel
-(see "Where things stand").  1.0 is to add a conformance document and
-mkext2, fsck and login inside the system.
+(see "Where things stand").  0.9.1 fixes what the external test suites
+showed after 0.9 (`docs/conformance.md`).  1.0 is to add mkext2, fsck and
+login inside the system.
 
-Shall was made by Joost Orchidee Winter with Claude, Anthropic's AI model,
-which wrote most of the code from the text of the standard (POSIX.1-2024,
-The Open Group's edition), under his direction: he set the goals and made
+Shall was made by Joost Winter with Claude, Anthropic's AI model, which
+wrote most of the code from the text of the standard (POSIX.1-2024, The
+Open Group's edition), under his direction: he set the goals and made
 the decisions, and the results were checked by the test suites described
 below, by differential testing against other implementations, and by
-external suites (the Open POSIX Test Suite, the test suites of the ports).
+external suites (the Open POSIX Test Suite, os-test, the POSIX Shell
+Tests, the test suites of the ports).
 
 ## Layout
 
@@ -36,6 +38,7 @@ external suites (the Open POSIX Test Suite, the test suites of the ports).
                     installed too: /usr/bin/tl)
     kernel/         the kernel (README.md), and init
     system/etc/     the configuration files of a Shall system
+    docs/           conformance.md: the external test suites and their results
     ports/          third-party software for it: ncurses, Rogue, Lua, SQLite,
                     sqllogictest, Mbed TLS, curl
                     (README.md; a HOWTO.md and a build.sh for each)
@@ -177,6 +180,24 @@ offers.
   of the tests); the others test undefined or implementation-defined
   behaviour, are defects of the tests, or (one) need more time than QEMU's
   emulation gives them (`libc/STATUS.md`, stage 17).
+* os-test (Sortix's, 5816 tests in 14 suites: headers, namespace, every
+  function at a basic level, fnmatch, regex, limits, I/O, processes,
+  signals, pseudoterminals, stdio, UDP), built inside the system and run
+  on its own kernel in QEMU with `libc/tools/ost/`: 5616 pass (glibc on
+  Linux 5228), all of the header and namespace tests among them.  Of the
+  other 200, 85 do not compile (83 call `usleep` or `gettimeofday`), 69
+  have no known outcome yet (UDP's open questions), and the rest are
+  QEMU's software x87, last-ulp long double results, test defects,
+  os-test's "nonstandard" tests and a few readings of the standard where
+  Shall does as glibc (`libc/STATUS.md`, stage 18).
+* The POSIX Shell Tests (yash's test suite, 10,979 cases) against Shall's
+  `sh`: 10,940 pass and 8 fail (yash 0 failures, dash 1,271, bash as `sh`
+  1,634); the 8 are things POSIX.1-2024 leaves unspecified and one place
+  where the 2024 text differs from the other shells
+  (`utilities/sh/README.md`).
+
+`docs/conformance.md` has all three suites side by side, with the
+comparisons and what each result that is not a pass comes from.
 
 ## Where things stand
 
@@ -197,4 +218,5 @@ Data a system needs is copied from the host when `bootstrap.sh` builds
 it (time zones, terminfo, locale sources and charmaps, certificate
 authorities) and keeps its own licenses; the ports are fetched by
 `ports/get.sh` and keep theirs (only Shall's small diffs to them are
-here); the Open POSIX Test Suite (GPL) is used from outside the tree.
+here); the Open POSIX Test Suite (GPL), os-test (ISC) and the POSIX
+Shell Tests (GPL) are used from outside the tree.

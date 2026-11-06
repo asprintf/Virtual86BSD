@@ -14,7 +14,7 @@
 #endif
 const char *uts_sysname = UTS_SYSNAME;
 const char *uts_release = "6.9.0-shall";
-const char *uts_version = "#1 Shall 0.9";
+const char *uts_version = "#1 Shall 0.9.1";
 char uts_nodename[65] = "shall";
 static char uts_domain[65] = "(none)";
 

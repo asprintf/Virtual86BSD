@@ -12,7 +12,7 @@
 #
 # What is needed: e2fsprogs (mke2fs with -d, version 1.43 or later); no
 # root privileges.  The root itself is not changed: it is copied, completed
-# with what a booted system needs (/dev, /proc, /sys, /tmp; /etc/resolv.conf
+# with what a booted system needs (/dev, /proc, /sys, /tmp, /run; /etc/resolv.conf
 # as a link to the kernel's /proc/net/pnp, the name server DHCP gave), and
 # written into the image with every file owned by root.
 #

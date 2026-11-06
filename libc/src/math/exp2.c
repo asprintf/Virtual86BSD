@@ -6,12 +6,12 @@ long double exp2l(long double x)
 	if (x != x)
 		return x + x;
 	if (x >= 16384) {
-		if (x - x != 0)
+		if (__ld_nonfinite(x))
 			return x;
 		return __math_oflow(0);
 	}
 	if (x < -16446) {
-		if (x - x != 0)
+		if (__ld_nonfinite(x))
 			return 0;
 		return __math_uflow(0);
 	}

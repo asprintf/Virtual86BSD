@@ -100,19 +100,20 @@ int main(void)
 	errno = 0; CHECK(readdir(d) == 0 && errno == 0);
 	closedir(d);
 
-	/* utmpx: only where we may create the database and it does not exist */
+	/* utmpx: only where we may create the database and it does not exist;
+	   the first pututxline creates it */
 	{
 		struct stat st;
 		if (geteuid() == 0 && stat("/run/utmp", &st) < 0 && stat("/var/run/utmp", &st) < 0 &&
-		    stat("/run", &st) == 0 && (fd = open("/run/utmp", O_CREAT | O_EXCL | O_RDWR, 0664)) >= 0) {
+		    stat("/run", &st) == 0) {
 			struct utmpx u, *up;
 			char login[64];
-			close(fd);
 			setutxent();
 			CHECK(getutxent() == 0);
 			memset(&u, 0, sizeof u);
 			u.ut_type = BOOT_TIME; u.ut_tv.tv_sec = 1700000000;
 			CHECK(pututxline(&u) != 0);
+			CHECK(stat("/run/utmp", &st) == 0 && (st.st_mode & 0777) == 0644);
 			memset(&u, 0, sizeof u);
 			u.ut_type = USER_PROCESS; u.ut_pid = 4242; strcpy(u.ut_line, "pts/77");
 			strcpy(u.ut_id, "ts/7"); strcpy(u.ut_user, "tester"); strcpy(u.ut_host, "far.away");

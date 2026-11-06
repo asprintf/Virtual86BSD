@@ -124,8 +124,17 @@ static long double fma_core(long double x, long double y, long double z, int p, 
 	u192 A, B;
 	long double r;
 
-	if (x != x || y != y || z != z || x - x != 0 || y - y != 0 || z - z != 0 || x == 0 || y == 0)
+	if (x != x || y != y || z != z || __ld_nonfinite(x) || __ld_nonfinite(y) || __ld_nonfinite(z) || x == 0 || y == 0) {
+		/* a domain error: an infinity times zero (also with a NaN z,
+		   where POSIX says "may"), or infinities of opposite signs
+		   added; NaN operands otherwise give none */
+		int xi = __ld_nonfinite(x) && x == x, yi = __ld_nonfinite(y) && y == y;
+		if ((xi && y == 0) || (yi && x == 0) ||
+		    ((xi || yi) && x == x && y == y && __ld_nonfinite(z) && z == z &&
+		     (x * y > 0) != (z > 0)))
+			errno = EDOM;
 		return x * y + z;           /* exact: NaN, infinite, or z +- 0 */
+	}
 	unpack(x, &nx, &mx, &ex);
 	unpack(y, &ny, &my, &ey);
 	neg = nx ^ ny;
@@ -208,7 +217,7 @@ static long double fma_core(long double x, long double y, long double z, int p, 
 		if (mode == FE_TOWARDZERO || (mode == FE_UPWARD && neg) || (mode == FE_DOWNWARD && !neg))
 			r = __x87_scale(__x87_scale(1, p) - 1, emax - p + 1);   /* largest finite */
 		else
-			r = 1.0L / 0.0L;
+			r = HUGE_VALL;
 		return neg ? -r : r;
 	}
 	if (rb | st)

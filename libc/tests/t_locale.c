@@ -5,7 +5,8 @@
  * strings, swprintf, regex and fnmatch in UTF-8, iconv.
  * Excluded (deliberate differences, see STATUS.md): bytes 0x80-0xff of
  * the POSIX locale, code points above 0x10FFFF in UTF-8, the "combining"
- * classes of glibc's C.utf8, strfmon "%+n" in the POSIX locale. */
+ * classes of glibc's C.utf8, strfmon in the POSIX locale (glibc puts
+ * a '.' for its empty mon_decimal_point). */
 #define _GNU_SOURCE
 #include <locale.h>
 #include <langinfo.h>
@@ -164,7 +165,11 @@ static void one(const char *name)
 	{
 		static const char *f[] = { "%n", "%i", "%(n", "%!n", "%^n", "%12n", "%-12n|", "%#5n", "%=*#5n", "%.0n", "%.3i", "%(#6.2n" };
 		static const double v[] = { 1234567.891, -1234.5, 0 };
-		for (k = 0; k < sizeof f / sizeof *f; k++) {
+		/* (not in the POSIX locale, whose mon_decimal_point is empty:
+		 * glibc puts '.' there, this library none, as POSIX says) */
+		if (!*localeconv()->mon_decimal_point) k = sizeof f / sizeof *f;
+		else k = 0;
+		for (; k < sizeof f / sizeof *f; k++) {
 			unsigned j;
 			for (j = 0; j < 3; j++) {
 				ssize_t rr = strfmon(buf, sizeof buf, f[k], v[j]);

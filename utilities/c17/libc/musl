@@ -7,3 +7,4 @@ crti crti.o
 crtn crtn.o
 interp /lib/ld-musl-x86_64.so.1
 link static
+define __c17_int_fast16=int   # musl's int_fast16_t and int_fast32_t

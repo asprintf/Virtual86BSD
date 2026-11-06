@@ -157,6 +157,8 @@ void cpp_keep_pragmas(struct cpp *p, bool on);
 struct token *cpp_run(struct cpp *p, const char *path, const char *display);
 /* the preprocessed tokens as text, with line markers (c17 -E) */
 void cpp_print(struct token *t, FILE *out);
+/* the macros defined at the end of the last cpp_run (c17 -E -dM) */
+void cpp_print_macros(struct cpp *p, FILE *out);
 /* is it a "#pragma ..." token of cpp_keep_pragmas? */
 bool cpp_is_pragma(const struct token *t);
 /* the main file of the last cpp_run */

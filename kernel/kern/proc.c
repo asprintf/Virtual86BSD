@@ -672,6 +672,9 @@ long sys_setsid(void) {
   }
   p->sid = p->pgid = p->pid;
   p->ctty = NULL;
+  /* a parent waiting for the old group may have no children left in it */
+  if (p->parent)
+    wake_up(&p->parent->child_wait);
   return p->sid;
 }
 
@@ -698,13 +701,17 @@ long sys_setpgid(long pid, long pgid) {
     bool ok = false;
     list_for_each(q, &all_procs) {
       struct proc *o = list_entry(q, struct proc, all_link);
-      if (o->state == P_ALIVE && o->pgid == pgid && o->sid == p->sid)
+      /* a zombie is still a member: its group exists until it is waited for */
+      if (o->state != P_DEAD && o->pgid == pgid && o->sid == p->sid)
         ok = true;
     }
     if (!ok)
       return -EPERM;
   }
   p->pgid = (pid_t)pgid;
+  /* a parent waiting for the old group may have no children left in it */
+  if (p->parent)
+    wake_up(&p->parent->child_wait);
   return 0;
 }
 

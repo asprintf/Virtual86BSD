@@ -21,9 +21,14 @@ void endutxent(void)
 	fd = -1; rw = 0; curpos = -1;
 }
 
+/* no database (no utmpx file) is an empty one: errno is kept */
 static int opendb(void)
 {
-	if (fd < 0 && (fd = __utx_open(O_RDONLY)) < 0) return -1;
+	int e = errno;
+	if (fd < 0 && (fd = __utx_open(O_RDONLY)) < 0) {
+		if (errno == ENOENT) errno = e;
+		return -1;
+	}
 	return 0;
 }
 

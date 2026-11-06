@@ -8,9 +8,9 @@ static long double rem(long double x, long double y, int *q, int ieee)
 	*q = 0;
 	if (x != x || y != y)
 		return x + y;
-	if (x - x != 0 || y == 0)
-		return __math_invalid(x - x != 0 ? x : y);
-	if (y - y != 0 || x == 0)
+	if (__ld_nonfinite(x) || y == 0)
+		return __math_invalid(__ld_nonfinite(x) ? x : y);
+	if (__ld_nonfinite(y) || x == 0)
 		return x;
 	x = ieee ? __x87_remainder(x, y, &b) : __x87_fmod(x, y, &b);
 	*q = neg ? -b : b;

@@ -5,8 +5,8 @@ void __csqrt_parts(long double x, long double y, long double *re, long double *i
 {
 	long double t, ax = fabsl(x);
 	int scale = 0;
-	if (y - y != 0 && y == y) {             /* y infinite */
-		*re = 1.0L / 0.0L;
+	if (__ld_nonfinite(y) && y == y) {             /* y infinite */
+		*re = HUGE_VALL;
 		*im = y;
 		return;
 	}
@@ -15,7 +15,7 @@ void __csqrt_parts(long double x, long double y, long double *re, long double *i
 		*im = y - y + x;
 		return;
 	}
-	if (ax - ax != 0) {                     /* x infinite */
+	if (__ld_nonfinite(ax)) {                     /* x infinite */
 		if (x > 0) {
 			*re = x;
 			*im = y == y ? copysignl(0, y) : y;

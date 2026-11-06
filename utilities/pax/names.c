@@ -10,11 +10,61 @@ int npatterns;
 static int *pat_used;
 static char **pat_dir;      /* -n: the directory matched by the pattern */
 
+/*
+ * The pattern with XCU 2.14.3's rule for filename expansion, which
+ * fnmatch() does not apply: a '[' whose bracket expression would contain
+ * a slash is an ordinary character ("a[b/c]d" matches only itself).  Such
+ * a '[' is escaped; the rest is copied.
+ */
+static char *slash_brackets(const char *pat)
+{
+    size_t n = strlen(pat), i, o = 0;
+    char *r = xmalloc(2 * n + 1);
+    for (i = 0; i < n; i++) {
+        if (pat[i] == '\\' && pat[i + 1]) {
+            r[o++] = pat[i++];
+            r[o++] = pat[i];
+            continue;
+        }
+        if (pat[i] == '[') {
+            size_t j = i + 1;
+            int slash = 0;
+            if (pat[j] == '!' || pat[j] == '^')
+                j++;
+            if (pat[j] == ']')
+                j++;
+            while (pat[j] && pat[j] != ']') {
+                if (pat[j] == '[' && (pat[j + 1] == ':' || pat[j + 1] == '.' || pat[j + 1] == '=')) {
+                    char d = pat[j + 1];
+                    j += 2;
+                    while (pat[j] && !(pat[j] == d && pat[j + 1] == ']')) {
+                        if (pat[j] == '/')
+                            slash = 1;
+                        j += pat[j] == '\\' && pat[j + 1] ? 2 : 1;
+                    }
+                    if (pat[j])
+                        j += 2;
+                    continue;
+                }
+                if (pat[j] == '/')
+                    slash = 1;
+                j += pat[j] == '\\' && pat[j + 1] ? 2 : 1;
+            }
+            if (pat[j] == ']' && slash)
+                r[o++] = '\\';
+        }
+        r[o++] = pat[i];
+    }
+    r[o] = 0;
+    return r;
+}
+
 /* does the pattern match the member name or (without -d) a parent of it? */
-static int pattern_matches(const char *pat, const char *name)
+static int pattern_matches(const char *pattern, const char *name)
 {
     size_t l = strlen(name);
     char *n = xstrdup(name);
+    char *pat = slash_brackets(pattern);
     int r = 0;
     while (l > 1 && n[l - 1] == '/')
         n[--l] = 0;
@@ -31,6 +81,7 @@ static int pattern_matches(const char *pat, const char *name)
         }
     }
     free(n);
+    free(pat);
     return r;
 }
 

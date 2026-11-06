@@ -102,9 +102,14 @@ int fd_close(int fd) {
   return 0;
 }
 
+/* exec: the descriptors with FD_CLOEXEC are closed, and FD_CLOFORK is
+   cleared on the others (Austin Group interpretation 1851, for TC1 of
+   POSIX.1-2024: the flag belongs to the program that set it) */
 void fd_close_on_exec(struct proc *p) {
   for (int i = 0; i < p->nfd; i++)
-    if (p->fd[i] && (p->fdflags[i] & FD_CLOEXEC)) {
+    if (p->fd[i] && !(p->fdflags[i] & FD_CLOEXEC))
+      p->fdflags[i] &= (uint8_t)~FD_CLOFORK;
+    else if (p->fd[i]) {
       struct file *f = p->fd[i];
       p->fd[i] = NULL;
       p->fdflags[i] = 0;
@@ -308,7 +313,10 @@ struct file *open_path(int dirfd, const char *path, int flags, mode_t mode, int 
     return NULL;
   }
   if (!(flags & O_PATH)) {
-    if (S_ISDIR(ino->mode) && (flags & O_ACCMODE) != O_RDONLY) {
+    /* a directory: not for writing, nor with O_CREAT without O_DIRECTORY
+       (POSIX.1-2024) */
+    if (S_ISDIR(ino->mode) &&
+        ((flags & O_ACCMODE) != O_RDONLY || ((flags & O_CREAT) && !(flags & O_DIRECTORY)))) {
       path_put(&p);
       *err = -EISDIR;
       return NULL;

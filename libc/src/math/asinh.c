@@ -3,7 +3,7 @@
 long double asinhl(long double x)
 {
 	long double ax = __ld_abs(x), t, r;
-	if (x - x != 0)
+	if (__ld_nonfinite(x))
 		return x + x;
 	if (ax < 0x1p-32L)
 		return __math_l(x);
@@ -25,7 +25,7 @@ long double acoshl(long double x)
 		return x + x;
 	if (x < 1)
 		return __math_invalid(x);
-	if (x - x != 0)
+	if (__ld_nonfinite(x))
 		return x;
 	if (x > 0x1p34L)
 		return __x87_yl2x(x, __LN2) + __LN2;

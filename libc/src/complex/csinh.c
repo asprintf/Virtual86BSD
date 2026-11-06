@@ -9,7 +9,7 @@ long double _Complex csinhl(long double _Complex z)
 	long double x = __cre(z), y = __cim(z);
 	if (y == 0)
 		return __cpack(sinhl(x), y);
-	if (y - y != 0) {                       /* y infinite or NaN */
+	if (__ld_nonfinite(y)) {                       /* y infinite or NaN */
 		if (x == 0)
 			return __cpack(x, y - y);
 		if (INF(x))
@@ -28,7 +28,7 @@ long double _Complex ccoshl(long double _Complex z)
 	long double x = __cre(z), y = __cim(z);
 	if (y == 0)
 		return __cpack(coshl(x), x == x ? copysignl(0, x) * y : y);
-	if (y - y != 0) {
+	if (__ld_nonfinite(y)) {
 		if (x == 0)
 			return __cpack(y - y, x * copysignl(0, y));
 		if (INF(x))
@@ -48,10 +48,10 @@ long double _Complex ctanhl(long double _Complex z)
 {
 	long double x = __cre(z), y = __cim(z), t, b, s, r, d;
 	if (INF(x))
-		return __cpack(copysignl(1, x), copysignl(0, y - y == 0 ? sinl(2 * y) : y));
+		return __cpack(copysignl(1, x), copysignl(0, !__ld_nonfinite(y) ? sinl(2 * y) : y));
 	if (x != x)
 		return __cpack(x, y == 0 ? y : x);
-	if (y - y != 0)
+	if (__ld_nonfinite(y))
 		return __cpack(x == 0 ? x : y - y, y - y);
 	if (fabsl(x) > 23) {
 		long double e = expl(-2 * fabsl(x));

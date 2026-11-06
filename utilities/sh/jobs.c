@@ -8,6 +8,10 @@ Job *jobtab;
 int njobs;
 int curjob = -1, prevjob = -1;
 pid_t shell_pgid;
+/* the process group the shell had, and the terminal's foreground one,
+   before it took job control: given back when it ends (exit, set +m,
+   exec), so that whoever started it has the terminal again */
+static pid_t orig_pgid = -1, orig_fg = -1;
 int tty_fd = -1;
 static int jobctl_on;
 static struct termios shell_tmodes;
@@ -17,7 +21,14 @@ char *trap_actions[NSIGS];
 volatile sig_atomic_t pending_sig[NSIGS];
 volatile sig_atomic_t gotsig;
 volatile sig_atomic_t intpending;
+/* signals ignored on entry to a non-interactive shell: they stay
+   ignored, traps cannot change them (2.11) */
 int sig_ignored_at_entry[NSIGS];
+/* signals ignored that a trap may still change: ignored on entry to an
+   interactive shell, and SIGINT and SIGQUIT in an asynchronous list
+   without job control; inherited ignored by what the shell runs until a
+   trap command sets or resets them */
+int sig_inherit_ign[NSIGS];
 char **saved_parent_traps;
 int in_trap;
 int trap_status_before;
@@ -127,7 +138,7 @@ void set_signal(int sig)
     const char *t = trap_actions[sig];
     if (sig <= 0 || sig >= NSIGS || sig == SIGKILL || sig == SIGSTOP)
         return;
-    if (sig_ignored_at_entry[sig] && !interactive) {
+    if (sig_ignored_at_entry[sig] || (!t && sig_inherit_ign[sig])) {
         setact(sig, SIG_IGN);
         return;
     }
@@ -181,8 +192,12 @@ void signals_init(void)
     int i;
     for (i = 1; i < NSIGS; i++) {
         struct sigaction sa;
-        if (sigaction(i, NULL, &sa) == 0 && sa.sa_handler == SIG_IGN)
-            sig_ignored_at_entry[i] = 1;
+        if (sigaction(i, NULL, &sa) == 0 && sa.sa_handler == SIG_IGN) {
+            if (interactive)
+                sig_inherit_ign[i] = 1;   /* an interactive shell may reset them */
+            else
+                sig_ignored_at_entry[i] = 1;
+        }
     }
     if (interactive) {
         set_signal(SIGINT);
@@ -203,7 +218,7 @@ void signals_child_reset(int async_nojc)
             continue;
         if (sa.sa_handler != SIG_IGN && sa.sa_handler != SIG_DFL)
             setact(i, SIG_DFL);
-        else if (sa.sa_handler == SIG_IGN && !sig_ignored_at_entry[i] &&
+        else if (sa.sa_handler == SIG_IGN && !sig_ignored_at_entry[i] && !sig_inherit_ign[i] &&
                  !(trap_actions[i] && !*trap_actions[i]))
             setact(i, SIG_DFL);
     }
@@ -297,6 +312,27 @@ static void take_terminal(pid_t pg)
     }
 }
 
+/* Gives the terminal and the process group back (see orig_pgid). */
+void job_control_end(void)
+{
+    if (!jobctl_on)
+        return;
+    jobctl_on = 0;
+    if (orig_pgid > 0 && orig_pgid != shell_pgid) {
+        if (setpgid(0, orig_pgid) == 0)
+            shell_pgid = orig_pgid;
+    }
+    if (tty_fd >= 0 && orig_fg > 0) {
+        sigset_t s, o;
+        sigemptyset(&s);
+        sigaddset(&s, SIGTTOU);
+        sigprocmask(SIG_BLOCK, &s, &o);
+        tcsetpgrp(tty_fd, orig_fg);
+        sigprocmask(SIG_SETMASK, &o, NULL);
+    }
+    orig_pgid = orig_fg = -1;
+}
+
 void set_job_control(int on)
 {
     if (on == jobctl_on)
@@ -332,6 +368,10 @@ void set_job_control(int on)
                 break;
             kill(0, SIGTTIN);
         }
+        if (orig_pgid < 0) {
+            orig_pgid = getpgrp();
+            orig_fg = tcgetpgrp(tty_fd);
+        }
         shell_pgid = getpid();
         setpgid(0, shell_pgid);
         jobctl_on = 1;
@@ -343,7 +383,7 @@ void set_job_control(int on)
         set_signal(SIGTTOU);
         set_signal(SIGCHLD);
     } else {
-        jobctl_on = 0;
+        job_control_end();
         set_signal(SIGTSTP);
         set_signal(SIGTTIN);
         set_signal(SIGTTOU);
@@ -356,8 +396,11 @@ void set_job_control_child(void)
     opts[O_MONITOR] = 0;
 }
 
+int jobs_started;
+
 void jobs_init(void)
 {
+    jobs_started = 1;
     shell_pgid = getpgrp();
     if (opts[O_MONITOR]) {
         opts[O_MONITOR] = 0;

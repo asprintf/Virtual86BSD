@@ -1,7 +1,8 @@
 /* k_clofork: close-on-fork done by the kernel.  The library must hand the
  * flags to the kernel (the raw F_GETFD shows FD_CLOFORK), and the kernel
  * must close the descriptors in fork() and posix_spawn() children, keep
- * them across exec, and keep O_CLOFORK out of the file status flags. */
+ * them across exec with FD_CLOFORK cleared (interpretation 1851, TC1), and
+ * keep O_CLOFORK out of the file status flags. */
 #include <fcntl.h>
 #include <spawn.h>
 #include <stdio.h>
@@ -37,11 +38,31 @@ static int open_in_spawn(int fd)
 	return WEXITSTATUS(st);
 }
 
+/* FD_CLOFORK set on fd in a process that then execs: the flags it has
+   in the new program (2: closed) */
+static int flags_after_exec(int fd)
+{
+	char arg[16], *av[] = { "k_clofork", "-f", arg, 0 };
+	pid_t p; int st;
+	snprintf(arg, sizeof arg, "%d", fd);
+	if ((p = fork()) == 0) {
+		fcntl(fd, F_SETFD, FD_CLOFORK);
+		execv("/proc/self/exe", av);
+		_exit(9);
+	}
+	waitpid(p, &st, 0);
+	return WEXITSTATUS(st);
+}
+
 int main(int argc, char **argv)
 {
 	int fd, fd2, fds[2], sv[2];
 	if (argc == 3 && !strcmp(argv[1], "-q"))
 		return fcntl(atoi(argv[2]), F_GETFD) >= 0;
+	if (argc == 3 && !strcmp(argv[1], "-f")) {
+		long r = rawgetfd(atoi(argv[2]));
+		return r < 0 ? 2 : (int)r;
+	}
 
 	fd = open("/", O_RDONLY | O_DIRECTORY | O_CLOFORK);
 	CHECK(fd >= 0 && rawgetfd(fd) == FD_CLOFORK);           /* native */
@@ -55,6 +76,9 @@ int main(int argc, char **argv)
 	CHECK(open_in_child(fd2) == 0);
 	CHECK(fcntl(fd2, F_SETFD, FD_CLOEXEC) == 0 && open_in_child(fd2) == 1);
 	CHECK(open_in_spawn(fd2) == 0);                       /* closed by exec */
+	close(fd2);
+	fd2 = dup(fd);
+	CHECK(flags_after_exec(fd2) == 0);                    /* kept, FD_CLOFORK cleared */
 	close(fd2);
 
 	fd2 = fcntl(fd, F_DUPFD_CLOFORK, 40);

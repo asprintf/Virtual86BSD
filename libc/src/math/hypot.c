@@ -4,9 +4,9 @@ long double hypotl(long double x, long double y)
 {
 	long double ax = __ld_abs(x), ay = __ld_abs(y), t;
 	int e;
-	if (ax - ax != 0 && ax == ax)
+	if (__ld_nonfinite(ax) && ax == ax)
 		return ax;              /* inf, even if y is NaN */
-	if (ay - ay != 0 && ay == ay)
+	if (__ld_nonfinite(ay) && ay == ay)
 		return ay;
 	if (x != x || y != y)
 		return x + y;
@@ -28,7 +28,7 @@ long double hypotl(long double x, long double y)
 double hypot(double x, double y)
 {
 	long double ax = x, ay = y;
-	if (ax - ax != 0 || ay - ay != 0)
+	if (__ld_nonfinite(ax) || __ld_nonfinite(ay))
 		return hypotl(x, y);
 	return __math_d(__x87_sqrt(ax * ax + ay * ay));
 }

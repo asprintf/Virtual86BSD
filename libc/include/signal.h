@@ -113,10 +113,12 @@ typedef struct {
 	size_t ss_size;
 } stack_t;
 
+#if __XSI_VISIBLE
 #define SS_ONSTACK  1
 #define SS_DISABLE  2
 #define MINSIGSTKSZ 2048
 #define SIGSTKSZ    8192
+#endif
 
 /* Machine context: the kernel's x86-64 sigcontext. */
 typedef struct {
@@ -169,8 +171,10 @@ typedef struct __ucontext {
 #define BUS_ADRERR 2
 #define BUS_OBJERR 3
 
+#if __XSI_VISIBLE
 #define TRAP_BRKPT 1
 #define TRAP_TRACE 2
+#endif
 
 #define CLD_EXITED    1
 #define CLD_KILLED    2
@@ -179,12 +183,15 @@ typedef struct __ucontext {
 #define CLD_STOPPED   5
 #define CLD_CONTINUED 6
 
+/* SIGPOLL's codes: not in POSIX.1-2024 (STREAMS removed) */
+#if __EXT_VISIBLE
 #define POLL_IN  1
 #define POLL_OUT 2
 #define POLL_MSG 3
 #define POLL_ERR 4
 #define POLL_PRI 5
 #define POLL_HUP 6
+#endif
 #endif /* __POSIX_VISIBLE */
 
 __BEGIN_DECLS

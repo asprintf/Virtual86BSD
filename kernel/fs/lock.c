@@ -133,9 +133,9 @@ long do_fcntl_lock(struct file *f, int cmd, void *ufl) {
   if (fl.type != F_RDLCK && fl.type != F_WRLCK && fl.type != F_UNLCK)
     return -EINVAL;
   if (cmd == F_GETLK || cmd == F_OFD_GETLK) {
-    if (fl.type == F_UNLCK)
-      return -EINVAL;
-    struct lock *c = find_conflict(ino, owner, fl.type, s, e);
+    /* F_UNLCK asked about: nothing would block it, so F_UNLCK (as Linux
+       and the BSDs answer; os-test expects it) */
+    struct lock *c = fl.type == F_UNLCK ? NULL : find_conflict(ino, owner, fl.type, s, e);
     if (!c)
       fl.type = F_UNLCK;
     else {

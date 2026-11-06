@@ -21,9 +21,17 @@ const char *command_default_path(void)
     return buf;
 }
 
+/* the last command of a subshell can replace it, unless a trap is set
+   (EXIT, or a signal caught: the trap would be lost) */
 static int exec_in_place_ok(int flags)
 {
-    return (flags & EV_EXIT) && !trap_actions[0] && !gotsig;
+    int i;
+    if (!(flags & EV_EXIT) || gotsig)
+        return 0;
+    for (i = 0; i < NSIGS; i++)
+        if (trap_actions[i] && (i == 0 || *trap_actions[i]))
+            return 0;
+    return 1;
 }
 
 /* ------------------------------------------------------------------ */
@@ -172,8 +180,9 @@ int redirect(Redir *r, int save)
                 return -1;
             }
             {
-                int src = atoi(fname);
-                if (fcntl(src, F_GETFD) < 0) {
+                int src = atoi(fname), fl = fcntl(src, F_GETFL);
+                /* open for output (>&), for input (<&): 2.7.5, 2.7.6 */
+                if (fl < 0 || (fl & O_ACCMODE) == (r->type == R_DUPOUT ? O_RDONLY : O_WRONLY)) {
                     sh_warn("%s: bad file descriptor", fname);
                     return -1;
                 }
@@ -365,6 +374,57 @@ int hash_add(const char *name)
     return 0;
 }
 
+/* set -h: the utilities a function invokes are located when it is
+   defined (those named by a literal word that are not built-ins or
+   functions; ones not found are left for execution to report) */
+static void hash_tree(Node *n)
+{
+    int i;
+    if (!n)
+        return;
+    switch (n->type) {
+    case N_SIMPLE: {
+        char *lit = n->u.simple.words ? word_literal(n->u.simple.words) : NULL;
+        if (lit && !strchr(lit, '/') && !builtin_lookup(lit) && !func_lookup(lit) &&
+            !hash_get(lit)) {
+            char *p = path_search(lit, var_get("PATH"));
+            if (p && p[0] == '/')
+                hash_put(lit, p);
+        }
+        break;
+    }
+    case N_PIPE:
+        for (i = 0; i < n->u.pipe.n; i++)
+            hash_tree(n->u.pipe.cmds[i]);
+        break;
+    case N_AND: case N_OR: case N_LIST:
+        hash_tree(n->u.bin.a);
+        hash_tree(n->u.bin.b);
+        break;
+    case N_ASYNC: case N_NOT: case N_SUBSHELL: case N_BRACE:
+        hash_tree(n->u.un.a);
+        break;
+    case N_IF:
+        hash_tree(n->u.nif.cond);
+        hash_tree(n->u.nif.then);
+        hash_tree(n->u.nif.els);
+        break;
+    case N_WHILE: case N_UNTIL:
+        hash_tree(n->u.loop.cond);
+        hash_tree(n->u.loop.body);
+        break;
+    case N_FOR:
+        hash_tree(n->u.nfor.body);
+        break;
+    case N_CASE: {
+        CaseItem *c;
+        for (c = n->u.ncase.items; c; c = c->next)
+            hash_tree(c->body);
+        break;
+    }
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /* external commands                                                  */
 /* ------------------------------------------------------------------ */
@@ -441,8 +501,10 @@ void exec_external(char **argv, char **envp, const char *path_override)
 
 void enter_subshell(int keep_traps)
 {
+    extern int exit_begun;
     (void)keep_traps;
     in_subshell = 1;
+    exit_begun = 0;     /* (a subshell of an EXIT trap may set its own) */
     interactive = 0;
     opts[O_INTERACTIVE] = 0;
     reset_traps_for_subshell();
@@ -475,8 +537,9 @@ static pid_t do_fork(Job *j, int bg)
         signals_child_reset(bg && !(j && j->jobctl));
         if (bg && !(j && j->jobctl)) {
             /* an asynchronous list without job control: SIGINT and SIGQUIT
-               ignored, as if on entry (XCU 2.11), also for what it forks */
-            sig_ignored_at_entry[SIGINT] = sig_ignored_at_entry[SIGQUIT] = 1;
+               ignored (XCU 2.12), also for what it forks, unless a trap
+               command in the list changes them */
+            sig_inherit_ign[SIGINT] = sig_inherit_ign[SIGQUIT] = 1;
         }
         if (bg && !(j && j->jobctl)) {
             /* stdin of async lists without job control: /dev/null */
@@ -641,17 +704,20 @@ static int run_builtin_cmd(const Builtin *b, int argc, char **argv, char **as, i
     int st;
     int special = (b->flags & BI_SPECIAL) && !via_command;
     char *volatile savedname = commandname;
+    if (b->fn == bltin_exec_fn() && argc == 1) {
+        /* exec without a command: redirections affect the shell, also
+           through "command exec" (whose errors do not end the shell) */
+        if (special)
+            set_assignments(as, nas, V_EXPORT, NULL);
+        if (redirect(redir, 0) < 0) {
+            if (special && !interactive)
+                exitshell(1);
+            return 1;
+        }
+        return 0;
+    }
     if (special) {
         set_assignments(as, nas, b->fn == bltin_exec_fn() ? V_EXPORT : 0, NULL);
-        if (b->fn == bltin_exec_fn() && argc == 1) {
-            /* exec without a command: redirections affect the shell */
-            if (redirect(redir, 0) < 0) {
-                if (!interactive)
-                    exitshell(1);
-                return 1;
-            }
-            return 0;
-        }
     } else {
         VarSave *tmp = NULL;
         set_assignments(as, nas, V_EXPORT, &tmp);
@@ -701,6 +767,35 @@ static int builtin_usable(const Builtin *b, const char *name, const char *path)
     return find_command(name, path, NULL) != NULL;
 }
 
+/* does w have an expansion that can have side effects? */
+static int word_expands(const Word *w)
+{
+    const char *p;
+    if (!w)
+        return 0;
+    if (w->nsubs)
+        return 1;
+    for (p = w->s; *p; p++) {
+        if (*p == CTLESC) {
+            if (!*++p)
+                break;
+        } else if (*p == CTLVAR || *p == CTLBACKQ || *p == CTLARI)
+            return 1;
+    }
+    return 0;
+}
+
+static int redirs_expand(const Redir *r)
+{
+    for (; r; r = r->next)
+        if (word_expands(r->word) || (r->here && !r->hquoted && word_expands(r->here)))
+            return 1;
+    return 0;
+}
+
+/* (eval_simple's returns, giving back redirections done early) */
+#define SIMPLE_RETURN(x) do { int r_ = (x); if (predepth >= 0) undo_redirects(predepth); return r_; } while (0)
+
 static int eval_simple(Node *n, int flags)
 {
     ArgList args = { NULL, 0, 0 };
@@ -708,6 +803,8 @@ static int eval_simple(Node *n, int flags)
     int nas = 0, i, status;
     Word *w;
     int via_command = 0;
+    Redir *redir = n->redir;
+    int predepth = -1;
     const char *cmdpath = NULL;
 
     cmd_lineno = n->lineno;
@@ -747,6 +844,24 @@ static int eval_simple(Node *n, int flags)
     for (w = n->u.simple.assigns; w; w = w->next) {
         nas++;
     }
+    /* the redirections before the assignments are expanded (2.9.1.1, 3
+       before 4), when an assignment has an expansion that could see
+       their effect; a special built-in may have either order */
+    if (nas && args.n > 0 && redir) {
+        const Builtin *sb = builtin_lookup(args.v[0]);
+        int expands = 0;
+        for (w = n->u.simple.assigns; w; w = w->next)
+            expands |= word_expands(w);
+        if (expands && !(sb && (sb->flags & BI_SPECIAL))) {
+            predepth = redir_depth();
+            if (redirect(redir, 1) < 0) {
+                undo_redirects(predepth);
+                free(args.v);
+                return 1;
+            }
+            redir = NULL;
+        }
+    }
     if (nas && args.n > 0) {
         as = stalloc((size_t)nas * sizeof(char *));
         for (w = n->u.simple.assigns, i = 0; w; w = w->next, i++)
@@ -767,12 +882,27 @@ static int eval_simple(Node *n, int flags)
             xtrace(NULL, &a, 1, NULL);
             set_assignments(&a, 1, 0, NULL);
         }
+        /* the redirections are performed in a subshell environment
+           (2.9.1.3): one is made when their expansions could change
+           this one (parameter expansion, command substitution,
+           arithmetic, in a word or a here-document); the status is that
+           of the last command substitution, if any */
+        if (redirs_expand(redir)) {
+            Job *j = job_new(1, 0);
+            pid_t pid = do_fork(j, 0);
+            if (pid == 0) {
+                st = redirect(redir, 0) < 0 ? 1 : cmdsub_status_set ? cmdsub_status : 0;
+                sh_exit_now(st);
+            }
+            free(args.v);
+            SIMPLE_RETURN(job_wait(j));
+        }
         st = cmdsub_status_set ? cmdsub_status : 0;
-        if (redirect(n->redir, 1) < 0)
+        if (redirect(redir, 1) < 0)
             st = 1;
         undo_redirects(depth);
         free(args.v);
-        return st;
+        SIMPLE_RETURN(st);
     }
 
     /* "command" handled here so that it can suppress function lookup */
@@ -783,7 +913,8 @@ static int eval_simple(Node *n, int flags)
         const Builtin *b;
         Func *f;
 
-        while (strcmp(name, "command") == 0) {
+        /* (a function named "command" comes first: 2.9.1.4 c before d) */
+        while (strcmp(name, "command") == 0 && (via_command || !func_lookup(name))) {
             int i = 1, pflag = 0, vflag = 0, bad = 0;
             while (i < argc && argv[i][0] == '-' && argv[i][1]) {
                 const char *o;
@@ -800,16 +931,17 @@ static int eval_simple(Node *n, int flags)
             }
             if (vflag || bad) {
                 status = run_builtin_cmd(builtin_lookup("command"), argc, argv, as, nas,
-                                         n->redir, 0);
+                                         redir, 0);
                 free(args.v);
-                return status;
+                SIMPLE_RETURN(status);
             }
             argv += i;
             argc -= i;
             via_command = 1;
             if (argc == 0) {
+                check_readonly(as, nas);    /* (a=b command: still an assignment error) */
                 free(args.v);
-                return 0;
+                SIMPLE_RETURN(0);
             }
             name = argv[0];
             cmdpath = pflag ? command_default_path() : NULL;
@@ -818,20 +950,20 @@ static int eval_simple(Node *n, int flags)
         if (!strchr(name, '/')) {
             b = builtin_lookup(name);
             if (b && (b->flags & BI_SPECIAL)) {
-                status = run_builtin_cmd(b, argc, argv, as, nas, n->redir, via_command);
+                status = run_builtin_cmd(b, argc, argv, as, nas, redir, via_command);
                 free(args.v);
-                return status;
+                SIMPLE_RETURN(status);
             }
             if (!via_command && (f = func_lookup(name))) {
-                status = call_function(f, argc, argv, as, nas, n->redir);
+                status = call_function(f, argc, argv, as, nas, redir);
                 free(args.v);
-                return status;
+                SIMPLE_RETURN(status);
             }
             if (b && builtin_usable(b, name, cmdpath)) {
                 check_readonly(as, nas);
-                status = run_builtin_cmd(b, argc, argv, as, nas, n->redir, via_command);
+                status = run_builtin_cmd(b, argc, argv, as, nas, redir, via_command);
                 free(args.v);
-                return status;
+                SIMPLE_RETURN(status);
             }
         }
 
@@ -841,15 +973,15 @@ static int eval_simple(Node *n, int flags)
             char *path = strchr(name, '/') ? (char *)name : find_command(name, cmdpath, NULL);
             if (!path) {
                 int depth = redir_depth();
-                if (redirect(n->redir, 1) == 0)
+                if (redirect(redir, 1) == 0)
                     sh_warn("%s: not found", name);
                 undo_redirects(depth);
                 free(args.v);
-                return 127;
+                SIMPLE_RETURN(127);
             }
             if (exec_in_place_ok(flags)) {
                 char **env;
-                if (redirect(n->redir, 0) < 0)
+                if (redirect(redir, 0) < 0)
                     sh_exit_now(1);
                 set_assignments(as, nas, V_EXPORT, NULL);
                 env = var_environ();
@@ -863,7 +995,7 @@ static int eval_simple(Node *n, int flags)
                 pid = do_fork(j, 0);
                 if (pid == 0) {
                     char **env;
-                    if (redirect(n->redir, 0) < 0)
+                    if (redirect(redir, 0) < 0)
                         sh_exit_now(1);
                     set_assignments(as, nas, V_EXPORT, NULL);
                     env = var_environ();
@@ -871,11 +1003,12 @@ static int eval_simple(Node *n, int flags)
                 }
                 status = job_wait(j);
                 free(args.v);
-                return status;
+                SIMPLE_RETURN(status);
             }
         }
     }
 }
+#undef SIMPLE_RETURN
 
 /* exec a resolved path keeping argv[0] as given */
 void exec_external_path(const char *path, char **argv, char **envp)
@@ -1249,6 +1382,8 @@ static int eval_tree1(Node *n, int flags)
         exitstatus = st;
         return st;
     case N_FUNCDEF:
+        if (opts[O_HASHALL])
+            hash_tree(n->u.func.body);
         func_define(n->u.func.name, n->u.func.body);
         st = 0;
         break;

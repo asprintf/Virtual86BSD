@@ -4,7 +4,7 @@
 # Usage: sh tools/mkdisk.sh rootdir image [size-in-MiB]
 #
 # The root is copied to a staging directory, completed with what a booted
-# system needs (/sbin, /dev, /proc, /tmp, /sys; user/init as /sbin/init if
+# system needs (/sbin, /dev, /proc, /tmp, /sys, /run; user/init as /sbin/init if
 # it has been built: make init), and written with the host's mke2fs -d
 # (e2fsprogs).  Files are owned by root.  Plain ext2: filetype,
 # sparse_super, large_file.
@@ -16,7 +16,7 @@ size=${3:-512}
 stage=${TMPDIR:-/tmp}/mkdisk.$$
 rm -rf "$stage"
 cp -pR "$root" "$stage"
-for d in dev proc tmp sys root usr/sbin; do
+for d in dev proc tmp sys root run usr/sbin; do
     [ -d "$stage/$d" ] || mkdir -p "$stage/$d"
 done
 chmod 1777 "$stage/tmp"

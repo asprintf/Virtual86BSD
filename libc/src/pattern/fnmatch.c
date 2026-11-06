@@ -13,7 +13,16 @@
  * multi-character collating elements ("ch") named by [.ch.] or of an
  * equivalence class [=x=]; ranges and non-matching lists match single
  * characters (as in regcomp()).  Where both a character and an element
- * match, both are tried. */
+ * match, both are tried.
+ *
+ * Without FNM_NOESCAPE a backslash escapes the next character everywhere,
+ * also in the names of [:class:], [.symbol.] and [=class=] (XCU 2.14.1:
+ * "regardless of whether or not the <backslash> is inside a bracket
+ * expression").  With FNM_PATHNAME a slash is matched only by a slash,
+ * never by a bracket expression; a bracket expression with a slash in it
+ * is still one (fnmatch() takes XCU 2.14.1 and 2.14.2, not the rule of
+ * 2.14.3 that makes its '[' ordinary: glob() and the shell split the
+ * pattern at slashes first, pax does that rule itself). */
 
 #define NAMEMAX 64
 
@@ -76,6 +85,8 @@ static const unsigned char *elem(const struct m *m, const unsigned char *p, stru
 		const unsigned char *q = p + 2;
 		do {
 			if (!*q || x->n == NAMEMAX) return 0;
+			/* escapes work here too (XCU 2.14.1): [[.\..]] is [[...]] */
+			if (q[0] == '\\' && !(m->flags & FNM_NOESCAPE) && q[1]) q++;
 			q += get(m, q, &c);
 			x->u[x->n++] = c;
 		} while (!(q[0] == d && q[1] == ']'));
@@ -116,17 +127,21 @@ static const unsigned char *bracket(const struct m *m, const unsigned char *p, c
 	for (;; first = 0) {
 		if (!*p) return 0;
 		if (*p == ']' && !first) { p++; break; }
-		if ((m->flags & FNM_PATHNAME) && *p == '/') return 0;
 		if (p[0] == '[' && p[1] == ':') {
+			/* the class name, without its escapes ([[:al\num:]] is
+			 * [[:alnum:]]: XCU 2.14.1 escapes inside bracket
+			 * expressions too) */
 			const unsigned char *e = p + 2;
 			char name[32];
-			size_t l;
+			size_t l = 0;
 			unsigned long t;
-			while (*e && !(e[0] == ':' && e[1] == ']')) e++;
+			while (*e && !(e[0] == ':' && e[1] == ']')) {
+				if (e[0] == '\\' && !(m->flags & FNM_NOESCAPE) && e[1]) e++;
+				if (l < sizeof name) name[l] = (char)*e;
+				l++, e++;
+			}
 			if (!*e) return 0;
-			l = (size_t)(e - (p + 2));
 			if (l < sizeof name && x->n == 1) {
-				memcpy(name, p + 2, l);
 				name[l] = 0;
 				t = __wctype_l(name, m->ct);
 				if (t && ch < 0x110000) {

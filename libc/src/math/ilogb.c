@@ -18,7 +18,7 @@ int ilogbl(long double x)
 		r = FP_ILOGBNAN;
 	else if (x == 0)
 		r = FP_ILOGB0;
-	else if (x - x != 0)
+	else if (__ld_nonfinite(x))
 		r = INT_MAX;
 	else
 		return expo(x);
@@ -35,8 +35,8 @@ long double logbl(long double x)
 	if (x != x)
 		return x + x;
 	if (x == 0)
-		return -1 / __ld_abs(x);      /* FE_DIVBYZERO; no errno, as glibc */
-	if (x - x != 0)
+		return __math_divzero(1);     /* a pole error: -HUGE_VALL, ERANGE, FE_DIVBYZERO (POSIX) */
+	if (__ld_nonfinite(x))
 		return __ld_abs(x);
 	return expo(x);
 }

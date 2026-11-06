@@ -15,7 +15,7 @@ static long double halfexp(long double ax)
 long double sinhl(long double x)
 {
 	long double ax = __ld_abs(x), t, r;
-	if (x - x != 0)
+	if (__ld_nonfinite(x))
 		return x + x;
 	if (ax < 0x1p-32L)
 		return __math_l(x);
@@ -36,7 +36,7 @@ long double coshl(long double x)
 	long double ax = __ld_abs(x), t;
 	if (x != x)
 		return x + x;
-	if (ax - ax != 0)
+	if (__ld_nonfinite(ax))
 		return ax;
 	if (ax < 0x1p-33L)
 		return 1;

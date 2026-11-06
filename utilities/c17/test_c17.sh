@@ -196,6 +196,10 @@ printf '\t.globl seven\nseven:\tmovl $7, %%eax\n\tret\n' > seven.s
 printf 'int seven(void);\nint main(void) { return seven(); }\n' > usesev.c
 t ".s operands are assembled" "" 7 sh -c '"$1" -o sev usesev.c seven.s; ./sev' sh "$U"
 t "-c with a .s operand" "" 0 sh -c '"$1" -c seven.s && [ -f seven.o ]' sh "$U"
+printf '#define TWO 2\n#define F(a, b) ((a) + (b))\n#define V(x, ...) x __VA_ARGS__\n#undef TWO\n' > dm.c
+t "-E -dM: the macros defined at the end" "#define F(a,b) ((a) + (b))
+#define V(x,...) x __VA_ARGS__
+0" 1 sh -c '"$1" -E -dM dm.c | grep "^#define [FV](" | sort; "$1" -E -dM dm.c | grep -c "^#define TWO"' sh "$U"
 
 # ------------------------------------------------------------ programs
 # at -O 0 and -O 1 with the default C library, and at -O 1 with every

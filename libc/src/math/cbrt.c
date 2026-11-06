@@ -6,7 +6,7 @@ long double cbrtl(long double x)
 {
 	long double ax = __ld_abs(x), y, y3, n, m;
 	int e;
-	if (x == 0 || x - x != 0)
+	if (x == 0 || __ld_nonfinite(x))
 		return x + x;
 	/* ax = m 2^(3n), m in [1, 8) */
 	e = __ld_exp(ax) - 16383;

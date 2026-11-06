@@ -56,6 +56,18 @@ Inside QEMU, on an ext2 disk made from a bootstrapped Shall root:
   mappings (as Linux), and finding room for a new one no longer takes time
   quadratic in their number (`mmap` right below the one placed last, else
   one walk down the sorted list).
+* os-test (Sortix's, 5816 tests) built inside the system and run on this
+  kernel: 5610 pass, glibc on Linux 5228 (`libc/STATUS.md`, stage 18).
+  It found here: a pseudoterminal's slave opened with `O_NOCTTY` still
+  became the controlling terminal (the flag is not kept in the file, and
+  the pty's own open looked for it there: `tty_maybe_set_ctty` now does
+  ptys too); zombies count as members of their process group (`tcsetpgrp`,
+  `setpgid`); `open` of a directory with `O_CREAT` and without
+  `O_DIRECTORY` fails with `EISDIR`; `setpgid`/`setsid` wake a parent
+  waiting for the old group (it may have no children left in it:
+  `ECHILD`); `poll` on a hung-up terminal gives `POLLIN | POLLHUP |
+  POLLERR`, not `POLLOUT`; `F_GETLK`/`F_OFD_GETLK` of `F_UNLCK` answer
+  `F_UNLCK`; a new pseudoterminal is 0x0 until its controller sets a size.
 * The network: `k_net` passes through QEMU's user networking (UDP,
   fragmented both ways; 2 MiB of TCP each way; refused and non-blocking
   connects; ping; a server reached from the host), also with every 13th
@@ -80,7 +92,8 @@ can find out at run time and keep its emulation on Linux:
   `socketpair` and `accept4`; `MSG_CMSG_CLOFORK` in `recvmsg`.  A new
   process (`fork`, `vfork`, `clone` without `CLONE_THREAD`, hence also
   `posix_spawn`) gets a table without the flagged descriptors; exec keeps
-  them.  The
+  them and clears the flag (Austin Group interpretation 1851, for TC1: the
+  2024 text kept it).  The
   library tests once whether `F_GETFD` reports `FD_CLOFORK` after an
   `open` with `O_CLOFORK` (`tests/k_clofork` checks that it then uses the
   kernel's).
@@ -257,7 +270,9 @@ words become init's environment; init uses `CONSOLE` (default
   below 1024 for root), `EADDRINUSE` with Linux's `SO_REUSEADDR` rules,
   dual-stack AF_INET6 sockets (IPv4 peers as `::ffff:a.b.c.d`) unless
   `IPV6_V6ONLY`, connected UDP sockets that hear only their peer and get
-  `ECONNREFUSED` when it is gone.  Raw sockets (root): a packet to a
+  `ECONNREFUSED` when it is gone.  A UDP socket's address that connect()
+  chose (not bind()) is chosen again by the next connect() and dropped by
+  a disconnect (`AF_UNSPEC`).  Raw sockets (root): a packet to a
   loopback address reaches the raw sockets of its protocol (IPv4 with its
   header); the kernel answers ICMP and ICMPv6 echo requests.  Other
   destinations: `ENETUNREACH`.  `SIOCGIF*` and `/proc/net/dev` show `lo`.

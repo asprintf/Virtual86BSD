@@ -24,15 +24,19 @@ static volatile int lock;
 static char tag[64];
 static int opts, facility = LOG_USER, mask = 0xff, fd = -1;
 
+/* without a syslogd (no /dev/log) messages are dropped; errno is kept:
+   openlog() and syslog() have no errors */
 static void opensock(void)
 {
 	static const struct sockaddr_un log = {AF_UNIX, "/dev/log"};
+	int e = errno;
 	if (fd < 0)
 		fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
 	if (fd >= 0 && connect(fd, (const struct sockaddr *)&log, sizeof log) < 0) {
 		close(fd);
 		fd = -1;
 	}
+	errno = e;
 }
 
 void openlog(const char *ident, int option, int fac)

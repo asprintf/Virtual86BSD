@@ -87,8 +87,9 @@
 #define _XOPEN_REALTIME_THREADS         1
 #define _XOPEN_SHM                      1
 #define _XOPEN_UNIX                     1
-#define _XOPEN_UUCP                     1
 #endif
+/* the UUCP Utilities option: [UU], not XSI */
+#define _XOPEN_UUCP                     1
 
 /* ---- Execution-time constants ---- */
 #define _POSIX_ASYNC_IO  1

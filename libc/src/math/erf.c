@@ -56,7 +56,7 @@ long double erfcl(long double x)
 		return x + x;
 	if (x < 0.5L)
 		return x < -7 ? 2 : 1 - erfl(x);
-	if (x - x != 0)
+	if (__ld_nonfinite(x))
 		return 0;
 	r = erfc_cf(x);
 	if (r == 0)

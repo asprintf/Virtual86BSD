@@ -28,6 +28,10 @@ typedef struct Src {
 
 static Src *src;
 int alias_blank_popped;     /* an alias whose value ends in a blank ended */
+/* the value of an alias ended: the lexer may end the word it is reading
+   ("unspecified whether the current token is delimited", 2.3.1), as it
+   does unless a backslash or a quote reaches across */
+int alias_delim;
 static Src base_src;    /* pushback holder when no source is active */
 #define PB (src ? src : &base_src)
 static int prompt_which = 1;
@@ -164,7 +168,6 @@ static int fill_fd(Src *s)
     }
     s->pos = 0;
     s->len = (size_t)n;
-    echo_verbose(s->buf, s->len);
     return 1;
 }
 
@@ -176,8 +179,18 @@ int pgetc(void)
             return EOF;
         if (s->npush)
             return s->pushback[--s->npush];
-        if (s->pos < s->len)
-            return (unsigned char)s->buf[s->pos++];
+        if (s->pos < s->len) {
+            int c = (unsigned char)s->buf[s->pos++];
+            /* set -v: the input as it is read, a byte at a time as the
+               lexer takes it (a buffer read ahead, and read again after
+               input_sync, is not echoed twice) */
+            if (s->type == S_FD && !s->tty && opts[O_VERBOSE]) {
+                outc(&out2, c);
+                if (c == '\n' || s->pos == s->len)
+                    outflush(&out2);
+            }
+            return c;
+        }
         if (s->type == S_FD) {
             if (!fill_fd(s))
                 return EOF;
@@ -188,11 +201,10 @@ int pgetc(void)
             continue;
         }
         if (s->type == S_ALIAS) {
-            /* end of an alias value: continue with the enclosing input,
-             * behaving as if a <space> had been read */
+            /* end of an alias value: continue with the enclosing input
+             * (a here-document goes on there too), telling the lexer */
             pop_input();
-            if (src && src->npush < 16)
-                src->pushback[src->npush++] = ' ';
+            alias_delim = 1;
             continue;
         }
         return EOF;     /* end of a string source */

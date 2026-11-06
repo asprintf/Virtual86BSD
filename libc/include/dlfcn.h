@@ -15,8 +15,10 @@ typedef struct {
 	void *dli_saddr;
 } Dl_info_t;
 
-#if __EXT_VISIBLE
+/* Dl_info: the same type (Austin Group interpretation 1847, TC1) */
 typedef Dl_info_t Dl_info;
+
+#if __EXT_VISIBLE
 #define RTLD_NEXT    ((void *)-1)
 #define RTLD_DEFAULT ((void *)0)
 #endif

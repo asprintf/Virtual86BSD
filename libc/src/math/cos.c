@@ -3,7 +3,7 @@
 long double cosl(long double x)
 {
 	long double r;
-	if (x - x != 0)
+	if (__ld_nonfinite(x))
 		return __math_invalid(x);
 	switch (__rem_pio2l(x, &r)) {
 	case 0: return __x87_cos(r);

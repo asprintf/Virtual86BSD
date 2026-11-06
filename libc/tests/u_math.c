@@ -148,6 +148,14 @@ static void out(const char *name, const char *args, struct res r, double tol, do
 	}
 	if (special && r.err != ref.err)
 		bad = 1;
+	/* deliberate: logb(0) is a pole error, errno ERANGE (POSIX); glibc
+	 * leaves errno alone */
+	if (special && !strncmp(name, "logb", 4) && r.err == ERANGE && ref.err == 0 && u == 0)
+		bad = 0;
+	/* deliberate: pow(0, -inf) has the pole error POSIX allows ("may"),
+	 * as pow(0, y < 0) has; glibc sets errno only for a finite y */
+	if (special && !strncmp(name, "pow", 3) && r.err == ERANGE && ref.err == 0 && u == 0)
+		bad = 0;   /* (the same value: an infinity) */
 	record(name, u > 1e29 ? 1e9 : u);
 	if (bad) {
 		show(&r, a); show(&ref, b);

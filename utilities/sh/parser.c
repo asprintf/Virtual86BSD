@@ -104,6 +104,8 @@ static int is_name_alias(const char *s)
 static Node *parse_cmdsub_paren(void);
 static Node *parse_string_program(const char *s);
 static void scan_word(WCtx *c, int mode);
+extern int alias_blank_popped, alias_delim;
+static int alias_cut;      /* scan_word ended a word at the end of an alias */
 static void read_heredocs(void);
 
 static int nextc(void)
@@ -470,10 +472,23 @@ static int looks_arith(void)
                 depth--;
                 continue;
             }
-            ch = nextc();
-            if (ch != EOF)
-                sb_addc(&rec, ch);
-            result = (ch == ')');
+            /* the next character, after any line continuations */
+            for (;;) {
+                ch = nextc();
+                if (ch != EOF)
+                    sb_addc(&rec, ch);
+                if (ch == '\\') {
+                    int e = nextc();
+                    if (e != EOF)
+                        sb_addc(&rec, e);
+                    if (e == '\n')
+                        continue;
+                }
+                break;
+            }
+            /* (the end of input before it is known not to be one: an
+               incomplete arithmetic expansion, 2.6.3) */
+            result = (ch == ')' || ch == EOF);
             break;
         }
     }
@@ -598,6 +613,7 @@ static void scan_dq(WCtx *c, int mode)
     c->quoted = 1;
     sb_addc(&c->b, CTLQUOTE);
     scan_word(c, mode);
+    alias_delim = 0;    /* (the quotes reach across) */
     sb_addc(&c->b, CTLENDQ);
 }
 
@@ -606,6 +622,13 @@ static void scan_word(WCtx *c, int mode)
     int adepth = 0;     /* parenthesis depth in arithmetic */
     for (;;) {
         int ch = nextc();
+        if (alias_delim && mode == M_NORMAL) {
+            /* the alias value this word began in has ended */
+            alias_delim = 0;
+            alias_cut = 1;
+            ungetc_(ch);
+            return;
+        }
         switch (mode) {
         case M_NORMAL:
             if (is_meta(ch)) {
@@ -654,6 +677,7 @@ static void scan_word(WCtx *c, int mode)
         switch (ch) {
         case '\\': {
             int d = nextc();
+            alias_delim = 0;    /* (the backslash reaches across) */
             if (d == '\n') {
                 set_prompt(2);
                 continue;
@@ -693,6 +717,7 @@ static void scan_word(WCtx *c, int mode)
                         break;
                     add_quoted(c, d);
                 }
+                alias_delim = 0;    /* (the quotes reach across) */
                 continue;
             }
             break;
@@ -727,7 +752,6 @@ static void scan_word(WCtx *c, int mode)
 /* lexer                                                              */
 /* ------------------------------------------------------------------ */
 
-extern int alias_blank_popped;
 
 static void lex(Token *t)
 {
@@ -755,6 +779,11 @@ again:
     t->lineno = parse_lineno;
     t->after_blank_alias = alias_blank_popped;
     alias_blank_popped = 0;
+    alias_delim = 0;    /* (an alias that ended before this token) */
+    alias_cut = 0;
+    /* (the second and third characters of an operator are read with
+       line continuation removed, which comes before token recognition:
+       2.2.1) */
     switch (ch) {
     case EOF:
         t->type = T_EOF;
@@ -766,20 +795,20 @@ again:
             read_heredocs();
         return;
     case ';': {
-        int d = nextc();
+        int d = nextc_cont();
         if (d == ';') t->type = T_DSEMI;
         else if (d == '&') t->type = T_SEMI_AND;
         else { ungetc_(d); t->type = T_SEMI; }
         return;
     }
     case '&': {
-        int d = nextc();
+        int d = nextc_cont();
         if (d == '&') t->type = T_AND_IF;
         else { ungetc_(d); t->type = T_AMP; }
         return;
     }
     case '|': {
-        int d = nextc();
+        int d = nextc_cont();
         if (d == '|') t->type = T_OR_IF;
         else { ungetc_(d); t->type = T_PIPE; }
         return;
@@ -787,9 +816,9 @@ again:
     case '(': t->type = T_LPAREN; return;
     case ')': t->type = T_RPAREN; return;
     case '<': {
-        int d = nextc();
+        int d = nextc_cont();
         if (d == '<') {
-            int e = nextc();
+            int e = nextc_cont();
             if (e == '-') t->type = T_DLESSDASH;
             else { ungetc_(e); t->type = T_DLESS; }
         } else if (d == '&') t->type = T_LESSAND;
@@ -798,7 +827,7 @@ again:
         return;
     }
     case '>': {
-        int d = nextc();
+        int d = nextc_cont();
         if (d == '>') t->type = T_DGREAT;
         else if (d == '&') t->type = T_GREATAND;
         else if (d == '|') t->type = T_CLOBBER;
@@ -814,9 +843,11 @@ again:
         scan_word(&c, M_NORMAL);
         t->word = ctx_word(&c);
         t->type = T_WORD;
-        d = nextc();
+        d = nextc_cont();
         ungetc_(d);
-        if ((d == '<' || d == '>') && is_number(t->word->s) && !t->word->quoted &&
+        /* (digits that an alias value ended with are not an IO_NUMBER of
+           the redirection after it) */
+        if ((d == '<' || d == '>') && !alias_cut && !alias_delim && is_number(t->word->s) && !t->word->quoted &&
             strlen(t->word->s) < 8) {
             t->type = T_IO_NUMBER;
             t->ionum = atoi(t->word->s);
@@ -896,7 +927,16 @@ static int alias_check(int cmdpos)
             return done;
         push_alias(a->val, a);
         ntokq = 1;
-        lex(&tokq[0]);
+        {
+            /* the first token of the value takes the place of the one
+               replaced: one that followed an alias ending in a blank, so
+               does the token that replaces it (alias e='echo ' w='x':
+               "e w" looks at x) */
+            int carry = t->after_blank_alias;
+            lex(&tokq[0]);
+            if (carry)
+                tokq[0].after_blank_alias = 1;
+        }
         done = 1;
     }
 }
@@ -1271,11 +1311,11 @@ static int cmd_start(void)
     late = alias_check(1);
     t = &tokq[0];
     if (t->type == T_NEWLINE && pos != P_TOP && pos != P_CMD_BANG) {
-        /* the linebreak is skipped before the command-position alias
-           check; a newline that an alias left here is a bad command */
-        if (late)
-            unexpected(t);
-        return give(NEWLINE, 0, 0);     /* a linebreak: the position stays */
+        /* a linebreak (also one after an alias whose value is blanks:
+           "echo ok | b" with b=" " goes on with the next line, the alias
+           value being read as input, 2.3.1): the position stays */
+        (void)late;
+        return give(NEWLINE, 0, 0);
     }
     if (t->type == T_WORD) {
         lit = word_literal(t->word);
@@ -1297,6 +1337,23 @@ static int cmd_start(void)
             if (ntokq < 2) {
                 lex(&tokq[1]);
                 ntokq = 2;
+                /* the token after it is an alias when the name's alias
+                   value ended in a blank: its value may be the "()" (alias
+                   f='f ' p='()': "f p" defines f) */
+                for (;;) {
+                    Token *u = &tokq[1];
+                    char *ul;
+                    Alias *ua;
+                    if (u->type != T_WORD || !u->after_blank_alias || u->aliaschecked)
+                        break;
+                    u->aliaschecked = 1;
+                    ul = word_literal(u->word);
+                    if (!ul || !is_name_alias(ul) || !(ua = alias_lookup(ul)) || ua->inuse)
+                        break;
+                    push_alias(ua->val, ua);
+                    lex(u);
+                    u->after_blank_alias = 1;
+                }
             }
             if (tokq[1].type == T_LPAREN) {
                 lpos = P_FN_LPAREN;

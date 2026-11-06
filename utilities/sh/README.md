@@ -99,6 +99,10 @@ removes them.
 * Traps for signals ignored on entry are listed by `trap`.
 * `shift n` beyond `$#` exits a non-interactive shell (permitted: "may exit"),
   and `command shift` reports status 2 instead of 1.
+* `read` with fewer variables than fields gives the last one the rest of
+  the line "unsplit", with only IFS white space removed at its ends:
+  `IFS=' -' read a b c` of `A-B-C - ` sets `c` to `C -` (the others, and
+  yash's test suite, give `C`).
 
 ## Choices where the standard leaves room
 
@@ -117,6 +121,68 @@ removes them.
   series of end-of-files.
 
 ## Testing
+
+### The POSIX Shell Tests (yash's test suite)
+
+[posix-shell-tests](https://github.com/posix-shell-tests/posix-shell-tests)
+(yash's POSIX test suite, GPL-2, not in this tree; 120 files, 10,979
+cases, most of them the actions of every signal in every context) is run
+by `tests/posix_shell_tests.sh SUITE SHELL` on the host: its runner needs
+yash, and its job-control tests a terminal (each file gets a
+pseudo-terminal of its own from `script`).  With this shell built by c17
+and linked statically with Shall's C library (November 2026):
+
+| shell | passed | failed | skipped |
+|---|---|---|---|
+| this sh | 10,940 | 8 | 31 |
+| yash 2.55 | 10,957 | 0 | 22 |
+| dash 0.5.12 | 9,674 | 1,271 | 31 |
+| bash 5.2 as sh | 9,166 | 1,634 | 29 (some files cut at 300 s) |
+
+The first run had 970 failures.  Fixed after it: a signal ignored on
+entry to an interactive shell, or SIGINT/SIGQUIT in an asynchronous list
+without job control, could not be reset by `trap` (and stayed ignored in
+subshells and children); `sh -m` made children lose signals ignored on
+entry; job control did not give the terminal back to the process group
+that had it when the shell ended (the next program found itself in the
+background); a subshell with a trap ran its last command in place of
+itself (the trap was lost), and a signal caught just before the shell
+exited never ran its trap; `exit` from within an EXIT trap's subshell
+skipped the subshell's own EXIT trap; `unset` of a read-only variable
+did not end a non-interactive shell (a special built-in's error); a
+function named `command` did not override the built-in; `a=b command`
+did not report the read-only error; `command exec 3<file` did not keep
+the redirection; redirections without a command name were not performed
+in a subshell, and their command substitutions gave no exit status;
+redirections were done after the expansion of assignments (2.9.1.1 has
+them first); `>&3` and `<&3` did not check that the descriptor is open
+in that direction; line continuations inside operators (`&\<newline>&`)
+and before the closing `))` of an arithmetic expansion; `$((` that
+reaches the end of the input is an incomplete arithmetic expansion;
+an alias whose value is blanks followed by a newline; `alias --`;
+`command -V ./x` gave a relative pathname; `bg` wrote ` &` after the
+command; `umask +r` without who did nothing under `umask 777`; `set -h`
+did not locate a function's utilities when it is defined; `set -v`
+echoed input read ahead more than once.
+
+0.9.1 fixed the alias cases that POSIX specifies: an alias value is read
+as input, so a here-document in it continues in the rest of the value and
+a backslash at its end joins the following input (the end of an alias
+value no longer reads as a space: the lexer ends the word there unless a
+backslash or a quote reaches across, and digits the value ends with are
+not an IO_NUMBER); the token that replaces one following an alias whose
+value ends in a blank is examined too (`alias e='echo ' w=x` makes `e w`
+look at `x`), also where a function definition's `()` may come from an
+alias (`alias f='f ' p='()'`).
+
+What is left (8): four alias cases that substitute `in`, `do`, `for` or
+`case` (POSIX: unspecified for a word that could be a reserved word),
+three where the commands of a command substitution are parsed at once
+rather than line by line (unspecified in POSIX.1-2024; dash and bash do
+the same), and `read` (above).  `wait` interrupted by a trap passes or
+fails with the timing of the signal (dash fails it too).
+
+### The regression suite
 
 `tests/run_diff.tl` runs every case in `tests/cases*.txt` under this shell
 and under dash, bash `--posix`, yash `--posix`, BusyBox ash and mksh, and

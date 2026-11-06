@@ -425,9 +425,9 @@ static int bi_trap(int argc, char **argv)
     }
     if (bopt_ind >= argc) {
         for (i = 0; i < NSIGS; i++) {
-            if (!pflag && !tab[i] && !(sig_ignored_at_entry[i] && !interactive && i))
+            if (!pflag && !tab[i] && !(sig_ignored_at_entry[i] && i))
                 continue;
-            if (!tab[i] && sig_ignored_at_entry[i] && !interactive && i && !pflag) {
+            if (!tab[i] && sig_ignored_at_entry[i] && i && !pflag) {
                 outfmt(&out1, "trap -- '' %s\n", sig_name(i));
                 continue;
             }
@@ -477,8 +477,9 @@ static int bi_trap(int argc, char **argv)
             }
             if (s == SIGKILL || s == SIGSTOP)
                 continue;
-            if (s && sig_ignored_at_entry[s] && !interactive)
+            if (s && sig_ignored_at_entry[s])
                 continue;
+            sig_inherit_ign[s] = 0;
             free(trap_actions[s]);
             trap_actions[s] = action ? xstrdup(action) : NULL;
             if (s)
@@ -508,6 +509,12 @@ static int bi_unset(int argc, char **argv)
             ret = 1;
         }
     }
+    /* a special built-in's error: a non-interactive shell exits (2.8.1),
+       after the other names have been unset */
+    if (ret) {
+        exitstatus = 1;
+        raise_exc(EX_ERROR);
+    }
     return ret;
 }
 
@@ -517,12 +524,16 @@ static int bi_unset(int argc, char **argv)
 
 static int bi_alias(int argc, char **argv)
 {
-    int i, ret = 0;
-    if (argc == 1) {
+    int i = 1, ret = 0;
+    /* no options, but a first "--" is discarded (XCU 1.4): alias names
+       may begin with '-' */
+    if (argc > 1 && strcmp(argv[1], "--") == 0)
+        i = 2;
+    if (i >= argc) {
         alias_print_all();
         return 0;
     }
-    for (i = 1; i < argc; i++) {
+    for (; i < argc; i++) {
         char *eq = strchr(argv[i], '=');
         if (eq && eq != argv[i]) {
             char *name = ststrndup(argv[i], (size_t)(eq - argv[i]));
@@ -1033,7 +1044,7 @@ static int bi_fgbg(int argc, char **argv)
             outflush(&out1);
             return job_continue(j, 1);
         }
-        outfmt(&out1, "[%d] %s &\n", j->num, j->cmd ? j->cmd : "");
+        outfmt(&out1, "[%d] %s\n", j->num, j->cmd ? j->cmd : "");   /* (XCU bg STDOUT) */
         outflush(&out1);
         job_continue(j, 0);
         last_bgpid = j->procs[j->nprocs - 1].pid;
@@ -1048,7 +1059,7 @@ static int bi_fgbg(int argc, char **argv)
             outflush(&out1);
             return job_continue(j, 1);
         }
-        outfmt(&out1, "[%d] %s &\n", j->num, j->cmd ? j->cmd : "");
+        outfmt(&out1, "[%d] %s\n", j->num, j->cmd ? j->cmd : "");   /* (XCU bg STDOUT) */
         outflush(&out1);
         job_continue(j, 0);
         last_bgpid = j->procs[j->nprocs - 1].pid;
@@ -1464,16 +1475,16 @@ static int describe(const char *name, int mode, int usedefpath)
     if (strchr(name, '/')) {
         struct stat st;
         if (stat(name, &st) == 0 && access(name, X_OK) == 0 && !S_ISDIR(st.st_mode)) {
-            if (mode == 1) {
-                if (name[0] == '/')
-                    outfmt(&out1, "%s\n", name);
-                else {
-                    char *cwd = getcwd_heap();
-                    outfmt(&out1, "%s/%s\n", cwd ? cwd : ".", name);
-                    free(cwd);
-                }
-            } else
-                outfmt(&out1, "%s is %s\n", name, name);
+            /* the absolute pathname, for -V as for -v */
+            if (mode != 1)
+                outfmt(&out1, "%s is ", name);
+            if (name[0] == '/')
+                outfmt(&out1, "%s\n", name);
+            else {
+                char *cwd = getcwd_heap();
+                outfmt(&out1, "%s/%s\n", cwd ? cwd : ".", name);
+                free(cwd);
+            }
             return 0;
         }
         goto notfound;
@@ -1725,7 +1736,9 @@ static int bi_umask(int argc, char **argv)
             umask((mode_t)v & 0777);
         } else {
             mode_t m = ~mask & 0777;
-            if (apply_symbolic(s, &m, mask) < 0) {
+            /* a missing who is "a": chmod's restriction by the creation
+               mask would make "umask +r" do nothing under umask 777 */
+            if (apply_symbolic(s, &m, 0) < 0) {
                 sh_warn("%s: illegal mode", s);
                 return 2;
             }

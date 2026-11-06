@@ -89,6 +89,13 @@ static inline int __ld_exp(long double x)       /* biased exponent, 0..0x7fff */
 	return u.i.se & 0x7fff;
 }
 
+/* infinite or NaN, without the FE_INVALID that x - x != 0 raises for an
+   infinity */
+static inline int __ld_nonfinite(long double x)
+{
+	return __ld_exp(x) == 0x7fff;
+}
+
 static inline long double __ld_abs(long double x)
 {
 	union __ldbits u = {x};

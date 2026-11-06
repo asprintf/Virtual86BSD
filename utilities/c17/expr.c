@@ -1,6 +1,18 @@
 /* expr.c - expressions (6.5) */
 #include "parse.h"
 
+/* the values of __builtin_inf and __builtin_nan, computed here (when c17
+   runs, where floating-point exceptions do not matter) */
+static long double fp_inf_value(void) {
+  volatile long double zero = 0;
+  return 1 / zero;
+}
+static long double fp_nan_value(void) {
+  volatile long double zero = 0;
+  long double n = zero / zero;
+  return signbit(n) ? -n : n;   /* positive, as GCC's */
+}
+
 void add_fn_ref(Obj *fn);
 
 static Node *cast(Token **rest, Token *tok);
@@ -1811,6 +1823,35 @@ static Node *primary(Token **rest, Token *tok) {
       Node *e = assign(&tok, tok);
       *rest = skip(tok, ")");
       return new_num(is_ice(e) || is_const_expr(e), start);
+    }
+    /* infinities and quiet NaNs as constants (for <math.h>'s INFINITY,
+       NAN and HUGE_VAL): unlike 1.0/0.0 evaluated when run, they raise no
+       floating-point exception */
+    {
+      static const struct { const char *name; int kind; int ty; } fb[] = {
+          {"__builtin_inf", 0, 1},       {"__builtin_inff", 0, 0},
+          {"__builtin_infl", 0, 2},      {"__builtin_huge_val", 0, 1},
+          {"__builtin_huge_valf", 0, 0}, {"__builtin_huge_vall", 0, 2},
+          {"__builtin_nan", 1, 1},       {"__builtin_nanf", 1, 0},
+          {"__builtin_nanl", 1, 2},
+      };
+      for (size_t i = 0; i < sizeof fb / sizeof fb[0]; i++) {
+        if (!equal(tok, (char *)fb[i].name) || !equal(tok->next, "("))
+          continue;
+        Token *t = tok->next->next;
+        if (fb[i].kind) {   /* the argument: a string; only "" is supported */
+          if (t->kind != TK_STR)
+            error_tok(t, "%s: expected a string literal", fb[i].name);
+          if (t->ty->array_len > 1)
+            error_tok(t, "%s: only an empty string is supported", fb[i].name);
+          t = t->next;
+        }
+        *rest = skip(t, ")");
+        Node *n = new_node(ND_NUM, start);
+        n->fval = fb[i].kind ? fp_nan_value() : fp_inf_value();
+        n->ty = fb[i].ty == 0 ? ty_float : fb[i].ty == 1 ? ty_double : ty_ldouble;
+        return n;
+      }
     }
     if (equal(tok, "__builtin_alloca") && equal(tok->next, "(")) {
       tok = tok->next->next;

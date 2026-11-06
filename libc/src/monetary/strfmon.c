@@ -112,8 +112,7 @@ static ssize_t vstrfmon_l(char *s, size_t max, locale_t loc, const char *fmt, va
 		memcpy(field + fl, grp, nl);
 		fl += nl;
 		if (rprec) {
-			dp = __lc_str(m, M_DP);
-			if (!*dp) dp = ".";
+			dp = __lc_str(m, M_DP);   /* empty in the POSIX locale: none */
 			memcpy(field + fl, dp, strlen(dp));
 			fl += strlen(dp);
 			memcpy(field + fl, p + 1, (size_t)rprec);

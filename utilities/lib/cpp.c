@@ -958,8 +958,13 @@ static const struct {
      "#ifndef __c17_stdatomic_h\n"
      "#define __c17_stdatomic_h\n"
      "\n"
-     "#include <stddef.h>\n"
-     "#include <stdint.h>\n"
+     "/* no <stddef.h> or <stdint.h>, whose macros are not to be seen here:\n"
+     "   the types of x86-64 (LP64); int_fast16_t and int_fast32_t are those\n"
+     "   of the C library (long for Shall's and glibc, int for musl: its\n"
+     "   profile defines __c17_int_fast16) */\n"
+     "#ifndef __c17_int_fast16\n"
+     "#define __c17_int_fast16 long\n"
+     "#endif\n"
      "\n"
      "typedef enum memory_order {\n"
      "  memory_order_relaxed,\n"
@@ -985,6 +990,10 @@ static const struct {
      "#define atomic_init(obj, value) ((void)(*(obj) = (value)))\n"
      "#define kill_dependency(y) (y)\n"
      "\n"
+     "/* the non-generic functions are also functions (C17 7.1.4), in\n"
+     "   libc17rt.a */\n"
+     "void atomic_thread_fence(memory_order);\n"
+     "void atomic_signal_fence(memory_order);\n"
      "#define atomic_thread_fence(order) __c17_atomic_fence(order)\n"
      "#define atomic_signal_fence(order) __c17_atomic_signal_fence(order)\n"
      "\n"
@@ -1004,31 +1013,31 @@ static const struct {
      "typedef _Atomic unsigned long atomic_ulong;\n"
      "typedef _Atomic long long atomic_llong;\n"
      "typedef _Atomic unsigned long long atomic_ullong;\n"
-     "typedef _Atomic uint_least16_t atomic_char16_t;\n"
-     "typedef _Atomic uint_least32_t atomic_char32_t;\n"
-     "typedef _Atomic wchar_t atomic_wchar_t;\n"
-     "typedef _Atomic int_least8_t atomic_int_least8_t;\n"
-     "typedef _Atomic uint_least8_t atomic_uint_least8_t;\n"
-     "typedef _Atomic int_least16_t atomic_int_least16_t;\n"
-     "typedef _Atomic uint_least16_t atomic_uint_least16_t;\n"
-     "typedef _Atomic int_least32_t atomic_int_least32_t;\n"
-     "typedef _Atomic uint_least32_t atomic_uint_least32_t;\n"
-     "typedef _Atomic int_least64_t atomic_int_least64_t;\n"
-     "typedef _Atomic uint_least64_t atomic_uint_least64_t;\n"
-     "typedef _Atomic int_fast8_t atomic_int_fast8_t;\n"
-     "typedef _Atomic uint_fast8_t atomic_uint_fast8_t;\n"
-     "typedef _Atomic int_fast16_t atomic_int_fast16_t;\n"
-     "typedef _Atomic uint_fast16_t atomic_uint_fast16_t;\n"
-     "typedef _Atomic int_fast32_t atomic_int_fast32_t;\n"
-     "typedef _Atomic uint_fast32_t atomic_uint_fast32_t;\n"
-     "typedef _Atomic int_fast64_t atomic_int_fast64_t;\n"
-     "typedef _Atomic uint_fast64_t atomic_uint_fast64_t;\n"
-     "typedef _Atomic intptr_t atomic_intptr_t;\n"
-     "typedef _Atomic uintptr_t atomic_uintptr_t;\n"
-     "typedef _Atomic size_t atomic_size_t;\n"
-     "typedef _Atomic ptrdiff_t atomic_ptrdiff_t;\n"
-     "typedef _Atomic intmax_t atomic_intmax_t;\n"
-     "typedef _Atomic uintmax_t atomic_uintmax_t;\n"
+     "typedef _Atomic unsigned short atomic_char16_t;\n"
+     "typedef _Atomic unsigned int atomic_char32_t;\n"
+     "typedef _Atomic int atomic_wchar_t;\n"
+     "typedef _Atomic signed char atomic_int_least8_t;\n"
+     "typedef _Atomic unsigned char atomic_uint_least8_t;\n"
+     "typedef _Atomic short atomic_int_least16_t;\n"
+     "typedef _Atomic unsigned short atomic_uint_least16_t;\n"
+     "typedef _Atomic int atomic_int_least32_t;\n"
+     "typedef _Atomic unsigned int atomic_uint_least32_t;\n"
+     "typedef _Atomic long atomic_int_least64_t;\n"
+     "typedef _Atomic unsigned long atomic_uint_least64_t;\n"
+     "typedef _Atomic signed char atomic_int_fast8_t;\n"
+     "typedef _Atomic unsigned char atomic_uint_fast8_t;\n"
+     "typedef _Atomic __c17_int_fast16 atomic_int_fast16_t;\n"
+     "typedef _Atomic unsigned __c17_int_fast16 atomic_uint_fast16_t;\n"
+     "typedef _Atomic __c17_int_fast16 atomic_int_fast32_t;\n"
+     "typedef _Atomic unsigned __c17_int_fast16 atomic_uint_fast32_t;\n"
+     "typedef _Atomic long atomic_int_fast64_t;\n"
+     "typedef _Atomic unsigned long atomic_uint_fast64_t;\n"
+     "typedef _Atomic long atomic_intptr_t;\n"
+     "typedef _Atomic unsigned long atomic_uintptr_t;\n"
+     "typedef _Atomic unsigned long atomic_size_t;\n"
+     "typedef _Atomic long atomic_ptrdiff_t;\n"
+     "typedef _Atomic long atomic_intmax_t;\n"
+     "typedef _Atomic unsigned long atomic_uintmax_t;\n"
      "\n"
      "#define atomic_store(obj, desired) __c17_atomic_store(obj, desired)\n"
      "#define atomic_store_explicit(obj, desired, order) \\\n"
@@ -1062,6 +1071,10 @@ static const struct {
      "} atomic_flag;\n"
      "\n"
      "#define ATOMIC_FLAG_INIT { 0 }\n"
+     "_Bool atomic_flag_test_and_set(volatile atomic_flag *);\n"
+     "_Bool atomic_flag_test_and_set_explicit(volatile atomic_flag *, memory_order);\n"
+     "void atomic_flag_clear(volatile atomic_flag *);\n"
+     "void atomic_flag_clear_explicit(volatile atomic_flag *, memory_order);\n"
      "#define atomic_flag_test_and_set(obj) __c17_atomic_exchange(&(obj)->__value, 1)\n"
      "#define atomic_flag_test_and_set_explicit(obj, order) \\\n"
      "  ((void)(order), __c17_atomic_exchange(&(obj)->__value, 1))\n"
@@ -3001,6 +3014,36 @@ static bool would_paste(struct token *a, struct token *b) {
     return false;
   struct token *t = tokenize_buf(format("%.*s%.*s\n", a->len, a->loc, b->len, b->loc), NULL);
   return t->len != a->len;
+}
+
+/* the macros defined at the end of the last cpp_run, one "#define" line
+   each (c17 -E -dM): object-like with their replacement lists,
+   function-like with their parameters; the built-in ones (__FILE__,
+   __LINE__, ...) with their names only */
+void cpp_print_macros(struct cpp *p, FILE *out) {
+  for (int i = 0; i < p->macros.capacity; i++) {
+    HashEntry *ent = &p->macros.buckets[i];
+    if (!ent->key || ent->key == TOMBSTONE)
+      continue;
+    Macro *m = ent->val;
+    fprintf(out, "#define %s", m->name);
+    if (!m->is_objlike) {
+      fputc('(', out);
+      for (MacroParam *a = m->params; a; a = a->next)
+        fprintf(out, "%s%s", a->name, a->next || m->va_args_name ? "," : "");
+      if (m->va_args_name)
+        fprintf(out, "%s...", strcmp(m->va_args_name, "__VA_ARGS__") ? m->va_args_name : "");
+      fputc(')', out);
+    }
+    bool first = true;
+    for (struct token *t = m->body; t && t->kind != CPP_EOF; t = t->next) {
+      if (first || t->space)
+        fputc(' ', out);
+      first = false;
+      fwrite(t->loc, 1, t->len, out);
+    }
+    fputc('\n', out);
+  }
 }
 
 void cpp_print(struct token *tok, FILE *out) {

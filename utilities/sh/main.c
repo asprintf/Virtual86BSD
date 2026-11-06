@@ -19,18 +19,25 @@ static int terminal_gone(void);
 void sh_exit_now(int status)
 {
     flushall();
+    job_control_end();
     _exit(status & 0xff);
 }
 
+/* exitshell has begun (the EXIT trap runs once); a subshell starts
+   afresh (subshell_reset) */
+int exit_begun;
+
 void exitshell(int status)
 {
-    static int exiting;
-    if (exiting) {
+    if (exit_begun) {
         /* exit invoked from the EXIT trap: leave immediately */
         flushall();
         _exit(status);
     }
-    exiting = 1;
+    /* a signal caught but not yet handled: its trap first (it may exit) */
+    if (gotsig)
+        run_pending_traps();
+    exit_begun = 1;
     shell_exiting = 1;
     if (trap_actions[0]) {
         char *t = trap_actions[0];
@@ -50,6 +57,7 @@ void exitshell(int status)
     flushall();
     if (interactive && !in_subshell)
         history_save();
+    job_control_end();
     _exit(status & 0xff);
 }
 

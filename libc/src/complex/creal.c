@@ -15,8 +15,8 @@ __CWRAP(conj)
 long double _Complex cprojl(long double _Complex z)
 {
 	long double x = __cre(z), y = __cim(z);
-	if ((x - x != 0 && x == x) || (y - y != 0 && y == y))   /* an infinite part */
-		return __cpack(1.0L / 0.0L, copysignl(0, y));
+	if ((__ld_nonfinite(x) && x == x) || (__ld_nonfinite(y) && y == y))   /* an infinite part */
+		return __cpack(HUGE_VALL, copysignl(0, y));
 	return z;
 }
 __CWRAP(cproj)
