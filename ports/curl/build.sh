@@ -1,5 +1,5 @@
 #!/bin/sh
-# build.sh - build and install curl 8.23 with Mbed TLS inside a Shall
+# build.sh - build and install curl 8.23 with Mbed TLS inside a V86BSD
 # system (see HOWTO.md beside it).  Needs Mbed TLS first
 # (ports/mbedtls/build.sh).
 #
@@ -62,7 +62,9 @@ fi
 # LD=c17: libtool insists on finding a link editor, though the compiler
 # links.  No zlib, brotli, zstd, libpsl (not ported); static libcurl.
 say "configure (output in $log)"
-LD=$CC CFLAGS=${CFLAGS:--O 1} run ./configure --prefix=/usr/local \
+# (--build: config.guess does not know uname -s V86BSD; this is the triplet
+# it found when the system still said Linux)
+LD=$CC CFLAGS=${CFLAGS:--O 1} run ./configure --prefix=/usr/local --build=x86_64-pc-linux-gnu \
 	--with-mbedtls=/usr/local --without-zlib --without-brotli --without-zstd \
 	--without-libpsl --disable-shared \
 	--with-ca-bundle=$CABUNDLE --without-ca-path

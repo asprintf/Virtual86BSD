@@ -1,5 +1,5 @@
 #!/bin/sh
-# build.sh - build and install Mbed TLS 3.6 inside a Shall system (see
+# build.sh - build and install Mbed TLS 3.6 inside a V86BSD system (see
 # HOWTO.md beside it).
 #
 # Usage: sh build.sh [-I] [-t] [-T] [dir]

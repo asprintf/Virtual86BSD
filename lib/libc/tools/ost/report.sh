@@ -1,16 +1,16 @@
 #!/bin/sh
-# report.sh - on the host, after "ost.sh run" in Shall (shut down): take
-# the results out of Shall's disk image and make os-test's report of them.
+# report.sh - on the host, after "ost.sh run" in V86BSD (shut down): take
+# the results out of V86BSD's disk image and make os-test's report of them.
 #   sh report.sh IMAGE OSTEST [DIR]
-# IMAGE   Shall's disk image
+# IMAGE   V86BSD's disk image
 # OSTEST  an os-test directory on the host, where misc/html is built and
 #         the results and the report go (root/root/os-test, the one the
 #         image was made from, will do)
-# DIR     the os-test directory inside Shall (default /root/os-test)
-# The results go to OSTEST/out/shall (replacing what was there); the
+# DIR     the os-test directory inside V86BSD (default /root/os-test)
+# The results go to OSTEST/out/v86bsd (replacing what was there); the
 # report is OSTEST/html/index.html and OSTEST/os-test.json.  Other
 # systems' results in OSTEST/out (out/linux from os-test's own "make
-# test" on Linux, say) are put beside Shall's.  Needs e2fsprogs (e2fsck,
+# test" on Linux, say) are put beside V86BSD's.  Needs e2fsprogs (e2fsck,
 # debugfs) and a C compiler (CC, default cc) for misc/html.
 img=$1 ost=$2 dir=${3:-/root/os-test}
 if [ ! -f "$img" ] || [ ! -f "$ost/misc/html.c" ]; then
@@ -24,13 +24,13 @@ e2fsck -p "$img" > /dev/null || [ $? -eq 1 ] || {
 
 tmp=${TMPDIR:-/tmp}/ost-report.$$
 mkdir "$tmp" || exit 1
-debugfs -c -R "rdump $dir/out/shall $tmp" "$img" > /dev/null 2>&1
-if [ ! -d "$tmp/shall" ]; then
-	echo "report.sh: no $dir/out/shall in $img" >&2
+debugfs -c -R "rdump $dir/out/v86bsd $tmp" "$img" > /dev/null 2>&1
+if [ ! -d "$tmp/v86bsd" ]; then
+	echo "report.sh: no $dir/out/v86bsd in $img" >&2
 	rm -rf "$tmp"
 	exit 1
 fi
-mkdir -p "$ost/out" && rm -rf "$ost/out/shall" && mv "$tmp/shall" "$ost/out/shall" || exit 1
+mkdir -p "$ost/out" && rm -rf "$ost/out/v86bsd" && mv "$tmp/v86bsd" "$ost/out/v86bsd" || exit 1
 rmdir "$tmp"
 
 cd "$ost" || exit 1

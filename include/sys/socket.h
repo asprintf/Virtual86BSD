@@ -67,7 +67,7 @@ struct linger {
 #define SOCK_SEQPACKET 5
 #define SOCK_NONBLOCK  04000
 #define SOCK_CLOEXEC   02000000
-#define SOCK_CLOFORK   010000000000   /* native on Shall's kernel, else emulated */
+#define SOCK_CLOFORK   010000000000   /* native on V86BSD's kernel, else emulated */
 
 #define SOL_SOCKET 1
 
@@ -106,7 +106,7 @@ struct linger {
 #define MSG_WAITALL      0x100
 #define MSG_NOSIGNAL     0x4000
 #define MSG_CMSG_CLOEXEC 0x40000000
-#define MSG_CMSG_CLOFORK ((int)0x80000000)   /* native on Shall's kernel, else emulated */
+#define MSG_CMSG_CLOFORK ((int)0x80000000)   /* native on V86BSD's kernel, else emulated */
 /* not POSIX: in the namespace XSI reserves (MSG_, PF_) */
 #if __XSI_VISIBLE
 #define MSG_DONTWAIT     0x40

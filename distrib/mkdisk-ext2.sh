@@ -1,5 +1,5 @@
 #!/bin/sh
-# mkdisk-ext2.sh - make an ext2 disk image of a Shall root.
+# mkdisk-ext2.sh - make an ext2 disk image of a V86BSD root.
 #
 # Usage: sh distrib/mkdisk-ext2.sh rootdir image [size-in-MiB]
 #
@@ -45,6 +45,6 @@ if [ -n "$(ls $ktest/libc/s_* 2>/dev/null)" ]; then
     cp -pR regress/sys/kern/libc "$stage/root/ktest/libc"
 fi
 rm -f "$img"
-mke2fs -q -t ext2 -b 4096 -O ^resize_inode,^dir_index,^ext_attr -L shall \
+mke2fs -q -t ext2 -b 4096 -O ^resize_inode,^dir_index,^ext_attr -L v86bsd \
     -E root_owner=0:0 -d "$stage" "$img" "${size}M"
 rm -rf "$stage"

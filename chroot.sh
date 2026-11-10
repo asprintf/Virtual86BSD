@@ -1,5 +1,5 @@
 #!/bin/sh
-# chroot.sh - enter a Shall system made by bootstrap.sh, with or without
+# chroot.sh - enter a V86BSD system made by bootstrap.sh, with or without
 # root privileges.
 #
 # Usage: sh chroot.sh [-m method] [root [command [argument...]]]
@@ -29,7 +29,7 @@
 # Inside, root is also a mount point (so that the mount table has "/":
 # df); the host's /etc/resolv.conf (name lookups) and /etc/localtime are
 # copied in.  The environment is a fresh one: HOME, TERM, PATH,
-# C17_LIBC=shall, and ENV=/etc/profile, which sh reads.
+# C17_LIBC=v86bsd, and ENV=/etc/profile, which sh reads.
 
 usage() { echo "usage: sh chroot.sh [-m chroot|unshare|bwrap|proot] [root [command...]]" >&2; exit 2; }
 
@@ -50,8 +50,8 @@ root=$(cd "$root" && pwd)
 
 # ---- inside the namespaces of unshare: chroot.sh runs itself there, the
 # command already made ----
-if [ "${SHALL_INSIDE:-}" = unshare ]; then
-	unset SHALL_INSIDE
+if [ "${V86BSD_INSIDE:-}" = unshare ]; then
+	unset V86BSD_INSIDE
 	# root as a mount point, with the /proc that unshare mounted in it
 	mount --rbind "$root" "$root" 2>/dev/null
 	mount --rbind /dev "$root/dev" || echo "chroot.sh: warning: no /dev" >&2
@@ -62,10 +62,10 @@ fi
 # the command run inside: a fresh environment
 if [ $# -gt 0 ]; then
 	set -- /usr/bin/env -i HOME=/root TERM="${TERM:-vt100}" PATH=/usr/local/bin:/usr/bin:/bin \
-		C17_LIBC=shall ENV=/etc/profile "$@"
+		C17_LIBC=v86bsd ENV=/etc/profile "$@"
 else
 	set -- /usr/bin/env -i HOME=/root TERM="${TERM:-vt100}" PATH=/usr/local/bin:/usr/bin:/bin \
-		C17_LIBC=shall ENV=/etc/profile /bin/sh -i
+		C17_LIBC=v86bsd ENV=/etc/profile /bin/sh -i
 fi
 
 # the files the host lends
@@ -118,7 +118,7 @@ chroot)
 	chroot "$root" "$@"
 	;;
 unshare)
-	SHALL_INSIDE=unshare exec unshare -r -m -p -f --mount-proc="$root/proc" \
+	V86BSD_INSIDE=unshare exec unshare -r -m -p -f --mount-proc="$root/proc" \
 		sh "$0" "$root" "$@"
 	;;
 bwrap)

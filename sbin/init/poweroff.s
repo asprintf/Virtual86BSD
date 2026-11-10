@@ -1,5 +1,5 @@
 # poweroff.s - reboot(LINUX_REBOOT_MAGIC1, LINUX_REBOOT_MAGIC2,
-# LINUX_REBOOT_CMD_POWER_OFF): Shall's C library has no reboot().
+# LINUX_REBOOT_CMD_POWER_OFF): V86BSD's C library has no reboot().
 	.text
 	.globl linux_poweroff
 linux_poweroff:

@@ -1,5 +1,5 @@
 #!/bin/sh
-# build.sh - build and install SQLite 3.54 inside a Shall system (see
+# build.sh - build and install SQLite 3.54 inside a V86BSD system (see
 # HOWTO.md beside it).
 #
 # Usage: sh build.sh [-I] [-t] [dir]

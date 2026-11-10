@@ -1,12 +1,12 @@
-# HOWTO: build SQLite inside Shall
+# HOWTO: build SQLite inside V86BSD
 
-SQLite 3.54.1 builds inside a Shall system with its own `configure` and
+SQLite 3.54.1 builds inside a V86BSD system with its own `configure` and
 makefiles, from either form of its sources:
 
 - the **source tree** (the default): SQLite's build then makes the
   amalgamation, `sqlite3.c`, itself — with jimsh (a small Tcl, built by
   c17 at configure time), lemon (SQLite's parser generator) and
-  mkkeywordhash, all built and run inside Shall.  The `sqlite3.c` made
+  mkkeywordhash, all built and run inside V86BSD.  The `sqlite3.c` made
   this way is byte for byte the one the host's gcc build makes.  The
   tree also has SQLite's test programs written in C, which `-t` runs.
 - the **amalgamation** tarball, `sqlite-autoconf-3540100.tar.gz` from
@@ -31,7 +31,7 @@ download page has both).
 
 ## 2. Build and install (inside)
 
-    sh /usr/src/shall/ports/sqlite/build.sh          # -t: also the tests
+    sh /usr/src/ports/sqlite/build.sh          # -t: also the tests
 
 That applies the diff (once), then runs, with `CC=c17`:
 
@@ -73,7 +73,7 @@ runs them (each one's output in `NAME.log` in the sources):
 | `speedtest1 --verify --size 25` | a benchmark whose results are hashed | the same hash as with gcc on glibc |
 
 The main test suite (`make test`, thousands of `.test` files) is written
-in Tcl and needs Tcl's C library, `testfixture`; Shall has no Tcl, so it
+in Tcl and needs Tcl's C library, `testfixture`; V86BSD has no Tcl, so it
 isn't run.  `sessionfuzz`, the last part of `make fuzztest`, needs zlib.
 
 ## The changes
@@ -96,7 +96,7 @@ In the diffs:
 On the command lines:
 
 - **`CC_FOR_BUILD=c17`**: autosetup compiles its jimsh with `cc` (not a
-  POSIX utility; Shall's compiler is `c17`) unless told otherwise.
+  POSIX utility; V86BSD's compiler is `c17`) unless told otherwise.
 - **`LD=c17`**: configure stops when it can't find a program `ld`,
   though nothing but the compiler links.
 - **`--disable-shared`, `make CFLAGS.core=`**: the makefiles' options for
@@ -106,15 +106,15 @@ On the command lines:
   same options for the programs.  So `build.sh` makes `libsqlite3.so`
   itself with `c17 -G`.
 
-## Found on the way (in Shall)
+## Found on the way (in V86BSD)
 
-SQLite's source-tree makefile showed two differences between Shall's
+SQLite's source-tree makefile showed two differences between V86BSD's
 make and the other makes; both are fixed in `utilities/make` (with tests
 in `tests/cases.tl`, and in `make/README.md`):
 
 - A rule whose target list expands to nothing (`$(TCLSH_CMD):`, with
   no Tcl) was an error, "missing target".  GNU and BSD make ignore such a
-  rule, and so does Shall's make now.
+  rule, and so does V86BSD's make now.
 - A file with no commands (`parse.h: parse.c`, both written by lemon)
   counted as remade, so everything depending on it was rebuilt on every
   `make`: the whole amalgamation, again.  Now an existing file with no
@@ -138,12 +138,12 @@ speedtest1 takes 3.9 s against 1.4 s with gcc -O2 on glibc.
 
 ## Tested
 
-SQLite 3.54.1, built by `build.sh -t` inside a freshly bootstrapped Shall
+SQLite 3.54.1, built by `build.sh -t` inside a freshly bootstrapped V86BSD
 system in a chroot, from the git tag (results above), and from an
 amalgamation tarball made from that tag with SQLite's own
 `make amalgamation-tarball` (sqlite.org's download wasn't reachable from
-the test machine).  On Shall's own kernel in QEMU (emulation, no KVM):
+the test machine).  On V86BSD's own kernel in QEMU (emulation, no KVM):
 the build (12 minutes), fuzzcheck (0 errors out of 46 391, in 15
 minutes), and mptest's two scripts once each in WAL and DELETE mode (0
-errors): several processes sharing one database through Shall's file
+errors): several processes sharing one database through V86BSD's file
 locks and, in WAL mode, a shared-memory index.

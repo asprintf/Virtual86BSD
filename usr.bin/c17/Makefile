@@ -5,8 +5,8 @@
 # c17 compiles, assembles and link-edits by itself; what it needs besides
 # is a C library.  Each C library it can use has a profile in libc/ (its
 # headers, its directory, the dynamic linker, the default linking); LIBC
-# names the default one: glibc (dynamic linking), musl (static) or shall
-# (Shall's own C library, dynamic).  When
+# names the default one: glibc (dynamic linking), musl (static) or v86bsd
+# (V86BSD's own C library, dynamic).  When
 # c17 runs, C17_LIBC=name chooses another.
 
 .POSIX:

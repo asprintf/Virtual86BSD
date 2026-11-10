@@ -24,6 +24,9 @@ int snprintf(char *buf, size_t n, const char *fmt, ...);
 
 /* kern/subr_prf.c */
 void printk(const char *fmt, ...);
+
+/* the system's identity: vers.c, made by conf/newvers.sh */
+extern const char ostype[], osrelease[], osversion[], version[];
 NORETURN void panic(const char *fmt, ...);
 
 /* assertions, on with "option DIAGNOSTIC" (-DDIAGNOSTIC); KDASSERT is the

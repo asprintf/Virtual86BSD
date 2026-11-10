@@ -1,5 +1,5 @@
 #!/bin/sh
-# cc - os-test's compiler command, for POSIX c17 on Shall.
+# cc - os-test's compiler command, for POSIX c17 on V86BSD.
 # os-test calls the compiler the way gcc and clang are called; c17 takes
 # only POSIX's options (and -G, -dM).  This turns the one into the other:
 #   -pthread -std=* -fPIC -Wxxx    dropped (c17 needs none of them)

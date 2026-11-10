@@ -80,7 +80,6 @@ static const struct inode_ops proc_dir_iops, proc_link_iops, proc_magic_iops, pr
 static const struct file_ops proc_dir_fops, proc_file_fops;
 static const struct super_ops proc_sops;
 extern char kernel_cmdline[];
-extern const char *uts_release, *uts_version, *uts_sysname;
 extern char uts_nodename[65];
 
 #define PINO(pid, sub) ((ino_t)(pid) << 12 | (sub))
@@ -505,7 +504,7 @@ static int make_text(struct inode *i, struct sbuf *s) {
     sb_printf(s, "%lu.%02lu 0.00\n", up / 1000000000UL, up % 1000000000UL / 10000000UL);
     return 0;
   case R_VERSION:
-    sb_printf(s, "%s version %s %s\n", uts_sysname, uts_release, uts_version);
+    sb_printf(s, "%s version %s %s\n", ostype, osrelease, osversion);
     return 0;
   case R_STAT: {
     uint64_t ut = 0, st = 0;
@@ -567,10 +566,10 @@ static int make_text(struct inode *i, struct sbuf *s) {
     sb_printf(s, "%s\n", uts_nodename);
     return 0;
   case R_OSTYPE:
-    sb_printf(s, "%s\n", uts_sysname);
+    sb_printf(s, "%s\n", ostype);
     return 0;
   case R_OSRELEASE:
-    sb_printf(s, "%s\n", uts_release);
+    sb_printf(s, "%s\n", osrelease);
     return 0;
   case R_NGROUPS:
     sb_printf(s, "65536\n");

@@ -5,7 +5,7 @@ interactive utility on a pseudo-terminal and reading its screen, comparing
 with a reference implementation, generating random programs, reading binary
 formats.  It is a small language in the style of C, interpreted by one C
 file, `tl.c` (C99 and POSIX, no other library).  It is not a utility
-of POSIX, but it is a program of Shall, `/usr/bin/tl`, so that tests in the
+of POSIX, but it is a program of V86BSD, `/usr/bin/tl`, so that tests in the
 manner of the system's own can be written for anything on it; the test
 suites of the utilities compile `tl.c` for themselves, so they need nothing
 but a C compiler and the POSIX utilities, on any host.
@@ -257,7 +257,7 @@ includes them by path):
 
 ## In a test script
 
-On Shall, a script runs as `tl script.tl`.  The suites of this collection
+On V86BSD, a script runs as `tl script.tl`.  The suites of this collection
 build their own tl from `../tl/tl.c` and use it through `TLBIN`, so that
 they test the sources beside them:
 

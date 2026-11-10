@@ -130,7 +130,7 @@ cases, most of them the actions of every signal in every context) is run
 by `tests/posix_shell_tests.sh SUITE SHELL` on the host: its runner needs
 yash, and its job-control tests a terminal (each file gets a
 pseudo-terminal of its own from `script`).  With this shell built by c17
-and linked statically with Shall's C library (November 2026):
+and linked statically with V86BSD's C library (November 2026):
 
 | shell | passed | failed | skipped |
 |---|---|---|---|

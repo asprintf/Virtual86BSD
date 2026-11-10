@@ -1,7 +1,7 @@
-# HOWTO: build Lua inside Shall
+# HOWTO: build Lua inside V86BSD
 
-Lua 5.4 builds unmodified inside a Shall system, and passes Lua's
-complete official test suite.  The build uses only Shall's own tools:
+Lua 5.4 builds unmodified inside a V86BSD system, and passes Lua's
+complete official test suite.  The build uses only V86BSD's own tools:
 `c17` compiles and links, `ar` makes the library.
 
 ## 1. Get the sources (on the host)
@@ -17,7 +17,7 @@ way the sources land in `root/usr/src/lua-5.4.7`.
 
 ## 2. Build, test and install (inside)
 
-    sh /usr/src/shall/ports/lua/build.sh -t
+    sh /usr/src/ports/lua/build.sh -t
 
 `-t` runs the test suite after the build.  Then the script installs
 `lua` (and `luac`, if the sources have `luac.c`) into `/usr/local/bin`,
@@ -57,11 +57,11 @@ doesn't have:
 - **Compiler flags.** It passes `-std=gnu99`, `-Wall` and `-Wextra`.
   POSIX `c17` doesn't have those options, so it rejects them.
 - **`ranlib`.** The makefile runs `ranlib` after `ar`. `ranlib` isn't
-  part of POSIX, so Shall doesn't have it. It isn't needed either:
-  Shall's `ar` keeps an archive's symbol table up to date itself.
+  part of POSIX, so V86BSD doesn't have it. It isn't needed either:
+  V86BSD's `ar` keeps an archive's symbol table up to date itself.
 - **`_setjmp` in `ldo.c`.** With `LUA_USE_POSIX`, `ldo.c` handles
   errors with `_setjmp`/`_longjmp`. POSIX.1-2024 removed those two
-  functions, so Shall's libc doesn't have them. `ldo.c` uses
+  functions, so V86BSD's libc doesn't have them. `ldo.c` uses
   `LUA_USE_POSIX` for nothing else. Compiled without it, it falls back
   to ISO C's `setjmp`/`longjmp`, which do the same job here. Every other
   file keeps `LUA_USE_POSIX`, which gives `io.popen`, `mkstemp`-based
@@ -71,15 +71,15 @@ doesn't have:
 
 - **C modules.** `require` can't load C modules (`.so` files): this
   build leaves out `LUA_USE_DLOPEN`.  Modules written in Lua work as
-  usual.  (Shall has `dlopen` and `c17 -G` for shared objects, so this
+  usual.  (V86BSD has `dlopen` and `c17 -G` for shared objects, so this
   could be added; it hasn't been tried.)
 - **Line editing.** The interactive prompt has no line editing or
-  history, because Shall has no readline (it's not part of POSIX).
+  history, because V86BSD has no readline (it's not part of POSIX).
 
 ## Tested
 
 Lua 5.4.7 (git tag `v5.4.7`), built by `build.sh -t` inside a freshly
-bootstrapped Shall system, in a chroot and on Shall's own kernel in
+bootstrapped V86BSD system, in a chroot and on V86BSD's own kernel in
 QEMU: the full test suite passes.  The release tarball's layout (`src/`,
 `luac.c`, the separate test tarball) is handled by the script but has
 not been tested here.

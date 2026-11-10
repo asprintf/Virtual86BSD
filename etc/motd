@@ -1,2 +1,2 @@
-Shall 0.9.1: the POSIX.1-2024 utilities, C library and kernel, compiled by themselves.
-The sources are in /usr/src/shall; c17 compiles, make builds.
+Virtual/86 BSD 0.9.1: the POSIX.1-2024 utilities, C library and kernel, compiled by themselves.
+The sources are in /usr/src; c17 compiles, make builds.

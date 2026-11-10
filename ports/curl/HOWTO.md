@@ -1,9 +1,9 @@
-# HOWTO: build curl inside Shall — and use the Internet
+# HOWTO: build curl inside V86BSD — and use the Internet
 
-curl 8.23.0 builds inside a Shall system with its own `configure`
+curl 8.23.0 builds inside a V86BSD system with its own `configure`
 (autoconf and libtool) and makefiles, on Mbed TLS (`ports/mbedtls`) for
 TLS.  With it the system reaches the Internet: in the chroot through the
-host's network, and on Shall's own kernel in QEMU through its TCP/IP
+host's network, and on V86BSD's own kernel in QEMU through its TCP/IP
 stack and QEMU's user networking.
 
 ## 1. Get the sources (on the host)
@@ -27,8 +27,8 @@ publishes it:
 
 ## 2. Build, test and install (inside)
 
-    sh /usr/src/shall/ports/mbedtls/build.sh -t
-    sh /usr/src/shall/ports/curl/build.sh -t
+    sh /usr/src/ports/mbedtls/build.sh -t
+    sh /usr/src/ports/curl/build.sh -t
 
 That applies `shall.diff` (once), then runs, with `CC=c17`:
 
@@ -61,7 +61,7 @@ names are looked up with the host's name servers (`chroot.sh` copies
     curl -I https://curl.se/
     curl -LO https://github.com/curl/curl/releases/download/curl-8_23_0/curl-8.23.0.tar.gz
 
-**On Shall's kernel in QEMU** (`sh mkdisk.sh; sh boot.sh`), the e1000
+**On V86BSD's kernel in QEMU** (`sh mkdisk.sh; sh boot.sh`), the e1000
 network card gets 10.0.2.15 from QEMU's DHCP server, and connections go
 out through QEMU on the host ("user networking", no root needed); the
 name server is QEMU's, 10.0.2.3 (`/etc/resolv.conf` is a link to the
@@ -87,9 +87,9 @@ on the host's 127.0.0.1 is at 10.0.2.2:
 And on configure's command line, `LD=c17`: libtool stops when it finds no
 link editor, though here the compiler links.
 
-## Found on the way (in Shall)
+## Found on the way (in V86BSD)
 
-curl's `configure` and `make install` showed three bugs in Shall's
+curl's `configure` and `make install` showed three bugs in V86BSD's
 utilities, fixed in this version (with tests):
 
 - **`ls -t`** sorted file operands by name, not by time.  automake's
@@ -114,15 +114,15 @@ utilities, fixed in this version (with tests):
   (libpsl, for cookies): not ported.
 - **SSH** (scp, sftp: libssh2): not ported.
 - **curl's test suite**: it needs Perl (and servers written in Perl and
-  Python), which Shall doesn't have.
+  Python), which V86BSD doesn't have.
 
 ## Tested
 
-Built by `build.sh -t` inside a freshly bootstrapped Shall system in a
+Built by `build.sh -t` inside a freshly bootstrapped V86BSD system in a
 chroot: the file: URL, TLS 1.2 (TLS-ECDHE-RSA-WITH-CHACHA20-POLY1305-SHA256)
 and TLS 1.3 (TLS1-3-CHACHA20-POLY1305-SHA256) to `mbedtls_ssl_server2`,
-refusal without the CA.  From the chroot and from Shall's kernel in
+refusal without the CA.  From the chroot and from V86BSD's kernel in
 QEMU (emulation): HTTPS directly to github.com (names looked up by
-Shall's resolver, the certificate verified), and the 4.5 MB curl tarball
+V86BSD's resolver, the certificate verified), and the 4.5 MB curl tarball
 over HTTPS through an HTTP proxy (CONNECT), byte-identical (cksum) to the
 original; from QEMU also over plain HTTP from the host (10.0.2.2).

@@ -1,7 +1,7 @@
-# HOWTO: build Mbed TLS inside Shall
+# HOWTO: build Mbed TLS inside V86BSD
 
 Mbed TLS 3.6.7 (the long-term-support branch) — a TLS 1.2/1.3, X.509 and
-cryptography library in portable C — builds inside a Shall system with
+cryptography library in portable C — builds inside a V86BSD system with
 c17 and ar, and passes its own tests: the self-tests of every algorithm,
 TLS handshakes between its test client and server, and, if you generate
 them on the host, its 140 unit test suites (44 000 test cases).  It is
@@ -19,7 +19,7 @@ generated from it).
 
 ## 2. Build, test and install (inside)
 
-    sh /usr/src/shall/ports/mbedtls/build.sh -t
+    sh /usr/src/ports/mbedtls/build.sh -t
 
 applies `shall.diff` (once) and compiles, with `c17 -O 1`, everything as
 Mbed TLS's makefiles would: `library/*.c` into `libmbedcrypto.a`,
@@ -48,11 +48,11 @@ Link programs with `-lmbedtls -lmbedx509 -lmbedcrypto` (in that order).
 ## 3. The unit test suites (optional; Python on the host)
 
 Mbed TLS keeps its unit tests as `.function` and `.data` files that a
-Python script turns into C.  Shall has no Python (it isn't POSIX), so
+Python script turns into C.  V86BSD has no Python (it isn't POSIX), so
 generate them on the host, then build and run them inside:
 
     sh ports/mbedtls/gentests.sh                             # on the host: python3
-    sh /usr/src/shall/ports/mbedtls/build.sh -t -T           # inside
+    sh /usr/src/ports/mbedtls/build.sh -t -T           # inside
 
 `-T` compiles each of the 140 suites with c17 and runs it (one log each,
 `tests/test_suite_NAME.log`).  One suite is not built:
@@ -82,9 +82,9 @@ with Python and Perl.  The tarball has those files already.
 
 ## Tested
 
-Built by `build.sh -t -T` inside a freshly bootstrapped Shall system in
+Built by `build.sh -t -T` inside a freshly bootstrapped V86BSD system in
 a chroot: selftest passes, TLS 1.2 (TLS-ECDHE-RSA-WITH-CHACHA20-POLY1305-SHA256)
 and TLS 1.3 (TLS1-3-CHACHA20-POLY1305-SHA256) handshakes between
 `ssl_client2` and `ssl_server2`, and the unit suites as above.  With
 `ports/curl` it fetched files over HTTPS from the Internet, in the chroot
-and on Shall's own kernel in QEMU.
+and on V86BSD's own kernel in QEMU.

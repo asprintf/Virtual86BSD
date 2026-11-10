@@ -1,5 +1,5 @@
 #!/bin/sh
-# build.sh - build and install Rogue 5.4.4 inside a Shall system (see
+# build.sh - build and install Rogue 5.4.4 inside a V86BSD system (see
 # HOWTO.md beside it).  Needs ncurses first (ports/ncurses/build.sh).
 #
 # Usage: sh build.sh [-I] [dir]
@@ -10,7 +10,7 @@
 #
 # Applies posix.diff (beside this script) once, then Rogue's own configure
 # and make, with c17.  Installs /usr/local/bin/rogue, the score file
-# /var/games/rogue.scr, the manual page for Shall's man (man rogue:
+# /var/games/rogue.scr, the manual page for V86BSD's man (man rogue:
 # /usr/local/share/man/rogue), and
 # the guide, /usr/local/share/doc/rogue/rogue.doc.
 
@@ -49,7 +49,9 @@ else
 fi
 [ -f Makefile ] && run make clean
 say "configure (output in $log)"
-CFLAGS=${CFLAGS:--O 1} run ./configure --prefix=/usr/local \
+# (--build: config.guess does not know uname -s V86BSD; this is the triplet
+# it found when the system still said Linux)
+CFLAGS=${CFLAGS:--O 1} run ./configure --prefix=/usr/local --build=x86_64-pc-linux-gnu \
 	--enable-scorefile=/var/games/rogue.scr \
 	--enable-lockfile=/var/games/rogue.lck
 say "make"

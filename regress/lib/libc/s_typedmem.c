@@ -1,5 +1,5 @@
 /* Self-checking: typed memory objects ([TYM]), where the system has them
- * (Shall's kernel: pools ram0 and ram1; elsewhere the functions must fail
+ * (V86BSD's kernel: pools ram0 and ram1; elsewhere the functions must fail
  * as for no typed memory). */
 #define _XOPEN_SOURCE 800
 #include <errno.h>

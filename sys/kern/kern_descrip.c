@@ -690,7 +690,7 @@ long sys_dup2(long oldfd, long newfd) {
 #define F_GETOWN 9
 #define F_DUPFD_CLOEXEC 1030
 #define F_GETPIPE_SZ 1032
-#define F_DUPFD_CLOFORK 0x10000 /* the value of Shall's C library */
+#define F_DUPFD_CLOFORK 0x10000 /* the value of V86BSD's C library */
 #define F_OFD_GETLK 36
 #define F_OFD_SETLK 37
 #define F_OFD_SETLKW 38

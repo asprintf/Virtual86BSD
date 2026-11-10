@@ -1,6 +1,6 @@
-# The Shall kernel
+# The Virtual/86 BSD kernel
 
-A small x86-64 kernel that runs Shall's programs, and Linux programs, as
+A small x86-64 kernel that runs V86BSD's programs, and Linux programs, as
 Linux would: the same system call numbers, structures, ELF loading, initial
 stack, signal frames and `/proc` files.  It boots in QEMU in text mode,
 mounts an ext2 root file system and starts `/sbin/init`.
@@ -13,7 +13,7 @@ assembly.
 
 ## Status
 
-Inside QEMU, on an ext2 disk made from a bootstrapped Shall root:
+Inside QEMU, on an ext2 disk made from a bootstrapped V86BSD root:
 
 * The interactive shell on the serial console, with a controlling terminal
   and job control (Ctrl-C, Ctrl-Z, `jobs`, `fg`, `bg`); `vi`, `more`,
@@ -33,7 +33,7 @@ Inside QEMU, on an ext2 disk made from a bootstrapped Shall root:
 * The C library's self-checking tests: 22 of 23 pass (`s_net` with its
   own DNS server on 127.0.0.1:53, `s_sporadic` and `s_typedmem` among
   them; `s_collsym` with locales `regress/sys/kern/libc/run.sh` makes there with
-  Shall's own `localedef`); `s_math` meets QEMU's software x87, a few ulp
+  V86BSD's own `localedef`); `s_math` meets QEMU's software x87, a few ulp
   off in `y1`/`jn` (the floating-point state a process gets is the same as
   on Linux, checked by `tests/k_fpu`).
 * The Open POSIX Test Suite (LTP's, 1888 tests) built and run inside the
@@ -72,10 +72,10 @@ Inside QEMU, on an ext2 disk made from a bootstrapped Shall root:
   fragmented both ways; 2 MiB of TCP each way; refused and non-blocking
   connects; ping; a server reached from the host), also with every 13th
   frame lost each way.
-* The kernel is built by Shall's own c17 alone (it compiles the C,
+* The kernel is built by V86BSD's own c17 alone (it compiles the C,
   assembles `arch/amd64/amd64/*.s` and links with `ld.script`; no binutils), on the
   host by `bootstrap.sh` and inside the running system by `make` in
-  `/usr/src/shall/sys/arch/amd64/compile/GENERIC`, where it comes out byte for byte the same.
+  `/usr/src/sys/arch/amd64/compile/GENERIC`, where it comes out byte for byte the same.
   The whole system rebuilds itself inside (`bootstrap.sh`, 41 minutes
   under QEMU's emulation) into files identical to those the host built.
   `make gnu` builds it with gcc and binutils instead.
@@ -145,31 +145,31 @@ link to `arch/amd64/include`.
                        headers)
     lib/libkern/       memory and string routines
 
-`sbin/init` is init (POSIX C, built with Shall's c17 and C library),
+`sbin/init` is init (POSIX C, built with V86BSD's c17 and C library),
 `regress/sys/kern` the test programs (k_*.c, and the C library's tests, put
 on the disk image in /root/ktest) and `distrib/mkdisk-ext2.sh` makes the
-ext2 image of a Shall root.
+ext2 image of a V86BSD root.
 
 ## Building and running
 
-The kernel is part of Shall (`sys/` in its sources): `bootstrap.sh`
+The kernel is part of V86BSD (`sys/` in its sources): `bootstrap.sh`
 builds it with the c17 of its stage 2, together with `/sbin/init`, into
-`root/boot/shall-kernel` and `root/usr/sbin/init`.  To boot that root,
+`root/bsd` and `root/usr/sbin/init`.  To boot that root,
 the host needs QEMU (`qemu-system-x86_64`) and e2fsprogs (`mke2fs -d`);
 in the top directory:
 
-    sh mkdisk.sh                  # shall.img: the root as ext2 (1 GiB)
+    sh mkdisk.sh                  # v86bsd.img: the root as ext2 (1 GiB)
     sh boot.sh                    # QEMU; the console is this terminal
 
 (The head of `boot.sh` lists its options.)  Inside the system everything
 needed is there:
 
-    cd /usr/src/shall/sys/arch/amd64/compile/GENERIC
-    make                          # shall-kernel: c17 compiles, assembles, links
-    cd /usr/src/shall/sbin/init && make       # /sbin/init
-    cd /usr/src/shall/regress/sys/kern && make testprogs  # the test programs
+    cd /usr/src/sys/arch/amd64/compile/GENERIC
+    make                          # bsd: c17 compiles, assembles, links
+    cd /usr/src/sbin/init && make       # /sbin/init
+    cd /usr/src/regress/sys/kern && make testprogs  # the test programs
 
-The Makefile's defaults are Shall's tools (`CC=c17`, `AS="c17 -c"`,
+The Makefile's defaults are V86BSD's tools (`CC=c17`, `AS="c17 -c"`,
 `LD=c17` with `LDFLAGS="-B standalone"`, `HOSTCC=c17` for mkimage);
 programs for the system (`init`, the tests) are made with `C17="c17 -B
 static"`.  On a host, the c17 of a bootstrap kept with `-k` serves
@@ -206,7 +206,7 @@ words become init's environment; init uses `CONSOLE` (default
 2. `kmain`: memory map, page allocator (the first GiB), direct map of all
    RAM, then the rest of the memory to the allocator; GDT/IDT,
    TSC calibration, scheduler, timer at 1000 Hz, devices, root mount.
-3. Process 1 mounts devtmpfs on `/dev` and proc on `/proc` (Shall has no
+3. Process 1 mounts devtmpfs on `/dev` and proc on `/proc` (V86BSD has no
    `mount` utility: mount is not POSIX), opens `/dev/console` as 0, 1, 2
    and executes `init=`, `/sbin/init`, `/etc/init`, `/bin/init` or
    `/bin/sh`.
@@ -239,7 +239,7 @@ words become init's environment; init uses `CONSOLE` (default
 * **Processes.** A `struct task` per thread, a `struct proc` per process
   (thread group): credentials, nice value, descriptors, signal actions and
   record locks belong to the process, as POSIX says (Linux keeps several of
-  these per thread; Shall's C library broadcasts set*id and nice to every
+  these per thread; V86BSD's C library broadcasts set*id and nice to every
   thread anyway, so programs see the same).  `clone` takes the flag
   combinations of fork, vfork, posix_spawn and threads.
 * **Scheduling.** One processor, round robin with 10 ms slices; SCHED_FIFO
@@ -320,13 +320,25 @@ words become init's environment; init uses `CONSOLE` (default
 
 ## System calls
 
-224 of Linux's x86-64 system calls, among them every one Shall's C
+224 of Linux's x86-64 system calls, among them every one V86BSD's C
 library uses.
 `AF_NETLINK` exists only as the channel of `mq_notify(SIGEV_THREAD)`.
 Absent calls answer `ENOSYS`, as Linux does for those it lacks.
 
-`uname` says `Linux` and release `6.9.0-shall`, so that programs that
-check (glibc's start-up test, configure scripts) accept the system.
+`uname` says what `sys/conf/newvers.sh` writes into `vers.c`: `V86BSD`,
+release `0.9.1`, version `GENERIC#1`, machine `amd64`.  The Linux emulation
+will keep `Linux` and `6.9.0` for its own programs (a later phase: today
+every process gets the native identity, so a glibc binary that checks the
+release in its start-up test refuses to run).
+
+The kernel prints its banner first, as OpenBSD's does:
+
+    Virtual/86 BSD 0.9.1 (GENERIC) #1: Tue Nov 10 00:00:00 UTC 2026
+        user@host:/usr/src/sys/arch/amd64/compile/GENERIC
+
+`user@host` is the machine that built the kernel (`BUILDER=user@host`
+names another); the date is `sys/conf/RELDATE`, never the clock, so two
+builds differ only in that name.  The kernel is installed as `/bsd`.
 
 ## Testing
 
@@ -356,7 +368,7 @@ echo servers on the host, has a non-blocking and a blocking connect
 refused, pings the gateway, and serves a connection the host makes
 through the forwarded port.  With `netloss=13` on the command line (every
 13th frame lost, each way) it still passes, in about 30 s.  The utility suite: inside the system,
-`cd /usr/src/shall/utilities; CC=c17 sh run_tests.sh </dev/null` from a
+`cd /usr/src/utilities; CC=c17 sh run_tests.sh </dev/null` from a
 process without a controlling terminal (several tests check behaviour
 without one: `xargs -p`, `test -t`, `tput cols`), for example from
 `/etc/rc`.

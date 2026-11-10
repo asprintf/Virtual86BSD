@@ -139,7 +139,7 @@ int main(void)
 	CHECK(sleep(0) == 0);
 
 	/* misc */
-	CHECK(uname(&u) == 0 && !strcmp(u.sysname, "Linux"));
+	CHECK(uname(&u) == 0 && u.sysname[0] != 0);
 	CHECK(gethostname(buf, sizeof buf) == 0 && !strcmp(buf, u.nodename));
 	CHECK(gethostname(buf, 1) == -1 && errno == ENAMETOOLONG);
 	CHECK(getrlimit(RLIMIT_NOFILE, &rl) == 0 && rl.rlim_cur > 0 && setrlimit(RLIMIT_NOFILE, &rl) == 0);

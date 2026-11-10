@@ -68,7 +68,7 @@ struct sock;
 #define O_SYNC 04010000
 #define O_PATH 010000000
 #define O_TMPFILE 020000000
-#define O_CLOFORK 010000000000 /* POSIX.1-2024; Linux lacks it (the value of Shall's C library) */
+#define O_CLOFORK 010000000000 /* POSIX.1-2024; Linux lacks it (the value of V86BSD's C library) */
 #define FD_CLOEXEC 1
 #define FD_CLOFORK 2
 

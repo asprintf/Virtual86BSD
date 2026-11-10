@@ -18,7 +18,7 @@
  * /usr/lib/locale/locale-archive) and the directories of /usr/lib/locale
  * and of LOCPATH (when locale is not set-user-ID or set-group-ID), each
  * one that newlocale() accepts, and C.utf8 when the C library has it
- * without a file (Shall's built-in C.UTF-8) and no name of it was found;
+ * without a file (V86BSD's built-in C.UTF-8) and no name of it was found;
  * sorted, each once.  The charmaps (-m):
  * the files of /usr/share/i18n/charmaps, less .gz or .bz2, sorted (make
  * can set the places: -DLOCALE_DIR=... -DCHARMAP_DIR=...).
@@ -492,7 +492,7 @@ static void list_locales(void)
             dir_names(t);
         free(copy);
     }
-    /* a C library with a built-in UTF-8 C locale (Shall's has C.UTF-8, which
+    /* a C library with a built-in UTF-8 C locale (V86BSD's has C.UTF-8, which
        is no file): listed as glibc lists its C.utf8, unless a file has it */
     int have_cutf8 = 0;
     for (size_t i = 0; i < nnames; i++)
@@ -525,7 +525,7 @@ static void list_charmaps(void)
         }
         closedir(d);
     }
-    /* a C library with a built-in UTF-8 C locale (Shall's has C.UTF-8, which
+    /* a C library with a built-in UTF-8 C locale (V86BSD's has C.UTF-8, which
        is no file): listed as glibc lists its C.utf8, unless a file has it */
     int have_cutf8 = 0;
     for (size_t i = 0; i < nnames; i++)

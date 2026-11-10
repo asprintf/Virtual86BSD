@@ -1,14 +1,14 @@
-# /etc/profile of a Shall system: read by sh at start-up as $ENV
+# /etc/profile of a V86BSD system: read by sh at start-up as $ENV
 # (chroot.sh sets ENV=/etc/profile).
 PATH=/usr/local/bin:/usr/bin:/bin
 MANPATH=/usr/local/share/man:/usr/share/posixutilities/man
 HOME=${HOME:-/root}
-PS1='shall# '
-[ "$(id -u)" = 0 ] || PS1='shall$ '
+PS1='v86bsd# '
+[ "$(id -u)" = 0 ] || PS1='v86bsd$ '
 TERM=${TERM:-vt100}
 PAGER=more
 EDITOR=vi
-C17_LIBC=shall     # (c17 built elsewhere, e.g. in a test, defaults to glibc)
+C17_LIBC=v86bsd     # (c17 built elsewhere, e.g. in a test, defaults to glibc)
 CC=c17             # the C compiler, for scripts and makefiles that ask for $CC
 export PATH MANPATH HOME PS1 TERM PAGER EDITOR C17_LIBC CC
 case $- in *i*) [ -r /etc/motd ] && cat /etc/motd ;; esac

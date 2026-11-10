@@ -2,12 +2,15 @@
 # config(8) exists (usr.sbin/config) this file is written by hand; it has
 # the form config's output will have.
 #
-#   make            shall-kernel (a Multiboot image) and shall-kernel.elf
+#   make            bsd (a Multiboot image) and bsd.elf
 #   make proto      sys/syscallargs.h again
 #   make gnu        with the host's gcc and binutils instead of c17
 #   make run        boot it in QEMU on disk.img
 #
-# By default Shall's own tools build it: c17 compiles the C, assembles the
+# vers.c (the banner, ostype, osrelease: sys/conf/newvers.sh) is made again
+# whenever an object changes; BUILDER=user@host names the builder in it.
+#
+# By default the system's own tools build it: c17 compiles the C, assembles the
 # assembly and links the kernel (with ld.script) -- inside a running system,
 # nothing else is needed.
 
@@ -28,7 +31,7 @@ QEMUFLAGS = -m 512M -nographic -no-reboot
 APPEND = root=/dev/vda CONSOLE=/dev/ttyS0
 DISK = disk.img
 
-OBJS = boot.o cpu.o entry.o x86.o init_main.o libkern.o \
+OBJS0 = boot.o cpu.o entry.o x86.o init_main.o libkern.o \
 	subr_prf.o kern_sched.o kern_proc.o kern_sig.o kern_exec.o sys_futex.o \
 	kern_time.o kern_xxx.o sysv_ipc.o sys_mqueue.o init_sysent.o uvm_page.o \
 	kern_malloc.o uvm_map.o uvm_mmap.o vfs_subr.o kern_descrip.o vfs_lookup.o \
@@ -36,13 +39,14 @@ OBJS = boot.o cpu.o entry.o x86.o init_main.o libkern.o \
 	uipc_socket.o vfs_pcache.o ip.o tcp.o pci.o if_em.o \
 	kern_tym.o com.o vga.o pckbc.o pciide.o vioblk.o \
 	tty.o mem.o
+OBJS = $(OBJS0) vers.o
 
-all: shall-kernel
+all: bsd
 
-shall-kernel: shall-kernel.elf mkimage
-	./mkimage shall-kernel.elf $@
+bsd: bsd.elf mkimage
+	./mkimage bsd.elf $@
 
-shall-kernel.elf: machine $(OBJS) $(S)/arch/amd64/conf/ld.script
+bsd.elf: machine $(OBJS) $(S)/arch/amd64/conf/ld.script
 	$(LD) $(LDFLAGS) $(S)/arch/amd64/conf/ld.script -o $@ $(OBJS)
 
 gnu:
@@ -65,7 +69,12 @@ HDRS = $(S)/sys/param.h $(S)/sys/systm.h $(S)/sys/types.h \
 	$(S)/dev/pci/pcivar.h $(S)/arch/amd64/include/cpu.h $(S)/arch/amd64/include/_types.h \
 	$(S)/arch/amd64/include/vmparam.h
 
-$(OBJS): machine $(HDRS)
+$(OBJS0): machine $(HDRS)
+
+vers.c: $(S)/conf/newvers.sh $(S)/conf/RELDATE $(OBJS0)
+	sh $(S)/conf/newvers.sh GENERIC
+vers.o: vers.c
+	$(CC) $(CFLAGS) -c -o $@ vers.c
 
 boot.o: $(S)/arch/amd64/amd64/boot.s
 	$(AS) -o $@ $(S)/arch/amd64/amd64/boot.s
@@ -159,8 +168,8 @@ mem.o: $(S)/arch/amd64/amd64/mem.c
 proto:
 	sh $(S)/kern/makesyscalls.sh $(S)
 
-run: shall-kernel
-	$(QEMU) $(QEMUFLAGS) -kernel shall-kernel -append "$(APPEND)" -drive file=$(DISK),format=raw,if=virtio
+run: bsd
+	$(QEMU) $(QEMUFLAGS) -kernel bsd -append "$(APPEND)" -drive file=$(DISK),format=raw,if=virtio
 
 clean:
-	rm -f $(OBJS) shall-kernel shall-kernel.elf mkimage machine
+	rm -f $(OBJS) vers.c vers.c.new bsd bsd.elf mkimage machine

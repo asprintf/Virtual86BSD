@@ -1,12 +1,12 @@
 #!/bin/sh
-# boot.sh - boot a Shall system in QEMU: Shall's kernel with the disk image
+# boot.sh - boot a V86BSD system in QEMU: V86BSD's kernel with the disk image
 # mkdisk.sh made.
 #
 # Usage: sh boot.sh [-egi] [-m memory] [-n] [-k kernel] [-p hostport:port]...
 #                   [image [-- qemu-argument...]]
 #
-#   image     the disk image (default: shall.img beside this script)
-#   -k kernel the kernel (default: root/boot/shall-kernel beside this script)
+#   image     the disk image (default: v86bsd.img beside this script)
+#   -k kernel the kernel (default: root/bsd beside this script)
 #   -m memory QEMU's memory size (default 1G; for example 512M, 2G)
 #   -g        a window with the VGA screen and the keyboard, instead of the
 #             console on this terminal (the serial port)
@@ -33,7 +33,7 @@
 #
 # What is needed: QEMU (qemu-system-x86_64; on Ubuntu the package
 # qemu-system-x86) and e2fsprogs.  KVM is used when /dev/kvm can be opened, which makes
-# the system much faster (Shall has been tested under QEMU's emulation;
+# the system much faster (V86BSD has been tested under QEMU's emulation;
 # -e uses that even where KVM is available).
 
 usage() {
@@ -44,7 +44,7 @@ usage() {
 here=$(pwd)
 cd "$(dirname "$0")" || exit 2
 SRC=$(pwd)
-kernel=$SRC/root/boot/shall-kernel mem=1G graphic=false net=true fwd= kvm=true ide=false
+kernel=$SRC/root/bsd mem=1G graphic=false net=true fwd= kvm=true ide=false
 while getopts egik:m:np: opt; do
 	case $opt in
 	e) kvm=false ;;
@@ -62,7 +62,7 @@ while getopts egik:m:np: opt; do
 	esac
 done
 shift $((OPTIND - 1))
-img=$SRC/shall.img
+img=$SRC/v86bsd.img
 if [ $# -gt 0 ] && [ "$1" != -- ]; then img=$1; shift; fi
 if [ $# -gt 0 ]; then [ "$1" = -- ] || usage; shift; fi
 case $img in /*) ;; *) img=$here/$img ;; esac

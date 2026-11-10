@@ -1,10 +1,10 @@
-# HOWTO: build Rogue inside Shall
+# HOWTO: build Rogue inside V86BSD
 
 Rogue 5.4.4 — the classic dungeon game, Toy, Arnold and Wichman's
 1980s code as the Rogue Forge release of 1999 left it — builds inside a
-Shall system with its own `configure` and makefile, on the ncurses of
+V86BSD system with its own `configure` and makefile, on the ncurses of
 `ports/ncurses`.  Four small changes to its sources are needed
-(`posix.diff`); they are about the code's age, not about Shall: one of
+(`posix.diff`); they are about the code's age, not about V86BSD: one of
 them stops the build with any current ncurses, the others use functions
 that POSIX.1-2024 removed.
 
@@ -20,11 +20,11 @@ already have: `sh ports/get.sh rogue path/to/rogue-master.zip`.
 
 ## 2. Build ncurses first (inside)
 
-    sh /usr/src/shall/ports/ncurses/build.sh
+    sh /usr/src/ports/ncurses/build.sh
 
 ## 3. Build and install Rogue (inside)
 
-    sh /usr/src/shall/ports/rogue/build.sh
+    sh /usr/src/ports/rogue/build.sh
 
 That applies `posix.diff` (once; the script sees when it is applied
 already), then runs, with `CC=c17` and `CFLAGS='-O 1'`:
@@ -62,7 +62,7 @@ On the QEMU console set `TERM` (and the size) first, see
 ## The changes (`posix.diff`)
 
 - **`toascii()`**, twice (`fight.c`, `rooms.c`): POSIX.1-2008 marked it
-  obsolescent and POSIX.1-2024 removed it, so Shall's `<ctype.h>` doesn't
+  obsolescent and POSIX.1-2024 removed it, so V86BSD's `<ctype.h>` doesn't
   have it, and C99 (c17 too) doesn't allow calling an undeclared
   function.  It is `c & 0177`, written out.
 - **`curscr->_cury`, `curscr->_curx`** (`main.c`, in `tstp()`, which
@@ -79,8 +79,8 @@ On the QEMU console set `TERM` (and the size) first, see
 
 ## Tested
 
-Built by `build.sh` inside a freshly bootstrapped Shall system, in a
-chroot and on Shall's own kernel in QEMU, and played in a terminal
+Built by `build.sh` inside a freshly bootstrapped V86BSD system, in a
+chroot and on V86BSD's own kernel in QEMU, and played in a terminal
 (xterm emulation): moving, the inventory, saving with `S` and
 restoring with `-r`, quitting with gold (the score file then lists the
 game: `rogue -s`), and being stopped with SIGTSTP and continued with `fg`

@@ -64,7 +64,7 @@ install: all
 	cp -R $(INCLUDE)/. $(DESTDIR)$(PREFIX)/include
 	@# each file is copied beside its place and renamed into it: copying
 	@# over the libc.so that running programs map would change it under
-	@# them (they crash, and so does the copy: in a running Shall)
+	@# them (they crash, and so does the copy: in a running V86BSD)
 	@for f in $(B)/lib/libc.a $(CRT) $(EMPTY) $(SHARED); do \
 		n=$${f##*/}; d=$(DESTDIR)$(PREFIX)/lib; \
 		echo "cp $$f $$d/$$n"; \

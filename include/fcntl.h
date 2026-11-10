@@ -37,10 +37,10 @@ struct f_owner_ex {
 #define F_OFD_SETLK      37
 #define F_OFD_SETLKW     38
 #define F_DUPFD_CLOEXEC  1030
-#define F_DUPFD_CLOFORK  0x10000  /* native on Shall's kernel, else emulated */
+#define F_DUPFD_CLOFORK  0x10000  /* native on V86BSD's kernel, else emulated */
 
 #define FD_CLOEXEC 1
-#define FD_CLOFORK 2              /* native on Shall's kernel, else emulated */
+#define FD_CLOFORK 2              /* native on V86BSD's kernel, else emulated */
 
 #define F_RDLCK 0
 #define F_WRLCK 1

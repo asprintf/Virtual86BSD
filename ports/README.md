@@ -1,13 +1,13 @@
-# ports — third-party software for a Shall system
+# ports — third-party software for a V86BSD system
 
 Each port is a directory with a `HOWTO.md` (what it takes, what you get,
 what was changed and why) and a `build.sh` that does the work inside the
 system; a port that needs changes to its sources carries them as a
-diff, which its `build.sh` applies.  Everything is built by Shall's own
+diff, which its `build.sh` applies.  Everything is built by V86BSD's own
 tools: c17, make, sh, sed, awk, ar.  No gcc, binutils, GNU make, bash,
 Perl or Python.
 
-| Port | Version | Changes to its sources | Built with | Tests inside Shall |
+| Port | Version | Changes to its sources | Built with | Tests inside V86BSD |
 |---|---|---|---|---|
 | [ncurses](ncurses/HOWTO.md) | 6.6 | none | its `configure` and makefiles | tic/infocmp agree with the host's on 2899 terminals |
 | [rogue](rogue/HOWTO.md) | 5.4.4 | `posix.diff`: 4 small changes | its `configure` and makefile (needs ncurses) | played |
@@ -17,11 +17,11 @@ Perl or Python.
 | [mbedtls](mbedtls/HOWTO.md) | 3.6.7 | `shall.diff`: no inline assembly, gettimeofday | c17 and ar | selftest, TLS 1.2/1.3, 139 unit suites |
 | [curl](curl/HOWTO.md) | 8.23.0 | `shall.diff`: c17 in `<curl/system.h>` | its `configure` and makefiles (needs mbedtls) | HTTPS to localhost and the Internet |
 
-Shall's C library is strictly POSIX.1-2024: interfaces the standard
+V86BSD's C library is strictly POSIX.1-2024: interfaces the standard
 removed (`gettimeofday`, `setitimer`, `ctime_r`, ...) are not there, also
 not as extensions, so ports that still call them carry small diffs
 (SQLite: `gettimeofday` three times; Mbed TLS: its timing module).  That
-is a decision, not a gap: Shall is kept a minimal POSIX system.
+is a decision, not a gap: V86BSD is kept a minimal POSIX system.
 
 ## The way it goes
 
@@ -43,12 +43,12 @@ Then enter the system, `sh chroot.sh`, or boot it: `get.sh` writes into
 sqllogictest's 1.1 GB of tests; it makes the image afresh), and
 `sh boot.sh`.  Inside:
 
-    sh /usr/src/shall/ports/all.sh       # all that are in /usr/src, in order; -t: their tests
+    sh /usr/src/ports/all.sh       # all that are in /usr/src, in order; -t: their tests
 
 or one at a time:
 
-    sh /usr/src/shall/ports/ncurses/build.sh
-    sh /usr/src/shall/ports/rogue/build.sh
+    sh /usr/src/ports/ncurses/build.sh
+    sh /usr/src/ports/rogue/build.sh
     rogue
 
 Each `build.sh` installs (unless `-I`), writes the output of configure
@@ -62,12 +62,12 @@ The ports install under `/usr/local` (`bin`, `lib`, `include`,
 `share/man`, `share/doc`), apart from the system's own programs in `/usr`:
 
 - `PATH` has `/usr/local/bin` first (`/etc/profile`, `chroot.sh`, init);
-- c17 (its profile for Shall's C library, `/usr/lib/c17/libc/shall`)
+- c17 (its profile for V86BSD's C library, `/usr/lib/c17/libc/v86bsd`)
   searches `/usr/local/include` and `/usr/local/lib` after `/usr/include`
   and `/usr/lib`, so `c17 prog.c -lcurses` just works;
 - the dynamic linker searches `/usr/local/lib` (for `libsqlite3.so`);
 - `MANPATH` (`/etc/profile`) has `/usr/local/share/man` (plain-text
-  pages, as Shall's `man` reads them: `man rogue`).
+  pages, as V86BSD's `man` reads them: `man rogue`).
 
 Two things stay in the system's places: ncurses' terminfo database in
 `/usr/share/terminfo` (the system's `tput`, `more` and `vi` read it too)
@@ -92,7 +92,7 @@ column.
 ## The Internet
 
 With curl the system reaches the Internet, in the chroot through the
-host's network and on Shall's kernel in QEMU through QEMU's user
+host's network and on V86BSD's kernel in QEMU through QEMU's user
 networking (10.0.2.15 by DHCP; the host is 10.0.2.2): see
 [curl/HOWTO.md](curl/HOWTO.md).  `bootstrap.sh` copies the host's
 certificate authorities to `/etc/ssl/certs/ca-certificates.crt`.

@@ -1,6 +1,6 @@
 /* Internal: close-on-fork (FD_CLOFORK, O_CLOFORK).
  *
- * Shall's kernel has it: the flags go to the kernel as they are (open,
+ * V86BSD's kernel has it: the flags go to the kernel as they are (open,
  * pipe2, dup3, socket, accept4, recvmsg take them; F_GETFD/F_SETFD carry
  * FD_CLOFORK; F_DUPFD_CLOFORK exists), and the kernel closes the
  * descriptors in a new process.  __clofork_native() finds out, once.

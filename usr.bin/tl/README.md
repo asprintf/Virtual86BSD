@@ -4,7 +4,7 @@ tl is a small interpreted language in the style of C, with the interfaces
 of POSIX and pseudo-terminals (with a terminal emulator) as its library.
 It is not a utility of POSIX: it is the language the test suites of this
 collection are written in where the shell is not enough, and a program of
-Shall in its own right (`/usr/bin/tl`), so that tests in the same manner
+V86BSD in its own right (`/usr/bin/tl`), so that tests in the same manner
 can be written for anything else on the system.  One file, `tl.c`, C99
 with POSIX interfaces, about 6700 lines.
 
@@ -62,7 +62,7 @@ same sources.
 statements, functions, include, the errors and exit statuses) and every
 part of the library, with a script run by `#!`.  The suites of the other
 utilities use tl throughout (some 50 of them build it), so they test it
-as well, under gcc and c17, with glibc and with Shall's C library.
+as well, under gcc and c17, with glibc and with V86BSD's C library.
 
 ## Files
 

@@ -1,6 +1,6 @@
 #!/bin/sh
-# get.sh - fetch and unpack the sources of a port into a Shall system, on
-# the host (Shall itself has no network tools and no gzip).
+# get.sh - fetch and unpack the sources of a port into a V86BSD system, on
+# the host (V86BSD itself has no network tools and no gzip).
 #
 # Usage: sh get.sh [-f] [-r root] port [archive]
 #
@@ -57,7 +57,7 @@ if [ "$port" = all ]; then
 		else sh "$0" -r "$root" $p 2>&1 | grep -v 'is there already' || :
 		fi
 	done
-	echo "inside the system:  sh /usr/src/shall/ports/all.sh"
+	echo "inside the system:  sh /usr/src/ports/all.sh"
 	exit $st
 fi
 have() { command -v "$1" >/dev/null 2>&1; }
@@ -85,7 +85,7 @@ curl)    name=curl-8.23.0 git= tag= tests=
 *)       usage ;;
 esac
 
-[ -x "$root/usr/bin/sh" ] || fail "$root: no Shall system there (sh bootstrap.sh)"
+[ -x "$root/usr/bin/sh" ] || fail "$root: no V86BSD system there (sh bootstrap.sh)"
 src=$(cd "$root/usr/src" && pwd) || exit 1
 dest=$src/$name
 if [ -e "$dest" ]; then
@@ -143,4 +143,4 @@ else
 	fi
 fi
 echo "get.sh: $port in $dest"
-echo "inside the system:  sh /usr/src/shall/ports/$port/build.sh"
+echo "inside the system:  sh /usr/src/ports/$port/build.sh"

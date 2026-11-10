@@ -89,11 +89,11 @@ long sysconf(int name)
 	}
 	case CPUS_CONF: case CPUS_ONLN: return ncpus();
 	case PAGESZ: return (long)__libc.page_size;
-	/* the sporadic server: where the kernel takes the policy (Shall's
+	/* the sporadic server: where the kernel takes the policy (V86BSD's
 	   kernel; Linux has no such policy and says EINVAL) */
 	case SPORADIC: return __syscall1(SYS_sched_get_priority_max, SCHED_SPORADIC) > 0 ? VER : -1;
 	case SSREPL: return __syscall1(SYS_sched_get_priority_max, SCHED_SPORADIC) > 0 ? 32 : -1;
-	/* typed memory: where the kernel offers it (Shall's: /dev/tymctl) */
+	/* typed memory: where the kernel offers it (V86BSD's: /dev/tymctl) */
 	case TYM: return __syscall2(SYS_access, "/dev/tymctl", 0) == 0 ? VER : -1;
 	default: {
 		struct rlimit l;

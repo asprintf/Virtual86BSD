@@ -3,3 +3,9 @@
 /*.img
 *.o
 *.a
+/sys/arch/*/compile/*/vers.c
+/sys/arch/*/compile/*/vers.c.new
+/sys/arch/*/compile/*/bsd
+/sys/arch/*/compile/*/bsd.elf
+/sys/arch/*/compile/*/mkimage
+/sys/arch/*/compile/*/machine

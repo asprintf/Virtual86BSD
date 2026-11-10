@@ -6,25 +6,20 @@
 #include <uvm/uvm.h>
 #include <machine/cpu.h>
 
-/* uname: the system says it is Linux, so that programs that check (glibc's
-   "kernel too old" test, configure scripts) treat it as one */
-#ifndef UTS_SYSNAME
-#define UTS_SYSNAME "Linux"
-#endif
-const char *uts_sysname = UTS_SYSNAME;
-const char *uts_release = "6.9.0-shall";
-const char *uts_version = "#1 Shall 0.9.1";
-char uts_nodename[65] = "shall";
+/* uname: the system's identity is that of vers.c (conf/newvers.sh): V86BSD,
+   the release, GENERIC#1.  Linux programs get the same until the Linux
+   emulation has its own (uname -r 6.9.0 there). */
+char uts_nodename[65] = "v86bsd";
 static char uts_domain[65] = "(none)";
 
 long sys_uname(long ubuf) {
   char u[6][65];
   memset(u, 0, sizeof(u));
-  strcpy(u[0], uts_sysname);
+  strcpy(u[0], ostype);
   strcpy(u[1], uts_nodename);
-  strcpy(u[2], uts_release);
-  strcpy(u[3], uts_version);
-  strcpy(u[4], "x86_64");
+  strcpy(u[2], osrelease);
+  strcpy(u[3], osversion);
+  strcpy(u[4], "amd64");
   strcpy(u[5], uts_domain);
   return copy_to_user((void *)ubuf, u, sizeof(u)) ? -EFAULT : 0;
 }

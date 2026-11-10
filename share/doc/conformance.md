@@ -1,12 +1,12 @@
-# Shall and external conformance test suites
+# V86BSD and external conformance test suites
 
-Shall was checked with three test suites written by others:
+V86BSD was checked with three test suites written by others:
 
 * **os-test**, from Sortix: 5816 tests of POSIX headers, the namespace and C library functions;
 * **the POSIX Shell Tests**, yash's test suite: 10,979 cases of the shell language and its built-in utilities;
 * **the Open POSIX Test Suite**, from LTP: 1888 tests of the threads, real-time and signal interfaces.
 
-Each suite is compared here with other implementations: glibc on Linux for os-test and the Open POSIX Test Suite, and yash, dash and bash for the shell tests. The results are for Shall 0.9.1, from 5–6 November 2026.
+Each suite is compared here with other implementations: glibc on Linux for os-test and the Open POSIX Test Suite, and yash, dash and bash for the shell tests. The results are for V86BSD 0.9.1, from 5–6 November 2026.
 
 None of the suites is part of this tree. The scripts that run them are:
 
@@ -16,29 +16,29 @@ None of the suites is part of this tree. The scripts that run them are:
 
 A test that fails is not always a fault in the system it tests. For each suite, every result below that is not a pass is accounted for. Each is put in one of four classes:
 
-* a limitation of Shall;
+* a limitation of V86BSD;
 * a defect in the test;
 * something the standard leaves open;
 * a deliberate choice.
 
 ## Summary
 
-| suite | Shall | comparison |
+| suite | V86BSD | comparison |
 |---|---|---|
 | os-test | **5616 / 5816** pass | glibc 2.39 on Linux: 5228 |
 | POSIX Shell Tests | **10,940** pass, **8** fail (31 skipped) | yash 2.55: 0 fail; dash 0.5.12: 1,271; bash 5.2 as `sh`: 1,634 |
 | Open POSIX Test Suite | **1741 / 1777** that compile pass | glibc on Linux: 1693 |
 
-Every header test and every namespace test of os-test passes on Shall. glibc passes 3471 of the 3758 header tests and 130 of the 159 namespace tests.
+Every header test and every namespace test of os-test passes on V86BSD. glibc passes 3471 of the 3758 header tests and 130 of the 159 namespace tests.
 
 ## How the suites were run
 
-**On Shall:**
+**On V86BSD:**
 
-* The tests were built inside Shall by its own compiler, c17, against Shall's C library.
-* os-test and the Open POSIX Test Suite then ran on Shall's own kernel in QEMU, with the CPU emulated in software (no KVM).
+* The tests were built inside V86BSD by its own compiler, c17, against V86BSD's C library.
+* os-test and the Open POSIX Test Suite then ran on V86BSD's own kernel in QEMU, with the CPU emulated in software (no KVM).
 * os-test's header and namespace suites only compile, so they were done in a chroot.
-* The POSIX Shell Tests need yash for their runner, so they ran on the Linux host. The shell under test was Shall's `sh`, linked statically with Shall's C library.
+* The POSIX Shell Tests need yash for their runner, so they ran on the Linux host. The shell under test was V86BSD's `sh`, linked statically with V86BSD's C library.
 
 **The comparisons** ran on the host:
 
@@ -55,7 +55,7 @@ Some results are affected by the environment:
 
 The tests come from a snapshot of os-test taken on 5 November 2026: 5816 tests in 14 suites. The judgements are those of os-test's own report generator, `misc/html`. A test os-test has no expected outcome for counts as not passed.
 
-| suite | Shall | glibc / Linux |
+| suite | V86BSD | glibc / Linux |
 |---|---|---|
 | basic (a test of every function) | 1151 / 1187 | 1077 / 1187 |
 | fnmatch | 61 / 67 | 49 / 67 |
@@ -73,13 +73,13 @@ The tests come from a snapshot of os-test taken on 5 November 2026: 5816 tests i
 | udp | 59 / 207 | 95 / 207 |
 | **total** | **5616 / 5816** | **5228 / 5816** |
 
-Shall's first run passed 5501 tests. The fixes made after it are listed in `libc/STATUS.md`, stage 18; with them 0.9 passed 5610. They include errors in the floating-point exceptions and `errno` settings of the math functions, header namespace leaks, and some pseudoterminal and process-group behaviour in the kernel. 0.9.1 makes `fnmatch()` follow the 2024 text in two places (see below). The fnmatch suite was run again with 0.9.1's library, on the host rather than in QEMU, and passes 6 more tests; the table counts them.
+V86BSD's first run passed 5501 tests. The fixes made after it are listed in `libc/STATUS.md`, stage 18; with them 0.9 passed 5610. They include errors in the floating-point exceptions and `errno` settings of the math functions, header namespace leaks, and some pseudoterminal and process-group behaviour in the kernel. 0.9.1 makes `fnmatch()` follow the 2024 text in two places (see below). The fnmatch suite was run again with 0.9.1's library, on the host rather than in QEMU, and passes 6 more tests; the table counts them.
 
-### The 200 that do not pass on Shall
+### The 200 that do not pass on V86BSD
 
-**85 do not compile** (accounted for, not faults in Shall):
+**85 do not compile** (accounted for, not faults in V86BSD):
 
-* 83 call `usleep()` or `gettimeofday()`. POSIX removed `usleep()` in 2008 and `gettimeofday()` in 2024, and Shall does not provide either (78 of these tests are in the udp suite).
+* 83 call `usleep()` or `gettimeofday()`. POSIX removed `usleep()` in 2008 and `gettimeofday()` in 2024, and V86BSD does not provide either (78 of these tests are in the udp suite).
   * For a diagnostic run, these tests were compiled with a small replacement for both functions (`libc/tools/ost/shim.h`). Then (in 0.9) 39 pass, 32 have no expected outcome, and 12 fail. glibc gets 38, 33 and 12 on the same tests.
 * 2 use `_POSIX_TEXTDOMAIN_MAX`, which POSIX does not define; the minimum it gives is `{_POSIX_NAME_MAX} - 3`. This is a defect in the test.
 
@@ -92,10 +92,10 @@ Shall's first run passed 5501 tests. The fixes made after it are listed in `libc
   * the `remquo` family reports the wrong quotient bits, because QEMU emulates the `fprem1` instruction wrongly.
   * All 11 pass on a real processor.
 * 18 are off by one unit in the last place of a long double result. POSIX does not require correct rounding, and glibc misses the same results.
-* 3 (`fma`, `fmaf`, `fmal`) are a defect in the test. Its case 24 expects `fma(0, inf, 10.1)` to leave `errno` alone. POSIX says a domain error *shall* occur, which means `errno` is `EDOM`. Shall does what POSIX says; glibc never sets `errno` in `fma`.
-* 2 are `strfmon` and `strfmon_l`. Shall pads a positive amount to the width of the negative one, as glibc does; os-test reads POSIX's alignment rule differently.
-* 1 is `sockatmark`, which needs TCP urgent data. Shall's kernel does not support it: this is a limitation of Shall.
-* 1 is `pututxline`, which calls `gettimeofday()` and so does not compile; it is counted again among the 85 above. Compiled with a shim it failed on 0.9, because Shall had no utmp file; since 0.9.1 the first `pututxline()` creates one.
+* 3 (`fma`, `fmaf`, `fmal`) are a defect in the test. Its case 24 expects `fma(0, inf, 10.1)` to leave `errno` alone. POSIX says a domain error *shall* occur, which means `errno` is `EDOM`. V86BSD does what POSIX says; glibc never sets `errno` in `fma`.
+* 2 are `strfmon` and `strfmon_l`. V86BSD pads a positive amount to the width of the negative one, as glibc does; os-test reads POSIX's alignment rule differently.
+* 1 is `sockatmark`, which needs TCP urgent data. V86BSD's kernel does not support it: this is a limitation of V86BSD.
+* 1 is `pututxline`, which calls `gettimeofday()` and so does not compile; it is counted again among the 85 above. Compiled with a shim it failed on 0.9, because V86BSD had no utmp file; since 0.9.1 the first `pututxline()` creates one.
 
 **fnmatch 6, regex 3:** all 9 are tests os-test itself marks "nonstandard": rejecting invalid UTF-8, and `\{,n\}` in basic regular expressions.
 
@@ -106,7 +106,7 @@ Two things os-test found in `fnmatch()` were fixed in 0.9.1. Both follow the let
 
 **udp, 2:**
 
-* Binding to the LAN's broadcast address is refused; Linux allows it. This is a limitation of Shall's kernel.
+* Binding to the LAN's broadcast address is refused; Linux allows it. This is a limitation of V86BSD's kernel.
 * Connecting again to 0.0.0.0 connects to the loopback, as on some systems. os-test wants this to fail or to disconnect the socket.
 
 A UDP socket that was connected on the loopback used to keep 127.0.0.1 as its address when it was connected again to an outside address. 0.9.1 fixes this; os-test has no settled expectation for that test, so it now counts among the 69 with no expected outcome.
@@ -119,14 +119,14 @@ The suite is posix-shell-tests (git b1acf5f, GPL-2): 120 files and 10,979 cases.
 
 | shell | passed | failed | skipped |
 |---|---|---|---|
-| **Shall `sh`** | **10,940** | **8** | 31 |
+| **V86BSD `sh`** | **10,940** | **8** | 31 |
 | yash 2.55 | 10,957 | 0 | 22 |
 | dash 0.5.12 | 9,674 | 1,271 | 31 |
 | bash 5.2.21 as `sh` | 9,166 | 1,634 | 29 |
 
 A few test files cut bash off at the 300-second limit; that is why bash's total is lower. The suite was written for yash, so yash passing everything is expected.
 
-Shall's first run had 970 failures, and 0.9 had 15. The fixes made after the first run are listed in `utilities/sh/README.md`. Most were about signals:
+V86BSD's first run had 970 failures, and 0.9 had 15. The fixes made after the first run are listed in `utilities/sh/README.md`. Most were about signals:
 
 * signals ignored on entry, and SIGINT and SIGQUIT in background lists;
 * job control giving the terminal back when the shell ends;
@@ -134,24 +134,24 @@ Shall's first run had 970 failures, and 0.9 had 15. The fixes made after the fir
 
 The others were the order of redirections and assignments, line continuations inside operators, and a dozen smaller points. 0.9.1 fixed six alias cases that POSIX specifies: a here-document or a line continuation in an alias value, the `()` of a function definition from an alias, and the token that replaces one following an alias whose value ends in a blank.
 
-### The 8 that fail on Shall
+### The 8 that fail on V86BSD
 
 * **5 alias cases that POSIX leaves unspecified.** Four expect `in`, `do`, `for` or `case` to be replaced by aliases. POSIX says it is unspecified whether a word that could be a reserved word is subject to alias substitution. The fifth defines an alias inside a function and uses it in a command substitution in the same function, which depends on when that command substitution is parsed (also unspecified, see the next item).
-* **2 cases that POSIX.1-2024 leaves unspecified.** POSIX does not say whether the commands of a command substitution are parsed all at once or line by line. The tests check for line by line; Shall, dash and bash parse them all at once.
+* **2 cases that POSIX.1-2024 leaves unspecified.** POSIX does not say whether the commands of a command substitution are parsed all at once or line by line. The tests check for line by line; V86BSD, dash and bash parse them all at once.
 * **1 `read` case** (`read.tst:203`): a deliberate choice that follows the 2024 text. POSIX.1-2024 gives the last variable the rest of the line "unsplit". So `IFS=' -' read a b c` of `A-B-C - ` sets `c` to `C -`; the other shells, and the test, give `C`.
 
 One more case, `wait.tst:100`, passes or fails depending on timing: its expected status depends on whether the signal arrives while a child process is running. It passed in this run and failed in the one before; dash fails it too.
 
 ## The Open POSIX Test Suite
 
-The suite comes from LTP (git 43bf9cf): 1888 tests, of which 1777 compile on Shall. The other 111 use interfaces that were removed from POSIX or are not part of it.
+The suite comes from LTP (git 43bf9cf): 1888 tests, of which 1777 compile on V86BSD. The other 111 use interfaces that were removed from POSIX or are not part of it.
 
 | | passed |
 |---|---|
-| **Shall, on its kernel** | **1741 / 1777** |
+| **V86BSD, on its kernel** | **1741 / 1777** |
 | glibc on Linux, the same tests | 1693 |
 
-None of the 36 that do not pass is a fault in Shall. 26 of them do not pass on glibc either. The details, test by test, are in `libc/STATUS.md`, stage 17. In outline:
+None of the 36 that do not pass is a fault in V86BSD. 26 of them do not pass on glibc either. The details, test by test, are in `libc/STATUS.md`, stage 17. In outline:
 
 * features that are optional or whose limits are indeterminate (process contention scope, `AIO_MAX`, `SEM_NSEMS_MAX`);
 * behaviour that is undefined, or a "may fail";
@@ -160,6 +160,6 @@ None of the 36 that do not pass is a fault in Shall. 26 of them do not pass on g
 
 ## Reproducing the results
 
-* **os-test:** `libc/tools/ost/README.md`. Build with `sh ost.sh build` inside Shall (a chroot is enough), run with `sh ost.sh run` on Shall's kernel, then make the report on the host with `sh libc/tools/ost/report.sh shall.img root/root/os-test`.
+* **os-test:** `libc/tools/ost/README.md`. Build with `sh ost.sh build` inside V86BSD (a chroot is enough), run with `sh ost.sh run` on V86BSD's kernel, then make the report on the host with `sh libc/tools/ost/report.sh v86bsd.img root/root/os-test`.
 * **POSIX Shell Tests:** `sh utilities/sh/tests/posix_shell_tests.sh SUITE SHELL` on a host with yash and `script(1)`.
-* **Open POSIX Test Suite:** `sh libc/tools/pts.sh SRC OUT c17 [TIMEOUT [K/M]]` inside Shall.
+* **Open POSIX Test Suite:** `sh libc/tools/pts.sh SRC OUT c17 [TIMEOUT [K/M]]` inside V86BSD.

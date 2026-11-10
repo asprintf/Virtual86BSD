@@ -1,5 +1,5 @@
 #!/bin/sh
-# build.sh - build and install ncurses 6.6 inside a Shall system (see
+# build.sh - build and install ncurses 6.6 inside a V86BSD system (see
 # HOWTO.md beside it).
 #
 # Usage: sh build.sh [-n] [-T] [dir]
@@ -9,14 +9,14 @@
 #         (keep the one bootstrap.sh copied from the host)
 #   -T    don't build ncurses' test and demo programs (test/)
 #
-# Builds with c17 and Shall's make, sh, sed and awk through ncurses' own
+# Builds with c17 and V86BSD's make, sh, sed and awk through ncurses' own
 # configure; nothing is changed in the sources.  Installs, under /usr/local:
 #   lib/libncursesw.a, libpanelw.a, libmenuw.a, libformw.a, and the links
 #       libncurses.a, libcurses.a, libpanel.a, libmenu.a, libform.a to them
 #       (so that -lcurses and -lncurses work too)
 #   include/curses.h, ncurses.h, term.h, panel.h, menu.h, form.h, ...
 #   bin/tic, infocmp, toe, tset, clear (and captoinfo, infotocap, reset);
-#       not ncurses' tput and tabs: Shall has those already (POSIX's)
+#       not ncurses' tput and tabs: V86BSD has those already (POSIX's)
 #   bin/ncursesw6-config
 #   bin/ncurses/: all of ncurses' test and demo programs (unless -T), and
 #       some of them also in bin: worm, rain, xmas, blue, firework, hanoi,
@@ -25,7 +25,7 @@
 # the system's own tput, more and vi read it too.
 # The libraries are static (no shared ncurses: programs link it in)
 # and wide-character (UTF-8 locales work); there are no manual pages
-# (they are troff, Shall's man shows plain text).
+# (they are troff, V86BSD's man shows plain text).
 
 usage() { echo "usage: sh build.sh [-n] [-T] [dir]" >&2; exit 2; }
 db=yes tests=yes
@@ -56,7 +56,9 @@ run() {   # run what... : append the output to the log, stop on failure
 t=--with-tests
 [ $tests = no ] && t=--without-tests
 say "configure (output in $log)"
-CFLAGS=${CFLAGS:--O 1} run ./configure --prefix=/usr/local \
+# (--build: config.guess does not know uname -s V86BSD; this is the triplet
+# it found when the system still said Linux)
+CFLAGS=${CFLAGS:--O 1} run ./configure --prefix=/usr/local --build=x86_64-pc-linux-gnu \
 	--without-cxx --without-cxx-binding --without-ada \
 	--without-shared --without-debug --without-manpages $t --enable-overwrite \
 	--with-terminfo-dirs=/usr/share/terminfo \

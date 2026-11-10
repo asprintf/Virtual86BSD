@@ -1,5 +1,5 @@
 #!/bin/sh
-# build.sh - build Lua 5.4 inside a Shall system (see HOWTO.md beside it).
+# build.sh - build Lua 5.4 inside a V86BSD system (see HOWTO.md beside it).
 #
 # Usage: sh build.sh [-I] [-t] [dir]
 #
@@ -11,7 +11,7 @@
 #   -I    build only; without it lua (and luac) go to /usr/local/bin,
 #         liblua.a to /usr/local/lib and its headers to /usr/local/include
 #
-# Only Shall's own tools are used: c17 compiles and links, ar makes
+# Only V86BSD's own tools are used: c17 compiles and links, ar makes
 # liblua.a.  Lua's makefile isn't used: it passes gcc's options, runs
 # ranlib (not POSIX) and makes ldo.c use _setjmp (gone from POSIX.1-2024).
 

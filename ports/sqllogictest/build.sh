@@ -1,5 +1,5 @@
 #!/bin/sh
-# build.sh - build sqllogictest inside a Shall system (see HOWTO.md beside
+# build.sh - build sqllogictest inside a V86BSD system (see HOWTO.md beside
 # it), against the SQLite of ports/sqlite: the point is to test that one.
 # (sqllogictest's src/ also carries an SQLite amalgamation, which isn't
 # used: it would need posix-autoconf.diff of ports/sqlite as well.)

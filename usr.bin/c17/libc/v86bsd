@@ -1,5 +1,5 @@
-# Shall's own C library (../../libc), installed with PREFIX=/usr: the
-# C library of a Shall system.  Linked dynamically by default, with
+# V86BSD's own C library (../../libc), installed with PREFIX=/usr: the
+# C library of a V86BSD system.  Linked dynamically by default, with
 # libc.so, the library that is also the dynamic linker; -B static links
 # libc.a.
 include /usr/include

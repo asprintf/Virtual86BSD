@@ -99,7 +99,7 @@ No GNU attributes (weak aliases, visibility) are used in C, since c17
 does not implement them; where an alias is needed it is made in assembly.
 
 **Close-on-fork.**  POSIX.1-2024's `O_CLOFORK`/`FD_CLOFORK` go to the
-kernel when it has them (Shall's kernel; found out once, by whether
+kernel when it has them (V86BSD's kernel; found out once, by whether
 `F_GETFD` reports `FD_CLOFORK` on a descriptor opened with `O_CLOFORK`).
 Linux has no equivalent, so there the library keeps a bitmap of flagged
 descriptors (`src/internal/clofork.c`) and `fork()` closes them in the

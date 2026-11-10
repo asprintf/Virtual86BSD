@@ -28,10 +28,10 @@ the compiler (gcc / c17), not by this library.
 
 | Header | State | Notes |
 |---|---|---|
-| `<fcntl.h>` | done | `O_CLOFORK`/`FD_CLOFORK`/`F_DUPFD_CLOFORK` native on Shall's kernel, emulated on Linux; `O_EXEC`/`O_SEARCH` = `O_PATH` |
+| `<fcntl.h>` | done | `O_CLOFORK`/`FD_CLOFORK`/`F_DUPFD_CLOFORK` native on V86BSD's kernel, emulated on Linux; `O_EXEC`/`O_SEARCH` = `O_PATH` |
 | `<poll.h>` | done | |
 | `<signal.h>` | done | signals 32–34 reserved for the library, `SIGRTMIN` 35; `sig2str`/`str2sig`; `psignal`/`psiginfo` write with one `writev(2)` (atomic, stderr unbuffered) |
-| `<sys/mman.h>` | done; typed memory where the kernel has it (Shall's), else the functions fail as for no typed memory | `shm_open` in `/dev/shm`; `POSIX_MADV_DONTNEED` is a no-op (Linux's discards data) |
+| `<sys/mman.h>` | done; typed memory where the kernel has it (V86BSD's), else the functions fail as for no typed memory | `shm_open` in `/dev/shm`; `POSIX_MADV_DONTNEED` is a no-op (Linux's discards data) |
 | `<sys/resource.h>` | done | |
 | `<sys/select.h>` | done | |
 | `<sys/stat.h>` | done | |
@@ -142,7 +142,7 @@ signs are empty, as POSIX requires (in the POSIX locale); C.UTF-8 has no
 
 [os-test](https://gitlab.com/sortix/os-test) (Sortix, ISC licensed,
 outside the tree; a snapshot of 5 November 2026: 5816 tests in 14
-suites) was built inside the system by c17 and run on Shall's kernel in
+suites) was built inside the system by c17 and run on V86BSD's kernel in
 QEMU; the include and namespace suites only compile.  Its makefiles need
 GNU or BSD make, so `tools/ost/` runs it with POSIX sh (`ost.sh`), with a
 compiler command (`cc`) that turns gcc's options into c17's.  For
@@ -150,7 +150,7 @@ comparison it ran on the host as its makefiles do, with gcc 13 and glibc
 2.39 on Linux 6.18.  Judged by os-test's own `misc/html` (expectations in
 `<suite>.expect`, "none" where they are unknown):
 
-| suite | Shall | glibc/Linux |
+| suite | V86BSD | glibc/Linux |
 |---|---|---|
 | basic | 1151/1187 | 1077/1187 |
 | fnmatch | 61/67 | 49/67 |
@@ -192,7 +192,7 @@ The first run gave 5501.  It found, and this round fixed:
   without XSI, `<termios.h>` the output delays without XSI and `ECHOCTL`,
   `ECHOPRT`, `ECHOKE` without the extensions.
 * `make install` copied over the installed `libc.so`, which running
-  programs map: in a running Shall they (and the copy) crashed.  Each
+  programs map: in a running V86BSD they (and the copy) crashed.  Each
   file is now copied beside its place and renamed into it.
 * In c17 (`utilities/c17`): `INFINITY`, `NAN` and `HUGE_VAL` were `1.0/0.0`
   and `0.0/0.0`, evaluated when the program runs, so using them raised
@@ -237,7 +237,7 @@ host (not in QEMU), passes 61 of 67: 6 more, the table counts them.
 What is left (200):
 
 * 85 do not compile: 83 call `usleep` (78 of them in udp) or
-  `gettimeofday`, which POSIX removed (2008, 2024) and Shall does not
+  `gettimeofday`, which POSIX removed (2008, 2024) and V86BSD does not
   have; 2 (limits) use `_POSIX_TEXTDOMAIN_MAX`, which POSIX does not
   define (its minimum is `{_POSIX_NAME_MAX} - 3`): defects of the tests.
   Compiled with a shim (`shim.h`) for a diagnostic run, 39 of the 83 pass,
@@ -262,11 +262,11 @@ What is left (200):
   it); connecting again to 0.0.0.0 connects to the loopback, as on some
   systems, where os-test wants it to fail or to disconnect.
 
-## Stage 17: the Open POSIX Test Suite on Shall's kernel
+## Stage 17: the Open POSIX Test Suite on V86BSD's kernel
 
 The suite (LTP git 43bf9cf, 4 November 2026: 1873 conformance tests, 253
 of them compile-only, and 15 functional ones) was built inside the system
-by c17, linked dynamically with libc.so, and run on Shall's kernel in QEMU
+by c17, linked dynamically with libc.so, and run on V86BSD's kernel in QEMU
 (300 s per test, as LTP); for comparison also in a chroot on Linux and
 with glibc.  The runner is `tools/pts.sh` (POSIX sh; LTP itself is GPL and
 stays outside the tree): `sh tools/pts.sh SRC OUT c17 300 [K/M]` with SRC
@@ -275,7 +275,7 @@ stopped, and K/M splits the list between machines.
 
 * 111 do not compile, all for interfaces POSIX.1-2024 removed or that are
   not POSIX (see stage 14; `gettimeofday` alone is 22).
-* Of the other 1777: 1711 passed on Shall's kernel at first, 1741 after
+* Of the other 1777: 1711 passed on V86BSD's kernel at first, 1741 after
   the fixes below; glibc 1693 on Linux.  The run found, in this library:
   * read-write locks did not give way to waiting writers under
     `SCHED_FIFO`/`SCHED_RR` (Thread Execution Scheduling): a real-time
@@ -298,25 +298,25 @@ stopped, and K/M splits the list between machines.
   defects of the tests: they switch to `SCHED_SPORADIC` without valid
   sporadic-server parameters, expect the sporadic parameters to apply to a
   process that is not `SCHED_SPORADIC`, or keep an old `errno`.
-* Left, not bugs of Shall: tests of undefined behaviour (`pthread_join`
+* Left, not bugs of V86BSD: tests of undefined behaviour (`pthread_join`
   and others on a joined thread) and of implementation-defined
   `aio_cancel` (a request in progress is cancelled here, as musl does).
 * The 26 that do not pass with glibc either were each looked at; none is
-  a fault of Shall.  7 need process contention scope (`PTHREAD_SCOPE_PROCESS`
+  a fault of V86BSD.  7 need process contention scope (`PTHREAD_SCOPE_PROCESS`
   gives `ENOTSUP`, as POSIX allows: one scope is enough); 3 need a limit
   that is indeterminate here (`AIO_MAX` twice, `SEM_NSEMS_MAX`: no limit,
   `sysconf` -1) and 1 a 32-bit `off_t` (`mmap/31-1`); 10 test errors POSIX
   says "may" happen or behaviour it leaves undefined (`aio_error`/`aio_return`
   on a bad or retrieved aiocb, `EBUSY` from destroying a barrier or
   condition variable in use, an invalid mutex attribute object, `EPERM` for
-  reading another process's scheduling or CPU clock, which Shall allows to
+  reading another process's scheduling or CPU clock, which V86BSD allows to
   all, as Linux); 5 are defects of the tests (`sched_setscheduler/19-2`
   forgets `<unistd.h>`, so `_POSIX_SPORADIC_SERVER` is not seen: with it
-  the test passes on Shall's kernel; `aio_suspend/5-1` wants
+  the test passes on V86BSD's kernel; `aio_suspend/5-1` wants
   `_SC_ASYNCHRONOUS_IO` to be exactly 200112L; `pthread_rwlock_unlock/4-1`,
   `4-2` and `pthread_mutex_init/speculative/5-2` skip themselves on Linux,
-  and Shall's kernel calls itself Linux).
-* `clock_settime/8-1`, the 27th, was a bug of Shall's kernel (a relative
+  and V86BSD's kernel calls itself Linux).
+* `clock_settime/8-1`, the 27th, was a bug of V86BSD's kernel (a relative
   sleep on `CLOCK_REALTIME` was lengthened when the clock was set back),
   now fixed; it fails with glibc here only because of the sandbox's clock
   (the host's Linux passes the same check in `kernel/tests/k_timer`).
@@ -442,7 +442,7 @@ Found on the way: glob() of a pattern ending in "/" (`"d1/"`) used an
 unterminated buffer (in the static library the stack happened to hold
 a zero); `weak.s` reached an undefined weak symbol PC-relatively, which
 a PIE cannot (now through the GOT).
-Later (the Shall bootstrap, building with the collection's own ar):
+Later (the V86BSD bootstrap, building with the collection's own ar):
 src/fenv/fenv.c and src/arch/x86_64/fenv.s both made a member fenv.o,
 and POSIX ar -r keeps only the last of two members of one name; the
 assembly file is now fenv_prim.s, and tools/genmk.sh refuses two
@@ -709,12 +709,12 @@ Done through stage 18 (shared library, dynamic linker, static PIE, libc.so built
 * A locale with a charmap of its own: bytes 0x80-0xff convert to wide characters as in the POSIX locale (the file does not say which characters they are), so wide case mappings of them do not apply.
 
 Where Linux itself stands between this library and POSIX (what a kernel
-of Shall's own would settle):
+of V86BSD's own would settle):
 
 * `O_CLOFORK`/`FD_CLOFORK` are emulated on Linux (a table the library
   keeps): not atomic against a `fork()` in another thread between `open()`
   and the table entry, and invisible to descriptors passed by other means.
-  Shall's kernel has them, and the library then leaves them to it.
+  V86BSD's kernel has them, and the library then leaves them to it.
 * Credentials and the nice value are kept per thread by Linux; set*id and
   `nice()`/`setpriority()` of the process itself reach every thread through
   the library (signals for set*id, so not atomically), but `setpriority()`
@@ -727,16 +727,16 @@ of Shall's own would settle):
 * Options not offered on Linux: `_POSIX_SPORADIC_SERVER` and
   `_POSIX_THREAD_SPORADIC_SERVER` (no such scheduling policy in Linux),
   `_POSIX_TYPED_MEMORY_OBJECTS` (no such memory in Linux): the three are
-  0 in `<unistd.h>` and `sysconf()` asks the kernel (Shall's has them).
+  0 in `<unistd.h>` and `sysconf()` asks the kernel (V86BSD's has them).
   Not offered: the 32-bit programming environments (ILP32_OFF32 and
   ILP32_OFFBIG).  LPBIG_OFFBIG is offered: it is the LP64_OFF64
   environment, whose types meet its minimum widths.  The FORTRAN Runtime
   Utilities option (`_POSIX2_FORT_RUN`) is offered: it is `asa` alone.
   (`fort77` is not in POSIX.1-2024: it was removed in Issue 8.)
-* `_POSIX_RAW_SOCKETS`: Linux has them for privileged processes; Shall's
+* `_POSIX_RAW_SOCKETS`: Linux has them for privileged processes; V86BSD's
   kernel for root, on its loopback interface.
 
-## After stage 16 (with Shall's kernel)
+## After stage 16 (with V86BSD's kernel)
 
 * Prioritized I/O (`_POSIX_PRIORITIZED_IO`, `_POSIX_PRIO_IO`,
   `AIO_PRIO_DELTA_MAX` 20): the worker thread of an `aio_read`/`aio_write`

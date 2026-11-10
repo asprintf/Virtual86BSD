@@ -1,12 +1,12 @@
 #!/bin/sh
-# mkdisk.sh - make a bootable disk image of a Shall system made by
-# bootstrap.sh: an ext2 file system holding the root, to boot with Shall's
-# kernel (root/boot/shall-kernel) in QEMU (see boot.sh).
+# mkdisk.sh - make a bootable disk image of a V86BSD system made by
+# bootstrap.sh: an ext2 file system holding the root, to boot with V86BSD's
+# kernel (root/bsd) in QEMU (see boot.sh).
 #
 # Usage: sh mkdisk.sh [-s size] [root [image]]
 #
 #   root     the system (default: root/ beside this script)
-#   image    the disk image to write (default: shall.img beside this script);
+#   image    the disk image to write (default: v86bsd.img beside this script);
 #            it is made afresh
 #   -s size  its size in MiB (default 1024)
 #
@@ -37,13 +37,13 @@ shift $((OPTIND - 1))
 [ $# -le 2 ] || usage
 case $size in ''|*[!0-9]*) echo "mkdisk: -s: a size in MiB" >&2; exit 2 ;; esac
 root=${1:-$SRC/root}
-img=${2:-$SRC/shall.img}
+img=${2:-$SRC/v86bsd.img}
 case $root in /*) ;; *) root=$here/$root ;; esac
 case $img in /*) ;; *) img=$here/$img ;; esac
 
-[ -d "$root/usr/bin" ] || { echo "mkdisk: $root: not a Shall root (run sh bootstrap.sh first)" >&2; exit 1; }
-[ -f "$root/boot/shall-kernel" ] ||
-	echo "mkdisk: warning: $root has no boot/shall-kernel (made by bootstrap.sh)" >&2
+[ -d "$root/usr/bin" ] || { echo "mkdisk: $root: not a V86BSD root (run sh bootstrap.sh first)" >&2; exit 1; }
+[ -f "$root/bsd" ] ||
+	echo "mkdisk: warning: $root has no bsd (made by bootstrap.sh)" >&2
 command -v mke2fs >/dev/null 2>&1 || [ -x /sbin/mke2fs ] || [ -x /usr/sbin/mke2fs ] ||
 	{ echo "mkdisk: no mke2fs: install e2fsprogs" >&2; exit 1; }
 PATH=$PATH:/sbin:/usr/sbin

@@ -1,5 +1,5 @@
 #!/bin/sh
-# all.sh - build and install, inside a Shall system, every port whose
+# all.sh - build and install, inside a V86BSD system, every port whose
 # sources are in /usr/src (sh ports/get.sh all, on the host), in the order
 # their dependencies need: ncurses, rogue, lua, sqlite, sqllogictest,
 # mbedtls, curl.

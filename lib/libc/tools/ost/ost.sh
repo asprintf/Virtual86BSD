@@ -11,23 +11,23 @@
 # test whose .out (or, building, whose program) exists is not done again,
 # so a run cut short continues where it stopped.
 #   OST_CC   the compiler command (default: cc beside this script, which
-#            turns gcc's options into c17's; not $CC, which Shall's
+#            turns gcc's options into c17's; not $CC, which V86BSD's
 #            /etc/profile sets to c17 itself)
-#   OS       the system's name (default: Shall on Shall, whose uname -s
-#            says Linux, else uname -s); out/ in lower case
+#   OS       the system's name (default: uname -s;
+#            V86BSD on V86BSD); out/ in lower case
 #   TIMEOUT  seconds per test (default 120)
 #   SKIP     a file of suite/test lines not to run (they stop the system)
 #   NO_GETIFADDRS  udp/udp.h finds the LAN with getifaddrs(), which is
-#            not POSIX (Shall does not have it), except on some systems:
-#            set (the default on Shall), udp.h is changed to take
+#            not POSIX (V86BSD does not have it), except on some systems:
+#            set (the default on V86BSD), udp.h is changed to take
 #            NO_GETIFADDRS as one of them, once, and it is defined for the
 #            udp suite
 # For a diagnostic run only, OST_SHIM=1 compiles with shim.h, which gives
 # the tests the usleep() and gettimeofday() that POSIX removed.
 tools=$(cd "$(dirname "$0")" && pwd)
 CC=${OST_CC:-$tools/cc}
-case $(uname -r) in
-*shall*) OS=${OS:-Shall} NO_GETIFADDRS=${NO_GETIFADDRS-1} ;;
+case $(uname -s) in
+V86BSD) OS=${OS:-V86BSD} NO_GETIFADDRS=${NO_GETIFADDRS-1} ;;
 *) OS=${OS:-$(uname -s)} ;;
 esac
 TIMEOUT=${TIMEOUT:-120}

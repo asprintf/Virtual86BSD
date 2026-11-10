@@ -1,8 +1,8 @@
 #!/bin/sh
 # gentests.sh - on the HOST: generate the C sources of Mbed TLS's unit test
-# suites in a Shall system's copy of its sources, so that build.sh -T can
+# suites in a V86BSD system's copy of its sources, so that build.sh -T can
 # compile and run them inside.  Mbed TLS writes its test suites as
-# .function and .data files that a Python script turns into C; Shall has
+# .function and .data files that a Python script turns into C; V86BSD has
 # no Python (it isn't POSIX), the host usually has.
 #
 # Usage: sh gentests.sh [-r root] [dir]
@@ -39,4 +39,4 @@ for d in suites/*.data; do
 		--helpers-file suites/helpers.function -o . || fail "generating $b"
 	n=$((n + 1))
 done
-echo "gentests.sh: $n suites in $dir/tests; inside the system: sh /usr/src/shall/ports/mbedtls/build.sh -T"
+echo "gentests.sh: $n suites in $dir/tests; inside the system: sh /usr/src/ports/mbedtls/build.sh -T"

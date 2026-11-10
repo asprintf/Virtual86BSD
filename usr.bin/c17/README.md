@@ -51,8 +51,8 @@ in `libc/` (installed in `$(PREFIX)/lib/c17/libc`):
 
 `libc/glibc` and `libc/musl` are for Debian, Ubuntu and their
 derivatives (musl from the package musl-dev); on other distributions
-the directories may differ. `libc/shall` is Shall's own C library
-installed in /usr (a Shall system: see ../../bootstrap.sh). `make
+the directories may differ. `libc/v86bsd` is V86BSD's own C library
+installed in /usr (a V86BSD system: see ../../bootstrap.sh). `make
 LIBC=musl` makes musl the default (`LIBC=glibc` is). When c17 runs, `C17_LIBC` chooses another: the name of
 a profile, the pathname of one, or a directory with `include/` and `lib/`
 (a C library linked statically). `C17_LIBDIR` replaces
@@ -220,7 +220,7 @@ one, unless it is that library (an output named `libc.so...`); it gets no
 start files. An object not compiled with `-G` that uses a symbol of
 another object directly, or an absolute address in code, is an error. A
 linker script operand with `ENTRY(symbol)` gives the library an entry
-point (a C library that is also its dynamic linker: Shall's `libc.so`).
+point (a C library that is also its dynamic linker: V86BSD's `libc.so`).
 
 GNU extensions accepted (only syntax that is invalid in C17, or reserved
 identifiers, so strictly conforming programs are not affected):

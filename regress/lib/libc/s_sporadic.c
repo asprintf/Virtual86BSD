@@ -1,5 +1,5 @@
 /* Self-checking: the sporadic server (SCHED_SPORADIC, [SS] and [TSP]),
- * where the kernel has it (Shall's: sysconf says so; Linux: not tested).
+ * where the kernel has it (V86BSD's: sysconf says so; Linux: not tested).
  * A server with a budget of 20 ms every 100 ms, competing with a busy
  * SCHED_FIFO thread whose priority lies between the server's two, gets
  * about a fifth of the processor; as plain SCHED_FIFO it would get all

@@ -1,5 +1,5 @@
 #!/bin/sh
-# run.sh - the self-checking tests of Shall's C library (built from
+# run.sh - the self-checking tests of V86BSD's C library (built from
 # libc/tests/s_*.c), run on this system.  Each gets 600 seconds (emulated, s_malloc needs about 300).
 cd "$(dirname "$0")" || exit 2
 # the test locales of s_collsym, made from collate.def (copied here with

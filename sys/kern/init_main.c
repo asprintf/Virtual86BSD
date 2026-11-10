@@ -142,7 +142,7 @@ static int open_console(void) {
 
 static long run_init(void *arg) {
   (void)arg;
-  /* Shall has no mount utility (mount is not POSIX): the kernel mounts
+  /* V86BSD has no mount utility (mount is not POSIX): the kernel mounts
      /dev and /proc itself, as Linux's CONFIG_DEVTMPFS_MOUNT does for /dev */
   auto_mount("/dev", "devtmpfs");
   auto_mount("/proc", "proc");
@@ -195,7 +195,7 @@ static long run_init(void *arg) {
 void kmain(uint32_t magic, uint32_t mbi) {
   serial_init();
   vga_init();
-  printk("Shall kernel starting\n");
+  printk("%s", version);
   parse_multiboot(magic, mbi);
   printk("command line: %s\n", kernel_cmdline);
   page_init((uint64_t)_kernel_end - KERNEL_BASE, ranges, nranges, reserved, nreserved);

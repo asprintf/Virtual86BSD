@@ -1,8 +1,8 @@
-# HOWTO: build ncurses inside Shall
+# HOWTO: build ncurses inside V86BSD
 
-ncurses 6.6 builds unchanged inside a Shall system: its own `configure`
-(a 30 000-line autoconf script) runs on Shall's sh, sed, awk, grep and
-expr; its makefiles run on Shall's make; c17 compiles and links, and ar
+ncurses 6.6 builds unchanged inside a V86BSD system: its own `configure`
+(a 30 000-line autoconf script) runs on V86BSD's sh, sed, awk, grep and
+expr; its makefiles run on V86BSD's make; c17 compiles and links, and ar
 makes the libraries.  The tic it builds compiles the whole terminfo
 database (2899 terminal types) into the same files as the host's tic.
 
@@ -16,7 +16,7 @@ have: `sh ports/get.sh ncurses path/to/ncurses-6.6.tar.gz`.
 
 ## 2. Build and install (inside)
 
-    sh /usr/src/shall/ports/ncurses/build.sh
+    sh /usr/src/ports/ncurses/build.sh
 
 That runs:
 
@@ -48,7 +48,7 @@ test programs.
 | `/usr/share/terminfo` | the terminfo database, compiled from ncurses' `terminfo.src` |
 
 So a program builds with plain `c17 -o prog prog.c -lcurses` (or
-`-lncursesw`, `-lpanel -lncurses`, ...): c17's profile for Shall's C
+`-lncursesw`, `-lpanel -lncurses`, ...): c17's profile for V86BSD's C
 library searches `/usr/local/include` and `/usr/local/lib` after
 `/usr/include` and `/usr/lib`.  `ncursesw6-config --cflags --libs` answers configure scripts
 that ask.
@@ -74,12 +74,12 @@ Try the demos (`q` or Ctrl-C leaves most of them):
   of the compilers it knows (gcc's `-fPIC` and `-shared` on Linux);
   c17 does both with `-G`, which configure doesn't know, so
   `--with-shared` wasn't tried.
-- **Not ncurses' `tput` and `tabs`.** Shall has its own, the POSIX
+- **Not ncurses' `tput` and `tabs`.** V86BSD has its own, the POSIX
   utilities; ncurses' versions would replace them.  ncurses builds them
   (in `progs/`), so they can be tried there.
-- **No manual pages.** ncurses' pages are troff; Shall's `man` shows
-  plain-text pages, and Shall has no troff.
-- **No C++ and Ada bindings**: Shall has no compilers for those.
+- **No manual pages.** ncurses' pages are troff; V86BSD's `man` shows
+  plain-text pages, and V86BSD has no troff.
+- **No C++ and Ada bindings**: V86BSD has no compilers for those.
 
 ## What configure says that looks wrong but isn't
 
@@ -93,15 +93,15 @@ Try the demos (`q` or Ctrl-C leaves most of them):
   predefined`: configure decided not to add `-D_XOPEN_SOURCE` (on a
   Linux whose C library isn't glibc it sees no need), and warns that the
   wide-character code then relies on the headers showing the X/Open
-  names anyway.  Shall's do: without feature macros they show all of
+  names anyway.  V86BSD's do: without feature macros they show all of
   POSIX and XSI.
 - `checking whether we are using the GNU C compiler... no`, and no gcc
   options: right, it's c17.
 
 ## Tested
 
-ncurses 6.6 (20251230), built inside a freshly bootstrapped Shall system
-in a chroot and on Shall's own kernel in QEMU:
+ncurses 6.6 (20251230), built inside a freshly bootstrapped V86BSD system
+in a chroot and on V86BSD's own kernel in QEMU:
 
 - configure, make and install as above: no failures, no compiler
   warnings.

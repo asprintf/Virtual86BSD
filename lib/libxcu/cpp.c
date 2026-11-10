@@ -960,7 +960,7 @@ static const struct {
      "\n"
      "/* no <stddef.h> or <stdint.h>, whose macros are not to be seen here:\n"
      "   the types of x86-64 (LP64); int_fast16_t and int_fast32_t are those\n"
-     "   of the C library (long for Shall's and glibc, int for musl: its\n"
+     "   of the C library (long for V86BSD's and glibc, int for musl: its\n"
      "   profile defines __c17_int_fast16) */\n"
      "#ifndef __c17_int_fast16\n"
      "#define __c17_int_fast16 long\n"

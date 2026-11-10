@@ -15,7 +15,7 @@ C compiler, among them (see [Status](#status)).
 
 One utility: `cd sed && make test`, or `sh run_tests.sh sed ls`.
 
-In Shall, these utilities and the C library in ../libc make a system that
+In V86BSD, these utilities and the C library in ../libc make a system that
 compiles itself: ../bootstrap.sh builds it, from a host's C compiler
 through two stages of its own, in a directory that ../chroot.sh enters
 (see ../README.md).

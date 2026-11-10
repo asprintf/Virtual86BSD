@@ -1,4 +1,4 @@
-/* [TYM] typed memory objects: the kernel's (Shall's kernel has pools of
+/* [TYM] typed memory objects: the kernel's (V86BSD's kernel has pools of
  * physically contiguous memory as /dev/tym/NAME, and /dev/tymctl for
  * posix_mem_offset; Linux has none, and these fail as for a system
  * without typed memory: sysconf(_SC_TYPED_MEMORY_OBJECTS) says -1). */

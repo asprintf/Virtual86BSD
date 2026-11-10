@@ -1,4 +1,4 @@
-/* init.c - the first process of a Shall system.
+/* init.c - the first process of a V86BSD system.
  *
  * Runs /etc/rc (if there is one) with sh, then an interactive sh on the
  * console terminal as the leader of a new session, so that it has a
@@ -10,7 +10,7 @@
  * name=value words of its command line on as environment, as Linux does),
  * default /dev/ttyS0.
  *
- * POSIX C, plus reboot(2) of Linux for the power-off (poweroff.s: Shall's
+ * POSIX C, plus reboot(2) of Linux for the power-off (poweroff.s: V86BSD's
  * C library has no reboot()).
  */
 #define _XOPEN_SOURCE 800

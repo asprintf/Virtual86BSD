@@ -1,5 +1,5 @@
 /* shim.h - for a diagnostic run only: usleep() and gettimeofday(), which
-   POSIX removed (2008, 2024) and Shall does not have, made of nanosleep()
+   POSIX removed (2008, 2024) and V86BSD does not have, made of nanosleep()
    and clock_gettime(), for the os-test tests that still call them. */
 #include <time.h>
 #include <sys/time.h>
