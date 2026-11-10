@@ -12,7 +12,7 @@ into, or boot in QEMU with its own kernel.
 This is version 0.9.1 (November 2026; `VERSION`), a preview: complete in
 what POSIX asks of the interfaces and utilities, but young as a kernel
 (see "Where things stand").  0.9.1 fixes what the external test suites
-showed after 0.9 (`docs/conformance.md`).  1.0 is to add mkext2, fsck and
+showed after 0.9 (`share/doc/conformance.md`).  1.0 is to add mkext2, fsck and
 login inside the system.
 
 Shall was made by Joost Orchidee Winter with Claude, Anthropic's AI model,
@@ -31,14 +31,21 @@ Tests, the test suites of the ports).
     chroot.sh       enters it (with or without root privileges)
     mkdisk.sh       makes a bootable disk image of it (shall.img)
     boot.sh         boots that image with Shall's kernel in QEMU
-    libc/           the C library: include/, src/, tests/, tools/ (README.md, STATUS.md)
-    utilities/      the utilities, one directory each; lib/ and testlib/
-                    shared by them (README.md: the list, with tests); and
-                    tl/, the test language of their tests (not POSIX, but
-                    installed too: /usr/bin/tl)
-    kernel/         the kernel (README.md), and init
-    system/etc/     the configuration files of a Shall system
-    docs/           conformance.md: the external test suites and their results
+    include/        the C library's public headers
+    lib/libc/       the C library (README.md, STATUS.md; tools/)
+    lib/libxcu/     code shared by the utilities (not installed)
+    bin/ sbin/      the essential utilities, one directory each (as in OpenBSD)
+    usr.bin/        the other utilities, one directory each (README.md: the
+                    list, with tests); tl/ is the test language of their
+                    tests (not POSIX, but installed too: /usr/bin/tl)
+    sys/            the kernel (README.md); sys/arch/amd64/compile/GENERIC
+                    builds it
+    sbin/init/      init, the first process
+    etc/            the configuration files of a Shall system
+    share/doc/      conformance.md: the external test suites and their results
+    distrib/        scripts that make the disk image
+    regress/        the tests: regress/{bin,sbin,usr.bin}/<utility>, lib/libc
+                    (the C library), sys (the kernel), run_tests.sh
     ports/          third-party software for it: ncurses, Rogue, Lua, SQLite,
                     sqllogictest, Mbed TLS, curl
                     (README.md; a HOWTO.md and a build.sh for each)
@@ -86,7 +93,7 @@ user namespaces to ordinary users (see the head of `chroot.sh`).
 The grammars of awk, bc and sh are generated afresh by Shall's yacc and
 lex in every stage.
 
-`root/` then gets `/etc` (from `system/etc`), `/tmp`, `/root`, `/bin`,
+`root/` then gets `/etc` (from `etc`), `/tmp`, `/root`, `/bin`,
 `/lib` and `/sbin` (links into `/usr`), empty `/dev`, `/proc` and `/sys` (which
 `chroot.sh` mounts), these sources in `/usr/src/shall`, and the host's
 time zone database in `/usr/share/zoneinfo` (if it has one; `ZONEINFO=dir`
@@ -157,19 +164,19 @@ Shall has been tested under QEMU's emulation).
 
 The network is QEMU's user networking: the system gets 10.0.2.15 by DHCP
 (the host is 10.0.2.2, the name server 10.0.2.3), and connections out go
-through the host.  See `kernel/README.md` for the kernel and what it
+through the host.  See `sys/README.md` for the kernel and what it
 offers.
 
 ## Testing
 
-* The utilities: `cd utilities && sh run_tests.sh` on the host; inside the
-  system `cd /usr/src/shall/utilities && CC=c17 sh run_tests.sh`.  The
+* The utilities: `sh regress/run_tests.sh` on the host; inside the
+  system `cd /usr/src/shall && CC=c17 sh regress/run_tests.sh`.  The
   tests use only what POSIX specifies (no `yes`, `head -5`, `grep -o`,
   `cat -n` and the like), so all of some 6 700 pass inside the system as
   on the host.
 * The C library: `cd libc && make check` — most of its tests are
   differential, comparing with glibc, so they need gcc and glibc (see
-  `libc/README.md`); `LIBC_LINK=dynamic` and `static-pie` run them
+  `lib/libc/README.md`); `LIBC_LINK=dynamic` and `static-pie` run them
   linked those ways.
 * The Open POSIX Test Suite (LTP, 1888 tests), built and run inside the
   system on its own kernel in QEMU: of the 1777 that compile (the other
@@ -179,36 +186,36 @@ offers.
   (options not offered, indeterminate limits, "may fail" errors, defects
   of the tests); the others test undefined or implementation-defined
   behaviour, are defects of the tests, or (one) need more time than QEMU's
-  emulation gives them (`libc/STATUS.md`, stage 17).
+  emulation gives them (`lib/libc/STATUS.md`, stage 17).
 * os-test (Sortix's, 5816 tests in 14 suites: headers, namespace, every
   function at a basic level, fnmatch, regex, limits, I/O, processes,
   signals, pseudoterminals, stdio, UDP), built inside the system and run
-  on its own kernel in QEMU with `libc/tools/ost/`: 5616 pass (glibc on
+  on its own kernel in QEMU with `lib/libc/tools/ost/`: 5616 pass (glibc on
   Linux 5228), all of the header and namespace tests among them.  Of the
   other 200, 85 do not compile (83 call `usleep` or `gettimeofday`), 69
   have no known outcome yet (UDP's open questions), and the rest are
   QEMU's software x87, last-ulp long double results, test defects,
   os-test's "nonstandard" tests and a few readings of the standard where
-  Shall does as glibc (`libc/STATUS.md`, stage 18).
+  Shall does as glibc (`lib/libc/STATUS.md`, stage 18).
 * The POSIX Shell Tests (yash's test suite, 10,979 cases) against Shall's
   `sh`: 10,940 pass and 8 fail (yash 0 failures, dash 1,271, bash as `sh`
   1,634); the 8 are things POSIX.1-2024 leaves unspecified and one place
   where the 2024 text differs from the other shells
-  (`utilities/sh/README.md`).
+  (`bin/sh/README.md`).
 
-`docs/conformance.md` has all three suites side by side, with the
+`share/doc/conformance.md` has all three suites side by side, with the
 comparisons and what each result that is not a pass comes from.
 
 ## Where things stand
 
-See `libc/STATUS.md` and `utilities/README.md`.  In short: all 155
+See `lib/libc/STATUS.md` and `usr.bin/README.md`.  In short: all 155
 utilities of POSIX.1-2024 exist (16 of them as built-ins of sh), and
 1224 of the 1227 interfaces of XSH; the other three are the typed memory
 objects, an option Linux cannot support.  `kill` can also be run
 through exec (`env kill`), as POSIX requires of it alone among the
 intrinsic utilities.  Multi-character collating elements (`[.ch.]`)
 work in regular expressions and patterns.  On Shall's own kernel the
-utilities' tests pass but for a few (`kernel/README.md`), and the
+utilities' tests pass but for a few (`sys/README.md`), and the
 typed memory objects exist too.
 
 ## License

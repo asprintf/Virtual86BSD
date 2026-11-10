@@ -7,7 +7,7 @@
 #
 #   root        the system to make (default: root/ beside this script); it
 #               is made afresh
-#   -w workdir  where the stages are built (default: work/ beside this script)
+#   -w workdir  where the stages are built (default: obj/ beside this script)
 #   -k          keep workdir afterwards (default: removed when all went well)
 #   -n          no stage 3: statically linked programs in the system
 #
@@ -22,7 +22,7 @@
 #            against the host's own C library: c17 (the C compiler, with
 #            its own assembler and link editor), make, ar, yacc and lex.
 #
-#   stage 1  Those tools build everything: the C library (libc/, with c17
+#   stage 1  Those tools build everything: the C library (lib/libc/, with c17
 #            and make: libc.a, and libc.so, which is also the dynamic
 #            linker), then every utility against it (c17 among them),
 #            installed into workdir/stage1/root/usr.  From here on no
@@ -48,13 +48,13 @@
 #            library installed in root is stage 2's (the same as stage
 #            1's).
 #
-#   kernel   c17 of stage 2 builds the kernel (kernel/: c17 compiles its C,
+#   kernel   c17 of stage 2 builds the kernel (sys/: c17 compiles its C,
 #            assembles its assembly and links it) and init, its first
 #            process: root/boot/shall-kernel and root/usr/sbin/init.
 #
 #   system   root gets the rest of a small system: /bin, /lib and /sbin
 #            (links to /usr/...), /etc (passwd, group, profile, hosts,
-#            services, protocols; from system/etc), /tmp, /root, /dev,
+#            services, protocols; from etc/), /tmp, /root, /dev,
 #            /proc and /sys (empty: chroot.sh mounts them), /usr/local
 #            (for ports/), the host's time zones, terminfo, locale sources
 #            and charmaps (for localedef) and certificate
@@ -79,7 +79,7 @@ usage() { echo "usage: sh bootstrap.sh [-k] [-n] [-w workdir] [root]" >&2; exit 
 here=$(pwd)
 cd "$(dirname "$0")" || exit 2
 SRC=$(pwd)
-keep=false work=$SRC/work static=false
+keep=false work=$SRC/obj static=false
 while getopts knw: opt; do
 	case $opt in
 	k) keep=true ;;
@@ -144,14 +144,15 @@ copy() {
 # ---------------------------------------------------------------- stage 0
 S0=$work/stage0
 say "stage 0: c17, make, ar, yacc and lex, with the host's $cc"
-copy utilities "$S0/utilities"
+copy usr.bin "$S0/usr.bin"
+copy lib/libxcu "$S0/lib/libxcu"
 # the headers of Shall's C library, for c17's run-time support library
 # (only for that: the host's compiler, which may be a c17 too, must not
 # see C17_LIBC)
 mkdir -p "$S0/sysroot/lib"
-copy libc/include "$S0/sysroot/include"
+copy include "$S0/sysroot/include"
 for u in c17 make ar yacc lex; do
-	(cd "$S0/utilities/$u" &&
+	(cd "$S0/usr.bin/$u" &&
 	 hostmk PREFIX="$S0" RTC17="env C17_LIBC=$S0/sysroot ./c17" install) >> "$log" 2>&1 ||
 		fail "stage 0: $u"
 done
@@ -167,8 +168,9 @@ stage() {
 	mkdir -p "$dest/usr"
 	if [ -z "$libcdir" ]; then
 		say "stage $n: the C library, with c17 from $tools"
-		copy libc "$S/libc"
-		libcdir=$S/libc
+		copy include "$S/include"
+		copy lib/libc "$S/lib/libc"
+		libcdir=$S/lib/libc
 		c17libc=$dest/usr      # (include/ and lib/: linked statically)
 		linkflags= how="statically linked" rtc17=./c17
 	else
@@ -197,16 +199,21 @@ stage() {
 		"$tools/make" CCNAME=c17 PREFIX=/usr DESTDIR="$dest" install
 	) >> "$log" 2>&1 || fail "stage $n: the C library"
 	say "stage $n: the utilities, with c17 on Shall's C library ($how)"
-	copy utilities "$S/utilities"
+	copy bin "$S/bin"
+	copy sbin "$S/sbin"
+	copy usr.bin "$S/usr.bin"
+	copy lib/libxcu "$S/lib/libxcu"
 	(
 		PATH=$tools:$PATH
 		C17_LIBDIR=$c17dir
 		C17_LIBC=$c17libc
 		export PATH C17_LIBDIR C17_LIBC
 		unset MAKEFLAGS
-		cd "$S/utilities" &&
-		"$tools/make" CC=c17 LDFLAGS="$linkflags" RTC17="$rtc17" LIBC=shall YACC=yacc LEX=lex \
-			PREFIX=/usr DESTDIR="$dest" install
+		for d in bin sbin usr.bin; do
+			(cd "$S/$d" &&
+			"$tools/make" CC=c17 LDFLAGS="$linkflags" RTC17="$rtc17" LIBC=shall YACC=yacc LEX=lex \
+				PREFIX=/usr DESTDIR="$dest" install) || exit 1
+		done
 	) >> "$log" 2>&1 || fail "stage $n: the utilities"
 }
 
@@ -247,23 +254,26 @@ if $static; then
 	say "stage 3 left out: the programs of stage 2 for the system"
 	mkdir -p "$root" && cp -pR "$R2/usr" "$root/" || fail "copying stage 2"
 else
-	stage 3 "$R2/usr/bin" "$R2/usr/lib/c17" "$root" "$work/stage2/libc"
+	stage 3 "$R2/usr/bin" "$R2/usr/lib/c17" "$root" "$work/stage2/lib/libc"
 fi
 
 # ---------------------------------------------------------------- kernel
 say "kernel: shall-kernel and init, with c17 of stage 2"
-copy kernel "$work/kernel"
+copy sys "$work/sys"
+copy sbin "$work/sbin"
 (
 	PATH=$R2/usr/bin:$PATH
 	C17_LIBDIR=$R2/usr/lib/c17
 	C17_LIBC=$root/usr     # (statically linked)
 	export PATH C17_LIBDIR C17_LIBC
 	unset MAKEFLAGS
-	cd "$work/kernel" &&
-	"$R2/usr/bin/make" all init C17=c17 &&
+	cd "$work/sys/arch/amd64/compile/GENERIC" &&
+	"$R2/usr/bin/make" all &&
+	cd "$work/sbin/init" &&
+	"$R2/usr/bin/make" C17="c17 -B static" &&
 	mkdir -p "$root/boot" "$root/usr/sbin" &&
-	cp shall-kernel "$root/boot/shall-kernel" &&
-	cp user/init "$root/usr/sbin/init"
+	cp "$work/sys/arch/amd64/compile/GENERIC/shall-kernel" "$root/boot/shall-kernel" &&
+	cp "$work/sbin/init/init" "$root/usr/sbin/init"
 ) >> "$log" 2>&1 || fail "the kernel"
 
 # ---------------------------------------------------------------- system
@@ -274,15 +284,15 @@ say "system: /etc, /dev, /proc, /tmp ... and the sources in /usr/src/shall"
 	mkdir -p etc dev proc sys tmp var/tmp var/spool root home usr/src \
 		usr/local/bin usr/local/lib usr/local/include usr/local/share/man usr/lib/locale &&
 	chmod 1777 tmp var/tmp && chmod 700 root &&
-	cp "$SRC"/system/etc/* etc/
+	cp "$SRC"/etc/* etc/
 ) || fail "the system directories"
 mkdir -p "$root/usr/src/shall"
-for d in README.md LICENSE bootstrap.sh chroot.sh mkdisk.sh boot.sh system libc utilities kernel ports; do
+for d in README.md LICENSE bootstrap.sh chroot.sh mkdisk.sh boot.sh distrib etc share include lib bin sbin usr.bin sys regress ports; do
 	cp -pR "$SRC/$d" "$root/usr/src/shall/" || fail "copying the sources"
 done
 find "$root/usr/src/shall" \( -name "*.o" -o -name "*.a" \) -type f -exec rm -f {} +
 # with the HTML edition of the standard beside the sources: man's pages
-if [ -d "$SRC/susv5-html" ] && [ -f "$SRC/utilities/man/Makefile" ]; then
+if [ -d "$SRC/susv5-html" ] && [ -f "$SRC/usr.bin/man/Makefile" ]; then
 	mkdir -p "$root/usr/share" && cp -pR "$SRC/susv5-html" "$root/usr/share/"
 fi
 # the host's time zone database, for TZ=Area/City (the C library reads

@@ -1,0 +1,77 @@
+#!/bin/sh
+# libc-cc COMPILER [args...]
+# Compile and link against this libc instead of the system's, with
+# COMPILER gcc or c17.
+#   LIBC_LIB=dir      link with the library in dir (e.g. one built by the
+#                     other compiler) instead of build/COMPILER/lib
+#   LIBC_LINK=static  (the default) a static executable
+#   LIBC_LINK=dynamic linked with libc.so, which is also the program
+#                     interpreter (gcc: a PIE; c17: at a fixed address)
+#   LIBC_LINK=static-pie  (gcc) a static position-independent executable
+#   -shared (gcc), -G (c17)  a shared object, linked with libc.so
+here=$(cd "$(dirname "$0")/.." && pwd)
+include=$(cd "$here/../../include" && pwd)
+cc=$1; shift
+name=$(basename "$cc")
+mode=${LIBC_LINK:-static}
+lib=${LIBC_LIB:-$here/build/$name/lib}
+case $name in
+gcc*|cc)
+	link=1
+	for a in "$@"; do
+		case $a in
+		-c|-S|-E|-M|-MM) link=;;
+		-shared) mode=shared;;
+		esac
+	done
+	gccinc=$($cc -print-file-name=include)
+	set -- -nostdinc -isystem "$include" -isystem "$gccinc" "$@"
+	if [ "$link" ]; then
+		case $mode in
+		static)
+			set -- -static -no-pie -nostdlib -L"$lib" "$lib/crt1.o" "$lib/crti.o" \
+				"$($cc -print-file-name=crtbeginT.o)" "$@" \
+				"$lib/libc.a" "$($cc -print-libgcc-file-name)" "$lib/libc.a" \
+				"$($cc -print-file-name=crtend.o)" "$lib/crtn.o";;
+		static-pie)
+			set -- -static-pie -nostdlib -L"$lib" "$lib/rcrt1.o" "$lib/crti.o" \
+				"$($cc -print-file-name=crtbeginS.o)" "$@" \
+				"$lib/libc.a" "$($cc -print-libgcc-file-name)" "$lib/libc.a" \
+				"$($cc -print-file-name=crtendS.o)" "$lib/crtn.o";;
+		dynamic)
+			set -- -pie -nostdlib -L"$lib" -Wl,-dynamic-linker,"$lib/libc.so" \
+				"$lib/Scrt1.o" "$lib/crti.o" "$($cc -print-file-name=crtbeginS.o)" "$@" \
+				"$lib/libc.so" "$($cc -print-libgcc-file-name)" \
+				"$($cc -print-file-name=crtendS.o)" "$lib/crtn.o";;
+		shared)   # -shared: a shared object (linked with libc.so)
+			set -- -nostdlib -L"$lib" "$lib/crti.o" "$($cc -print-file-name=crtbeginS.o)" "$@" \
+				"$lib/libc.so" "$($cc -print-libgcc-file-name)" \
+				"$($cc -print-file-name=crtendS.o)" "$lib/crtn.o";;
+		*) echo "libc-cc: LIBC_LINK=$mode: static, dynamic or static-pie" >&2; exit 2;;
+		esac
+	fi
+	exec "$cc" "$@";;
+c17*)
+	# c17 takes an alternative C library from C17_LIBC: a directory
+	# (dir/include, dir/lib: static linking) or a profile file
+	root=${TMPDIR:-/tmp}/libc-cc.$$
+	mkdir -m 700 "$root" || exit 1
+	trap 'rm -rf "$root"' EXIT INT TERM
+	for a in "$@"; do
+		[ "$a" = -G ] && mode=dynamic   # a shared object: with libc.so
+	done
+	case $mode in
+	static)
+		ln -s "$include" "$root/include"
+		ln -s "$lib" "$root/lib"
+		C17_LIBC=$root "$cc" "$@";;
+	dynamic)
+		printf 'include %s\nlibdir %s\ncrt1 crt1.o\ncrti crti.o\ncrtn crtn.o\ninterp %s\nlink dynamic\n' \
+			"$include" "$lib" "$lib/libc.so" > "$root/profile"
+		C17_LIBC=$root/profile "$cc" "$@";;
+	*) echo "libc-cc: LIBC_LINK=$mode: c17 links static or dynamic" >&2; exit 2;;
+	esac;;
+*)
+	echo "libc-cc: unknown compiler $name (expected gcc or c17)" >&2
+	exit 2;;
+esac

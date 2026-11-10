@@ -48,8 +48,8 @@ command -v mke2fs >/dev/null 2>&1 || [ -x /sbin/mke2fs ] || [ -x /usr/sbin/mke2f
 	{ echo "mkdisk: no mke2fs: install e2fsprogs" >&2; exit 1; }
 PATH=$PATH:/sbin:/usr/sbin
 
-# kernel/tools/mkdisk.sh does the work; run here, where there are no
+# distrib/mkdisk-ext2.sh does the work; run here, where there are no
 # kernel test programs or init of a kernel build to add
-sh "$SRC/kernel/tools/mkdisk.sh" "$root" "$img" "$size" || { echo "mkdisk: failed" >&2; exit 1; }
+sh "$SRC/distrib/mkdisk-ext2.sh" "$root" "$img" "$size" || { echo "mkdisk: failed" >&2; exit 1; }
 echo "$img: $size MiB, ext2, root of $root"
 echo "Boot it:  sh $SRC/boot.sh"
