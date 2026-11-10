@@ -9,3 +9,8 @@
 /sys/arch/*/compile/*/bsd.elf
 /sys/arch/*/compile/*/mkimage
 /sys/arch/*/compile/*/machine
+/regress/sys/kern/k_*
+!/regress/sys/kern/k_*.c
+!/regress/sys/kern/k_*.s
+/regress/sys/kern/libc/*
+!/regress/sys/kern/libc/run.sh

@@ -90,7 +90,7 @@ int main(void) {
   signal(SIGTERM, SIG_IGN);
   signal(SIGHUP, SIG_IGN);
   signal(SIGTSTP, SIG_IGN);
-  setenv("PATH", "/usr/local/bin:/usr/bin:/bin", 0);
+  setenv("PATH", "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin", 0);
   setenv("HOME", "/root", 1);
   setenv("SHELL", "/bin/sh", 1);
   setenv("USER", "root", 1);

@@ -85,7 +85,7 @@ curl)    name=curl-8.23.0 git= tag= tests=
 *)       usage ;;
 esac
 
-[ -x "$root/usr/bin/sh" ] || fail "$root: no V86BSD system there (sh bootstrap.sh)"
+[ -x "$root/bin/sh" ] || fail "$root: no V86BSD system there (sh bootstrap.sh)"
 src=$(cd "$root/usr/src" && pwd) || exit 1
 dest=$src/$name
 if [ -e "$dest" ]; then

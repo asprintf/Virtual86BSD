@@ -28,9 +28,11 @@ Tests, the test suites of the ports).
 
     README.md       this file
     LICENSE         BSD 3-clause
-    bootstrap.sh    builds a Virtual/86 BSD system from scratch (read its header)
+    Makefile        buildworld, buildkernel, installworld, installkernel,
+                    release (a disk image), boot, regress (read its header)
+    bootstrap.sh    builds a Virtual/86 BSD system into a directory (calls make)
     chroot.sh       enters it (with or without root privileges)
-    mkdisk.sh       makes a bootable disk image of it (v86bsd.img)
+    mkdisk.sh       makes a bootable disk image of it (v86bsd.img; calls make)
     boot.sh         boots that image with V86BSD's kernel in QEMU
     include/        the C library's public headers
     lib/libc/       the C library (README.md, STATUS.md; tools/)
@@ -44,7 +46,8 @@ Tests, the test suites of the ports).
     sbin/init/      init, the first process
     etc/            the configuration files of a Virtual/86 BSD system
     share/doc/      conformance.md: the external test suites and their results
-    distrib/        scripts that make the disk image
+    distrib/        the scripts behind all of that: build.sh (the stages),
+                    mkdisk.sh, boot.sh, chroot.sh
     regress/        the tests: regress/{bin,sbin,usr.bin}/<utility>, lib/libc
                     (the C library), sys (the kernel), run_tests.sh
     ports/          third-party software for it: ncurses, Rogue, Lua, SQLite,
@@ -57,7 +60,7 @@ You need x86-64 Linux with a C compiler, make and ar (on Ubuntu:
 `build-essential`).  Then:
 
     sh bootstrap.sh            # builds root/ (a few minutes), as yourself
-    sh chroot.sh               # enters root/: V86BSD's sh, with /usr/bin first
+    sh chroot.sh               # enters root/: V86BSD's sh, in /bin
 
 or, to run it on its own kernel instead of the host's (see "Booting it"):
 
@@ -70,7 +73,14 @@ user namespace (`unshare -r`, in which you are root and have your own
 with sudo it uses chroot itself.  Ubuntu 23.10 and later may refuse
 user namespaces to ordinary users (see the head of `chroot.sh`).
 
-`bootstrap.sh` works in stages, each from a fresh copy of the sources:
+`bootstrap.sh` is a wrapper: it runs `make newroot buildworld buildkernel
+installworld distribution installkernel DESTDIR=root`, which one can run
+step by step (`make buildworld`, `make buildkernel`, and so on: the head of
+the `Makefile` lists them, and `share/doc/hier.md` says where things go).
+`make release` does all of it into `obj/root` and makes the disk image
+`obj/v86bsd.img`; `make boot` then boots it, and `make regress` runs every
+test (inside V86BSD).  The stages, each from a fresh copy of the sources
+(`distrib/build.sh`):
 
 1. **stage 0** — the host's compiler builds just five tools of this
    package: c17, make, ar, yacc and lex.
@@ -83,20 +93,22 @@ user namespaces to ordinary users (see the head of `chroot.sh`).
 4. **check** — stage 1 and stage 2 are compared file by file: the c17
    that the host's compiler made and the c17 that c17 made must produce
    identical programs.
-5. **stage 3** — the utilities of stage 2 build the utilities for
-   `root/`, dynamically linked with `/usr/lib/libc.so` and stripped:
-   some 4.7 MB for the 143 programs (49 MB linked statically).  (The
-   programs of stages 1 and 2 run on the host, so they are linked
-   statically; `-n` puts those in `root/` instead of stage 3's.)
-6. **kernel** — c17 of stage 2 builds the kernel and `/sbin/init`:
-   `root/bsd`.
+5. **stage 3** — the utilities of stage 2 build the utilities for the
+   system, stripped and where hier(7) wants them: those of `bin/` in
+   `/bin` and of `sbin/` in `/sbin`, linked statically, as in OpenBSD
+   (they need nothing in `/usr`), the others in `/usr/bin`, dynamically
+   linked with `/usr/lib/libc.so`.  (The programs of stages 1 and 2 run on
+   the host, so they are linked statically and all in `usr/bin`; `-n`
+   links all of stage 3's statically too.)
+6. **init and kernel** — c17 of stage 2 builds `/sbin/init`, and the
+   kernel: `root/bsd`.
 
 The grammars of awk, bc and sh are generated afresh by V86BSD's yacc and
 lex in every stage.
 
-`root/` then gets `/etc` (from `etc`), `/tmp`, `/root`, `/bin`,
-`/lib` and `/sbin` (links into `/usr`), empty `/dev`, `/proc` and `/sys` (which
-`chroot.sh` mounts), these sources in `/usr/src`, and the host's
+`root/` then gets the directories of hier(7), `/etc` (from `etc`), empty
+`/dev` and `/proc` (the kernel and `chroot.sh` mount file systems there),
+these sources in `/usr/src`, and the host's
 time zone database in `/usr/share/zoneinfo` (if it has one; `ZONEINFO=dir`
 names another) and its terminfo database in `/usr/share/terminfo` (for
 tput, more, vi; `TERMINFO=dirs` names others), its locale sources and
@@ -108,18 +120,20 @@ authorities in `/etc/ssl/certs/ca-certificates.crt` (for curl, see
 system rebuilds itself the same way, with its own c17 as the host's
 compiler, and gives the same files:
 
-    CC=c17 sh /usr/src/bootstrap.sh /tmp/again
+    cd /usr/src && make buildworld buildkernel
 
-and so does the kernel (`cd /usr/src/sys/arch/amd64/compile/GENERIC; make`).  In an
-interactive shell `/etc/profile` already sets `CC=c17`, so there `sh
-/usr/src/bootstrap.sh /tmp/again` is enough; scripts that do not
-start from such a shell, such as `/etc/rc`, give `CC=c17` themselves.
+(or `sh /usr/src/bootstrap.sh /tmp/again`), and so does the kernel
+(`cd /usr/src/sys/arch/amd64/compile/GENERIC; make`).  In an
+interactive shell `/etc/profile` already sets `CC=c17`; scripts that do
+not start from such a shell, such as `/etc/rc`, give `CC=c17` themselves.
+Without `DESTDIR` the `install` targets would install into the running
+system: only V86BSD itself does that.
 
-Options: `-k` keeps the stages, `-w dir` puts them elsewhere, `-n`
-leaves out stage 3.  `sh chroot.sh root command...` runs one command
-inside.
+Options of `bootstrap.sh`: `-k` keeps the stages, `-w dir` puts them
+elsewhere, `-n` links everything statically.  `sh chroot.sh root
+command...` runs one command inside.
 
-Programs in the system are linked dynamically with `/usr/lib/libc.so`
+Programs in `/usr/bin` are linked dynamically with `/usr/lib/libc.so`
 (the C library, which is also the dynamic linker), and so are by default
 the programs c17 makes there: `c17` finds the C library through its
 profile `/usr/lib/c17/libc/v86bsd`.  `c17 -B static` links a program

@@ -24,3 +24,4 @@ for t in s_*; do
     fi
 done
 echo "libc tests: $pass passed, $fail failed"
+[ $fail = 0 ]

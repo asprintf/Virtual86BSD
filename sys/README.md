@@ -154,7 +154,7 @@ ext2 image of a V86BSD root.
 
 The kernel is part of V86BSD (`sys/` in its sources): `bootstrap.sh`
 builds it with the c17 of its stage 2, together with `/sbin/init`, into
-`root/bsd` and `root/usr/sbin/init`.  To boot that root,
+`root/bsd` and `root/sbin/init`.  To boot that root,
 the host needs QEMU (`qemu-system-x86_64`) and e2fsprogs (`mke2fs -d`);
 in the top directory:
 

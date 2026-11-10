@@ -7,12 +7,14 @@
 #   make clean        remove everything that was built
 #
 # Macros given on the command line (CC=, CFLAGS=, PREFIX=, BINDIR=, DESTDIR=)
-# reach every directory.  One utility: cd sed && make.
+# reach every directory.  BINDIR is /bin (hier(7)), whatever PREFIX is; the
+# programs of bin/ are linked statically (see ../distrib/build.sh).
+# One utility: cd sed && make.
 
 .POSIX:
 
 PREFIX = /usr/local
-BINDIR = $(PREFIX)/bin
+BINDIR = /bin
 
 SUBDIR = cat chgrp chmod cp date dd df echo ed expr ln ls mkdir mv \
 	pax ps pwd rm rmdir sh sleep stty test
