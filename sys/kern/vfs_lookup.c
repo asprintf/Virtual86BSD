@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Joost Orchidee Winter
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ *    contributors may be used to endorse or promote products derived from
+ *    this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 /* namei.c - system calls on names: stat, mkdir, mknod, unlink, rmdir,
    rename, link, symlink, readlink, chmod, chown, utimensat, truncate,
    access, chdir, getcwd, getdents64, statfs, sync. */
@@ -626,6 +656,20 @@ long sys_fchown(long fd, long uid, long gid) {
   struct owner o = {(uint32_t)uid, (uint32_t)gid};
   return chown_fn(f->ino, &o);
 }
+
+/* revoke(2): the owner of a device, or root, may take it away from every
+   process that has it open */
+static int revoke_fn(struct inode *i, void *arg) {
+  (void)arg;
+  struct cred *c = &cur_proc()->cred;
+  if (!S_ISCHR(i->mode) && !S_ISBLK(i->mode))
+    return -EINVAL;
+  if (c->fsuid != 0 && c->fsuid != i->uid)
+    return -EPERM;
+  return revoke_dev(i);
+}
+
+long sys_revoke(long upath) { return path_op(AT_FDCWD, (const char *)upath, LOOKUP_FOLLOW, revoke_fn, NULL); }
 
 #define UTIME_NOW ((1L << 30) - 1)
 #define UTIME_OMIT ((1L << 30) - 2)

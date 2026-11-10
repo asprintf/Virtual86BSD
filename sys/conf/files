@@ -78,6 +78,7 @@ file kern/vfs_bio.c
 file ufs/ext2fs/ext2fs.c
 file tmpfs/tmpfs.c
 file miscfs/procfs/procfs.c
+file miscfs/deadfs/dead_vnops.c
 file kern/sys_pipe.c
 file kern/vfs_lockf.c
 file kern/uipc_socket.c

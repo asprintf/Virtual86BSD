@@ -146,6 +146,7 @@ and the `machine` link.
                        typed memory (kern_tym), autoconfiguration
                        (subr_autoconf), disks as devices (subr_disk);
                        makesyscalls.sh (syscalls.conf: what it writes)
+    miscfs/deadfs/     revoke(2): the dead files a device's open files become
     compat/linux/      the Linux emulation (option COMPAT_LINUX): its own
                        table (syscalls.master, linux_sysent.c), linux_exec
                        (struct emul), linux_misc (uname, personality, reboot)
@@ -437,7 +438,16 @@ emulation, exec sets it.
   `sys/syscallargs.h` and `kern/init_sysent.c` from it.  The arguments and
   structures are still Linux's (a first native ABI changes the numbers and
   the identity only), and `reboot(2)` takes OpenBSD's `howto`
-  (`<sys/reboot.h>`).  `uname` says what `sys/conf/newvers.sh` writes into
+  (`<sys/reboot.h>`).  Native only: `revoke(2)` (number 224, `<unistd.h>` with the extensions
+  only): the device the path names, which must be a character or block
+  device owned by the caller or the caller is root (else EPERM, EINVAL for
+  other files), is taken from every process that has it open.  Those open
+  files stay in their descriptors as dead files: read is end-of-file on a
+  terminal and EIO otherwise, write EIO, ioctl EBADF, poll POLLHUP, close
+  works; sleepers in a terminal's read or write are woken, the terminal's
+  session gets SIGHUP and loses it, and a later open is live.  Mapped memory
+  and a descriptor in a socket's queue are not revoked.  The match is the
+  device number, so `tty00` and `cua00` are one.  `uname` says what `sys/conf/newvers.sh` writes into
   `vers.c`: `V86BSD`, release `0.9.1`, version `GENERIC#1`, machine `amd64`.
 * **Linux:** `compat/linux/syscalls.master`, the 224 of Linux's x86-64
   system calls the kernel has, among them every one the C library uses

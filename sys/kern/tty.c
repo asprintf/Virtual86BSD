@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Joost Orchidee Winter
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ *    contributors may be used to endorse or promote products derived from
+ *    this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 /* tty.c - the terminal line discipline (as Linux's N_TTY, in part),
    the console terminal, /dev/tty, and pseudo-terminals. */
 #include <sys/param.h>
@@ -408,7 +438,7 @@ static ssize_t tty_read(struct file *f, char *buf, size_t n, off_t *pos) {
   uint64_t fl = irq_save();
   if (L(t, ICANON)) {
     while (t->nlines == 0) {
-      if (t->hungup) {
+      if (t->hungup || file_revoked(f)) {
         irq_restore(fl);
         return 0;
       }
@@ -443,7 +473,7 @@ static ssize_t tty_read(struct file *f, char *buf, size_t n, off_t *pos) {
       break;
     if (vmin == 0 && vtime == 0)
       break;
-    if (t->hungup)
+    if (t->hungup || file_revoked(f))
       break;
     if (f->flags & O_NONBLOCK) {
       if (!got) {
@@ -488,6 +518,10 @@ static ssize_t tty_write(struct file *f, const char *buf, size_t n, off_t *pos) 
   while (done < n) {
     uint64_t fl = irq_save();
     while (t->stopped) {
+      if (file_revoked(f)) {
+        irq_restore(fl);
+        return done ? (ssize_t)done : -EIO;
+      }
       if (sleep_on(&t->wq, 0, true) == -EINTR) {
         irq_restore(fl);
         return done ? (ssize_t)done : -ERESTARTSYS;
@@ -501,7 +535,7 @@ static ssize_t tty_write(struct file *f, const char *buf, size_t n, off_t *pos) 
     /* a pseudo-terminal: wait for room in the master's buffer (OPOST
        may double the size) */
     while (t->pty && room_for(t) < 2 * c) {
-      if (pty_master_gone(t)) {
+      if (pty_master_gone(t) || file_revoked(f)) {
         irq_restore(fl);
         return done ? (ssize_t)done : -EIO;
       }
@@ -809,6 +843,10 @@ static ssize_t ptm_read(struct file *f, char *buf, size_t n, off_t *pos) {
   char tmp[TTY_BUF];
   uint64_t fl = irq_save();
   while (p->olen == 0) {
+    if (file_revoked(f)) {
+      irq_restore(fl);
+      return 0;
+    }
     if (p->slave_ever_opened && p->slave_opens == 0) {
       irq_restore(fl);
       return -EIO;
@@ -847,6 +885,10 @@ static ssize_t ptm_write(struct file *f, const char *buf, size_t n, off_t *pos) 
     uint64_t fl = irq_save();
     /* wait while the slave's input is full */
     while (p->slave.ilen >= TTY_BUF - 256 || (L(&p->slave, ICANON) && p->slave.linelen >= TTY_BUF - 256 && false)) {
+      if (file_revoked(f)) {
+        irq_restore(fl);
+        return done ? (ssize_t)done : -EIO;
+      }
       if (f->flags & O_NONBLOCK) {
         irq_restore(fl);
         return done ? (ssize_t)done : -EAGAIN;
@@ -1053,4 +1095,32 @@ void tty_init(void) {
   chrdev_register(4, &tty4);
   chrdev_register(5, &tty5);
   chrdev_register(136, &pts);
+}
+
+/* ---- revoke(2) (miscfs/deadfs/dead_vnops.c) ---- */
+
+/* is this (still live) open file a terminal: a console, a pty slave or master? */
+bool tty_file_p(const struct file *f) {
+  extern const struct file_ops tty_fops_ext;
+  return f->fops == &tty_fops_ext || f->fops == &pts_fops || f->fops == &ptm_fops;
+}
+
+/* f was revoked (f->rfops is what it was): wake what sleeps on it, so that it
+   sees that, and hang up the session of its terminal, as revoke(2) does */
+void tty_file_revoked(struct file *f) {
+  if (f->rfops == &ptm_fops) {
+    struct pty *p = f->priv;
+    wake_up(&p->mrq);
+    wake_up(&p->mwq);
+    poll_wake();
+    return;
+  }
+  struct tty *t = TT(f);
+  if (!t)
+    return;
+  wake_up(&t->rq);
+  wake_up(&t->wq);
+  poll_wake();
+  if (t->sid)
+    tty_session_hangup(t, t->sid);
 }

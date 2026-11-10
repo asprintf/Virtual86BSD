@@ -1,3 +1,33 @@
+/*
+ * Copyright (c) 2026, Joost Orchidee Winter
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ *    contributors may be used to endorse or promote products derived from
+ *    this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+ * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+ * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+ * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
 /* init_main.c - kmain: from the multiboot hand-over to the first process. */
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -184,13 +214,15 @@ static long run_init(void *arg) {
   }
   envp[ne] = NULL;
   char init[128];
+  bool single = cmdline_flag("-s");
   const char *tries[] = {NULL, "/sbin/init", "/etc/init", "/bin/init", "/bin/sh"};
   if (cmdline_get("init", init, sizeof(init)))
     tries[0] = init;
   for (size_t i = 0; i < ARRAY_SIZE(tries); i++) {
     if (!tries[i])
       continue;
-    const char *argv[] = {tries[i], NULL};
+    /* `-s' on the command line: init starts in single-user mode */
+    const char *argv[] = {tries[i], single && strcmp(tries[i], "/bin/sh") ? "-s" : NULL, NULL};
     int e = kernel_execve(tries[i], argv, (const char *const *)envp);
     if (e == 0) {
       cli();

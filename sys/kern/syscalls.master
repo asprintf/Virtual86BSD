@@ -236,3 +236,4 @@
 221	STD	{ long sys_wait4(long pid, long ustatus, long options, long uru); }
 222	STD	{ long sys_waitid(long which, long id, long uinfo, long options, long uru); }
 223	STD	{ long sys_writev(long fd, long iov, long cnt); }
+224	STD	{ long sys_revoke(long path); }
