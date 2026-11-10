@@ -1,6 +1,6 @@
 #!/bin/sh
 # run_tests.sh - build every utility and run its tests
-# (regress/{bin,sbin,usr.bin}/<utility>/test_<utility>.sh).
+# (regress/{bin,sbin,usr.bin,usr.sbin}/<utility>/test_<utility>.sh).
 #
 # Usage: sh run_tests.sh [utility...]
 #
@@ -19,9 +19,9 @@ cd "$(dirname "$0")/.." || exit 2
 TOP=$(pwd)
 MAKE=${MAKE:-make}
 
-# the directory (bin, sbin or usr.bin) a utility is in
+# the directory (bin, sbin, usr.bin or usr.sbin) a utility is in
 where() {
-    for d in bin sbin usr.bin; do
+    for d in bin sbin usr.bin usr.sbin; do
         if [ -d "$TOP/$d/$1" ]; then echo "$d"; return; fi
     done
     return 1
@@ -36,7 +36,7 @@ fi
 if [ $# -gt 0 ]; then
     list=$*
 else
-    list=$(for d in bin sbin usr.bin; do ls "regress/$d"; done | sed '/^lib$/d')
+    list=$(for d in bin sbin usr.bin usr.sbin; do ls "regress/$d"; done | sed '/^lib$/d')
 fi
 
 log=${TMPDIR:-/tmp}/run_tests.$$

@@ -701,8 +701,9 @@ void net_init_conf(const char *conf, const char *loss) {
   waitq_init(&netwq);
   for (; *loss >= '0' && *loss <= '9'; loss++)
     loss_every = loss_every * 10 + (unsigned)(*loss - '0');
-  if (!e1000_init())
+  if (!eth0.present) /* no card: em_attach did not find or set one up */
     return;
+  em_start();
   if (!strcmp(conf, "off")) {
     printk("eth0: not configured (ip=off)\n");
   } else if (conf[0] && strcmp(conf, "dhcp")) {

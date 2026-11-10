@@ -1,0 +1,34 @@
+# GENERIC - the kernel for virtual machines (QEMU's: PIIX IDE, virtio, e1000,
+# a 16550 serial port, the PS/2 keyboard and VGA text).
+#
+# The lines of devices are NAME at PARENT, as dmesg will show them: a number
+# is that unit, * any (one for each device found), ? as a parent any unit.
+# Locators (port 0x3f8 irq 4) go with the parent's: see the `device' lines
+# of sys/conf/files.
+
+machine		amd64
+
+option		DIAGNOSTIC		# KASSERT and its friends
+option		COMPAT_LINUX		# Linux's system calls and ABI (compat/linux, later)
+
+# the kernel is bsd.  The root file system is root=/dev/... on the kernel's
+# command line or else the first disk: a `root on disk0s1' here comes with
+# the disk names (disk0, disk0s1: later)
+config		bsd
+
+mainbus0	at root
+cpu0		at mainbus0
+pci*		at mainbus0
+isa0		at mainbus0
+
+pciide*		at pci?
+disk*		at pciide?
+virtio*		at pci?
+vioblk*		at virtio?
+disk*		at vioblk?
+em*		at pci?
+
+com0		at isa0 port 0x3f8 irq 4
+pckbc0		at isa0
+pckbd0		at pckbc?
+vga0		at isa0

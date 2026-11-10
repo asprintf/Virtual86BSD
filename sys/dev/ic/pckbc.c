@@ -1,8 +1,11 @@
-/* kbd.c - PS/2 keyboard (scan code set 1), US layout, feeding the console
-   tty.  Arrow keys etc. produce VT100 sequences. */
+/* pckbc.c - the PS/2 keyboard controller (pckbc0) and the keyboard on it
+   (pckbd0): scan code set 1, US layout, feeding the console tty.  Arrow
+   keys etc. produce VT100 sequences. */
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/device.h>
 #include <sys/tty.h>
+#include <dev/isa/isavar.h>
 #include <machine/cpu.h>
 
 static const char normal[128] = {
@@ -93,8 +96,65 @@ static void kbd_irq(void) {
   }
 }
 
-void kbd_init(void) {
+/* the controller: ports 0x60 (data) and 0x64 (status, command), 5 of them
+   by the usual decode; the keyboard is in its keyboard slot */
+#define PCKBC_KBD_SLOT 0
+
+struct pckbc_attach_args {
+  int pa_slot;
+};
+
+static int kbd_irq_line = 1;
+
+static int pckbc_match(struct device *parent, void *match, void *aux) {
+  struct isa_attach_args *ia = aux;
+  (void)parent;
+  (void)match;
+  if (ia->ia_iobase == -1)
+    ia->ia_iobase = 0x60;
+  if (ia->ia_iobase != 0x60 || inb(0x64) == 0xff)
+    return 0;
+  ia->ia_iosize = 5;
+  if (ia->ia_irq == -1)
+    ia->ia_irq = 1;
+  return 1;
+}
+
+static int pckbc_print(void *aux, const char *pnp) {
+  struct pckbc_attach_args *pa = aux;
+  if (pnp)
+    printk("device at %s", pnp);
+  printk(" (%s slot)", pa->pa_slot == PCKBC_KBD_SLOT ? "kbd" : "aux");
+  return UNCONF;
+}
+
+static void pckbc_attach(struct device *parent, struct device *self, void *aux) {
+  struct isa_attach_args *ia = aux;
+  struct pckbc_attach_args pa = {PCKBC_KBD_SLOT};
+  (void)parent;
+  printk("\n");
   while (inb(0x64) & 1)
     inb(0x60);
-  irq_register(1, kbd_irq);
+  kbd_irq_line = ia->ia_irq;
+  config_found(self, &pa, pckbc_print);
 }
+
+static int pckbd_match(struct device *parent, void *match, void *aux) {
+  struct pckbc_attach_args *pa = aux;
+  (void)parent;
+  (void)match;
+  return pa->pa_slot == PCKBC_KBD_SLOT;
+}
+
+static void pckbd_attach(struct device *parent, struct device *self, void *aux) {
+  (void)parent;
+  (void)self;
+  (void)aux;
+  printk("\n");
+  irq_register(kbd_irq_line, kbd_irq);
+}
+
+struct cfdriver pckbc_cd = {NULL, "pckbc", DV_DULL, 0};
+struct cfattach pckbc_ca = {sizeof(struct device), pckbc_match, pckbc_attach};
+struct cfdriver pckbd_cd = {NULL, "pckbd", DV_TTY, 0};
+struct cfattach pckbd_ca = {sizeof(struct device), pckbd_match, pckbd_attach};

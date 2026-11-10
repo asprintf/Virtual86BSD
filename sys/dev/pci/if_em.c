@@ -1,12 +1,18 @@
-/* e1000.c - Intel 8254x gigabit Ethernet ("e1000": 82540EM, QEMU's
-   default card, and its relatives).  The registers are memory-mapped
+/* if_em.c - Intel 8254x gigabit Ethernet ("e1000": 82540EM, QEMU's
+   default card, and its relatives), em0.  The registers are memory-mapped
    (BAR 0, uncached through ioremap; QEMU's I/O window is only a stub).
    Legacy descriptors; 64 receive buffers of 2 KiB, 64 transmit
    buffers.  The interrupt only acknowledges and wakes the network thread,
-   which takes the received frames (e1000_poll). */
+   which takes the received frames (e1000_poll).
+
+   The card is set up when the machine is configured (em_attach); its
+   interrupt is taken when the network starts (em_start: net_init_conf),
+   after the thread's queue is there. */
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/device.h>
 #include <dev/pci/pcivar.h>
+#include <dev/pci/pcidevs.h>
 #include <uvm/uvm.h>
 #include <net/if_var.h>
 #include <machine/cpu.h>
@@ -115,23 +121,41 @@ static uint16_t eeprom(int word) {
   return 0;
 }
 
-bool e1000_init(void) {
-  static const uint16_t ids[] = {0x8086, 0x100e, 0x8086, 0x100f, 0x8086, 0x1004, 0x8086, 0x100c,
-                                 0x8086, 0x1015, 0x8086, 0x1019, 0x8086, 0x101e, 0x8086, 0x10d3, 0, 0};
-  struct pci_dev d;
-  if (!pci_find(ids, &d))
-    return false;
+static int em_irq_line;
+
+/* the cards the driver takes (one: there is one eth0) */
+static int em_match(struct device *parent, void *match, void *aux) {
+  static const uint16_t products[] = {PCI_PRODUCT_INTEL_82540EM, PCI_PRODUCT_INTEL_82545EM, PCI_PRODUCT_INTEL_82543GC,
+                                      PCI_PRODUCT_INTEL_82544GC, PCI_PRODUCT_INTEL_82540EM_LOM,
+                                      PCI_PRODUCT_INTEL_82547GI, PCI_PRODUCT_INTEL_82540EP, PCI_PRODUCT_INTEL_82574L};
+  struct pci_dev *d = aux;
+  (void)parent;
+  (void)match;
+  if (d->vendor != PCI_VENDOR_INTEL || eth0.present)
+    return 0;
+  for (size_t i = 0; i < ARRAY_SIZE(products); i++)
+    if (d->device == products[i])
+      return 1;
+  return 0;
+}
+
+static void em_attach(struct device *parent, struct device *self, void *aux) {
+  struct pci_dev d = *(struct pci_dev *)aux;
+  (void)parent;
+  (void)self;
   if (d.bar[0] & 1) {
-    printk("e1000: BAR 0 is not memory\n");
-    return false;
+    printk(": BAR 0 is not memory\n");
+    return;
   }
   uint64_t phys = d.bar[0] & ~0xfU;
   if (((d.bar[0] >> 1) & 3) == 2) /* 64-bit */
     phys |= (uint64_t)d.bar[1] << 32;
   pci_write(&d, 0x04, pci_read(&d, 0x04) | 0x6); /* memory, bus master */
   regs = ioremap(phys, 128 * 1024);
-  if (!regs)
-    return false;
+  if (!regs) {
+    printk(": cannot map the registers\n");
+    return;
+  }
 
   wr(CTRL, rd(CTRL) | (1U << 26)); /* reset */
   for (volatile int i = 0; i < 100000; i++)
@@ -156,21 +180,27 @@ bool e1000_init(void) {
 
   /* rings: descriptors in one page each, buffers two to a page */
   uint64_t rp = alloc_zeroed_page(), tp = alloc_zeroed_page();
-  if (!rp || !tp)
-    return false;
+  if (!rp || !tp) {
+    printk(": out of memory\n");
+    return;
+  }
   rx = P2V(rp);
   tx = P2V(tp);
   for (int i = 0; i < NRX; i += 2) {
     uint64_t pg = alloc_zeroed_page();
-    if (!pg)
-      return false;
+    if (!pg) {
+      printk(": out of memory\n");
+      return;
+    }
     rxbuf[i] = pg, rxbuf[i + 1] = pg + BUFSZ;
     rx[i].addr = rxbuf[i], rx[i + 1].addr = rxbuf[i + 1];
   }
   for (int i = 0; i < NTX; i += 2) {
     uint64_t pg = alloc_zeroed_page();
-    if (!pg)
-      return false;
+    if (!pg) {
+      printk(": out of memory\n");
+      return;
+    }
     txbuf[i] = pg, txbuf[i + 1] = pg + BUFSZ;
     tx[i].status = tx[i + 1].status = 1;
   }
@@ -194,9 +224,18 @@ bool e1000_init(void) {
 
   eth0.xmit = e1000_xmit;
   eth0.present = true;
-  irq_register(d.irq, e1000_irq);
-  wr(IMS, (1U << 7) | (1U << 6) | (1U << 4) | (1U << 2)); /* received, overrun, low, link */
-  printk("eth0: e1000 %04x:%04x at %lx, irq %d, %02x:%02x:%02x:%02x:%02x:%02x\n", d.vendor, d.device, phys, d.irq,
-         eth0.mac[0], eth0.mac[1], eth0.mac[2], eth0.mac[3], eth0.mac[4], eth0.mac[5]);
-  return true;
+  em_irq_line = d.irq;
+  printk(": irq %d, address %02x:%02x:%02x:%02x:%02x:%02x\n", d.irq, eth0.mac[0], eth0.mac[1], eth0.mac[2],
+         eth0.mac[3], eth0.mac[4], eth0.mac[5]);
 }
+
+/* the interrupt on: the network (net_init_conf) is ready for it */
+void em_start(void) {
+  if (!eth0.present)
+    return;
+  irq_register(em_irq_line, e1000_irq);
+  wr(IMS, (1U << 7) | (1U << 6) | (1U << 4) | (1U << 2)); /* received, overrun, low, link */
+}
+
+struct cfdriver em_cd = {NULL, "em", DV_IFNET, 0};
+struct cfattach em_ca = {sizeof(struct device), em_match, em_attach};

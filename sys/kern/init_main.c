@@ -1,9 +1,10 @@
-/* main.c - kmain: from the multiboot hand-over to the first process. */
+/* init_main.c - kmain: from the multiboot hand-over to the first process. */
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/tty.h>
 #include <sys/file.h>
 #include <sys/buf.h>
+#include <sys/conf.h>
 #include <uvm/uvm.h>
 #include <net/if_var.h>
 #include <machine/cpu.h>
@@ -214,11 +215,8 @@ void kmain(uint32_t magic, uint32_t mbi) {
     tym_init(tym);
   }
   tty_init();
-  kbd_init();
-  serial_enable_irq();
+  cpu_configure(); /* the devices: mainbus0 and all it finds, as config(8) says */
   sti();
-  ata_init();
-  virtio_blk_init();
   vfs_init();
   mount_root_fs();
   proc_init_first();

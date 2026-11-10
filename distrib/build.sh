@@ -22,7 +22,7 @@
 #   -d destdir    where to install (default: none: the running system, which
 #                 is only allowed on V86BSD itself)
 #   -c kernconf   the kernel configuration, a directory sys/arch/amd64/
-#                 compile/kernconf (default GENERIC; config(8) is later work)
+#                 conf/kernconf, run through config(8) (default GENERIC)
 #   -n            all programs statically linked (default: those in /bin and
 #                 /sbin are, the rest are linked dynamically)
 #
@@ -63,16 +63,19 @@
 #            the system, into objdir/world, where they are where hier(7)
 #            has them: those of bin/ in /bin and of sbin/ in /sbin, linked
 #            statically (they need nothing in /usr), the rest of usr.bin/ in
-#            /usr/bin, dynamically linked with V86BSD's libc.so (the C
+#            /usr/bin and usr.sbin/ (config) in /usr/sbin, dynamically linked
+#            with V86BSD's libc.so (the C
 #            library, which is also the dynamic linker, /usr/lib/libc.so);
 #            all stripped.  The C library installed is stage 2's (the same
 #            as stage 1's).
 #
 #   init     /sbin/init, the first process, statically linked.
 #
-#   kernel   c17 of stage 2 builds the kernel (sys/: c17 compiles its C,
-#            assembles its assembly and links it): bsd.  The banner of the
-#            kernel names who built it.
+#   kernel   config of stage 2 reads sys/arch/amd64/conf/GENERIC (the file
+#            named by -c) and writes the compile directory: Makefile, ioconf.c
+#            and the rest; then c17 of stage 2 builds the kernel (sys/: c17
+#            compiles its C, assembles its assembly and links it): bsd.  The
+#            banner of the kernel names who built it.
 #
 #   install  root gets /bin /sbin /usr ... as above, /etc from etc/, the
 #            sources in /usr/src, so that the system can rebuild itself:
@@ -233,17 +236,18 @@ stage() {
 	copy bin "$S/bin"
 	copy sbin "$S/sbin"
 	copy usr.bin "$S/usr.bin"
+	copy usr.sbin "$S/usr.sbin"
 	copy lib/libxcu "$S/lib/libxcu"
 	(
 		PATH=$tools:$PATH
 		C17_LIBDIR=$c17dir
 		C17_LIBC=$c17libc
 		export PATH C17_LIBDIR C17_LIBC
-		for d in bin sbin usr.bin; do
+		for d in bin sbin usr.bin usr.sbin; do
 			if [ -z "$forsystem" ]; then
 				bindir=BINDIR=/usr/bin lf=	# (all together, for the next stage)
-			elif $static || [ "$d" != usr.bin ]; then
-				bindir= lf="-B static -s"	# (BINDIR: /bin, /sbin, /usr/bin)
+			elif $static || { [ "$d" != usr.bin ] && [ "$d" != usr.sbin ]; }; then
+				bindir= lf="-B static -s"	# (BINDIR: /bin, /sbin, /usr/bin, /usr/sbin)
 			else
 				bindir= lf=-s
 			fi
@@ -267,6 +271,7 @@ do_world() {
 	S0=$obj/stage0
 	say "stage 0: c17, make, ar, yacc and lex, with the host's $cc"
 	copy usr.bin "$S0/usr.bin"
+	copy usr.sbin "$S0/usr.sbin"
 	copy lib/libxcu "$S0/lib/libxcu"
 	# the headers of V86BSD's C library, for c17's run-time support library
 	# (only for that: the host's compiler, which may be a c17 too, must not
@@ -278,6 +283,10 @@ do_world() {
 		 hostmk PREFIX="$S0" RTC17="env C17_LIBC=$S0/sysroot ./c17" install) >> "$log" 2>&1 ||
 			fail "stage 0: $u"
 	done
+	# config(8) too, to see that the host's compiler builds it; the kernel
+	# is configured by the config of stage 2
+	(cd "$S0/usr.sbin/config" && hostmk PREFIX="$S0" install) >> "$log" 2>&1 ||
+		fail "stage 0: config"
 
 	# ------------------------------------------------------------ stages 1, 2
 	stage 1 "$S0/bin" "$S0/lib/c17" "$R1"
@@ -327,20 +336,26 @@ do_world() {
 
 # ---------------------------------------------------------------- kernel
 do_kernel() {
-	[ -d "$SRC/sys/arch/amd64/compile/$kernconf" ] ||
-		{ echo "build: no kernel configuration $kernconf (sys/arch/amd64/compile/$kernconf)" >&2; exit 1; }
+	[ -f "$SRC/sys/arch/amd64/conf/$kernconf" ] ||
+		{ echo "build: no kernel configuration $kernconf (sys/arch/amd64/conf/$kernconf)" >&2; exit 1; }
 	[ -x "$R2/usr/bin/c17" ] && [ -d "$W/usr/lib" ] ||
 		{ echo "build: no world in $obj: make buildworld first" >&2; exit 1; }
 	[ -d "$obj" ] || mkdir -p "$obj" || exit 1
 	rm -rf "$obj/sys"
 	say "kernel: bsd ($kernconf), with c17 of stage 2"
 	copy sys "$obj/sys"
+	# (what a build in the tree left in the compile directories is not kept)
+	rm -rf "$obj/sys/arch/amd64/compile/$kernconf"
 	(
 		PATH=$R2/usr/bin:$PATH
 		C17_LIBDIR=$R2/usr/lib/c17
 		C17_LIBC=$W/usr     # (statically linked)
 		export PATH C17_LIBDIR C17_LIBC
-		cd "$obj/sys/arch/amd64/compile/$kernconf" &&
+		# config(8), run in the directory of the configurations as
+		# OpenBSD's is: the compile directory is ../compile/$kernconf
+		cd "$obj/sys/arch/amd64/conf" &&
+		"$R2/usr/bin/config" "$kernconf" &&
+		cd "../compile/$kernconf" &&
 		"$R2/usr/bin/make" all
 	) >> "$log" 2>&1 || fail "the kernel"
 	say "kernel: $obj/sys/arch/amd64/compile/$kernconf/bsd"
@@ -396,7 +411,7 @@ do_distribution() {
 	hier
 	cp "$SRC"/etc/* "$dest/etc/" || fail "copying etc/"
 	mkdir -p "$dest/usr/src"
-	for d in README.md LICENSE Makefile bootstrap.sh chroot.sh mkdisk.sh boot.sh distrib etc share include lib bin sbin usr.bin sys regress ports; do
+	for d in README.md LICENSE Makefile bootstrap.sh chroot.sh mkdisk.sh boot.sh distrib etc share include lib bin sbin usr.bin usr.sbin sys regress ports; do
 		cp -pR "$SRC/$d" "$dest/usr/src/" || fail "copying the sources"
 		# (not all of /usr/src: the ports' sources may be there already)
 		find "$dest/usr/src/$d" \( -name "*.o" -o -name "*.a" \) -type f -exec rm -f {} +

@@ -1,5 +1,5 @@
-/* virtio_blk.c - virtio block devices (QEMU's -drive if=virtio): vda, vdb,
-   ... as on Linux.
+/* vioblk.c - virtio block devices (QEMU's -drive if=virtio): vda, vdb,
+   ... as on Linux (disk0, disk1 ... as devices).
 
    The legacy ("transitional") PCI interface: registers in I/O BAR 0, one
    virtqueue in physically contiguous pages.  A request is a chain of
@@ -18,7 +18,10 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
+#include <sys/device.h>
+#include <sys/disk.h>
 #include <dev/pci/pcivar.h>
+#include <dev/pv/virtiovar.h>
 #include <uvm/uvm.h>
 #include <machine/cpu.h>
 
@@ -151,12 +154,18 @@ static int vblk_flush(struct blockdev *b) {
   return v->flush ? request(v, T_FLUSH, 0, NULL, 0) : 0;
 }
 
-static void probe(struct pci_dev *d) {
-  if (!(d->bar[0] & 1)) {
-    printk("virtio-blk: no I/O BAR\n");
-    return;
-  }
-  uint16_t io = (uint16_t)(d->bar[0] & ~3U);
+static int vioblk_match(struct device *parent, void *match, void *aux) {
+  struct virtio_attach_args *va = aux;
+  (void)parent;
+  (void)match;
+  return va->va_devid == VIRTIO_ID_BLOCK;
+}
+
+static void vioblk_attach(struct device *parent, struct device *self, void *aux) {
+  struct virtio_attach_args *va = aux;
+  struct pci_dev *d = va->va_pd;
+  (void)parent;
+  uint16_t io = (uint16_t)(d->bar[0] & ~3U); /* (virtio_match: an I/O BAR) */
   pci_write(d, 0x04, pci_read(d, 0x04) | 0x5); /* I/O space, bus master */
   outb((uint16_t)(io + R_STATUS), 0);         /* reset */
   outb((uint16_t)(io + R_STATUS), S_ACK);
@@ -167,7 +176,7 @@ static void probe(struct pci_dev *d) {
   unsigned qsize = inw((uint16_t)(io + R_QUEUE_SIZE));
   if (qsize < MAX_SEG) {
     outb((uint16_t)(io + R_STATUS), S_FAILED);
-    printk("virtio-blk: queue of %u entries\n", qsize);
+    printk(": queue of %u entries\n", qsize);
     return;
   }
   /* the queue: descriptors and available ring, then (page-aligned) the used ring */
@@ -181,7 +190,7 @@ static void probe(struct pci_dev *d) {
   struct vblk *v = kzalloc(sizeof(*v));
   if (!q || !hp || !v) {
     outb((uint16_t)(io + R_STATUS), S_FAILED);
-    printk("virtio-blk: out of memory\n");
+    printk(": out of memory\n");
     return;
   }
   memset(P2V(q), 0, PAGE_SIZE << order);
@@ -207,14 +216,10 @@ static void probe(struct pci_dev *d) {
   b->flush = vblk_flush;
   b->priv = v;
   nvdisks++;
-  blockdev_register(b);
+  printk("\n");
+  struct disk_attach_args da = {b, "VirtIO, Block Device"};
+  config_found(self, &da, NULL);
 }
 
-void virtio_blk_init(void) {
-  /* 1af4:1001, the legacy (transitional) block device; one is enough for
-     now (pci_find gives the first) */
-  static const uint16_t ids[] = {0x1af4, 0x1001, 0, 0};
-  struct pci_dev d;
-  if (pci_find(ids, &d))
-    probe(&d);
-}
+struct cfdriver vioblk_cd = {NULL, "vioblk", DV_DULL, 0};
+struct cfattach vioblk_ca = {sizeof(struct device), vioblk_match, vioblk_attach};

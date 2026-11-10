@@ -40,6 +40,5 @@ void tty_init(void);
 void tty_input(struct tty *t, char c);
 void tty_maybe_set_ctty(struct file *f);
 void tty_session_hangup(struct tty *t, pid_t sid);
-void serial_enable_irq(void);
 
 #endif

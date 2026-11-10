@@ -1,0 +1,15 @@
+# files.amd64 - the sources and devices of the amd64 machine (see ../../../conf/files)
+
+device mainbus
+attach mainbus at root
+device cpu
+attach cpu at mainbus
+
+file arch/amd64/amd64/boot.s
+file arch/amd64/amd64/cpu.s
+file arch/amd64/amd64/entry.s
+file arch/amd64/amd64/x86.c
+file arch/amd64/amd64/autoconf.c
+file arch/amd64/amd64/mainbus.c mainbus
+file arch/amd64/amd64/cpu_attach.c cpu
+file arch/amd64/amd64/mem.c

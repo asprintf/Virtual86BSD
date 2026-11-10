@@ -4,6 +4,9 @@
 
 #include <sys/types.h>
 #include <machine/vmparam.h>
+#ifdef _KERNEL
+#include <options.h> /* the options of the configuration (config(8)) */
+#endif
 
 #define PAGE_SIZE 4096UL
 #define PAGE_MASK (~(PAGE_SIZE - 1))

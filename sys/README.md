@@ -74,7 +74,7 @@ Inside QEMU, on an ext2 disk made from a bootstrapped V86BSD root:
   frame lost each way.
 * The kernel is built by V86BSD's own c17 alone (it compiles the C,
   assembles `arch/amd64/amd64/*.s` and links with `ld.script`; no binutils), on the
-  host by `bootstrap.sh` and inside the running system by `make` in
+  host by `bootstrap.sh` and inside the running system by `config GENERIC` and `make` in
   `/usr/src/sys/arch/amd64/compile/GENERIC`, where it comes out byte for byte the same.
   The whole system rebuilds itself inside (`bootstrap.sh`, 41 minutes
   under QEMU's emulation) into files identical to those the host built.
@@ -113,15 +113,26 @@ can find out at run time and keep its emulation on Linux:
 The tree is that of OpenBSD's `sys/`.  Headers are included as
 `<sys/systm.h>`, `<machine/cpu.h>`, `<uvm/uvm_extern.h>`: a kernel is built
 with `-D_KERNEL -I<sys> -I.` in a compile directory that has a `machine`
-link to `arch/amd64/include`.
+link to `arch/amd64/include`.  The compile directory is made by
+`config(8)` (`usr.sbin/config`) from `conf/files`, `arch/amd64/conf/files.amd64`
+and the configuration, `arch/amd64/conf/GENERIC`: the Makefile (from
+`Makefile.amd64`), `ioconf.c` (the device table), `locators.h`, `options.h`
+and the `machine` link.
 
     arch/amd64/amd64/  boot.s (Multiboot entry, long mode), entry.s (traps,
                        system calls, context switch, user copies), cpu.s
                        (instructions C cannot express), x86.c (GDT/TSS/IDT,
                        PIC, PIT, trap dispatch), mem.c (memory devices)
     arch/amd64/include machine headers: cpu.h, vmparam.h, _types.h
-    arch/amd64/conf/   ld.script (the linker script)
-    arch/amd64/compile/GENERIC/  the Makefile that builds the kernel
+                       autoconf.c (cpu_configure), mainbus.c and cpu_attach.c
+                       (mainbus0, cpu0)
+    arch/amd64/conf/   GENERIC (the configuration), files.amd64 (its sources and
+                       devices), Makefile.amd64 (the template config fills in),
+                       ld.script (the linker script)
+    arch/amd64/compile/GENERIC/  where config writes what builds the kernel (and
+                       the kernel is built); not in the tree
+    conf/              files (the machine-independent sources and devices),
+                       newvers.sh and RELDATE (vers.c: the banner)
     arch/amd64/stand/  mkimage (ELF to flat Multiboot image)
     kern/              init_main, subr_prf (printf, panic), the scheduler
                        (kern_sched), processes (kern_proc, kern_exec,
@@ -131,7 +142,9 @@ link to `arch/amd64/include`.
                        the VFS (vfs_subr, vfs_lookup, vfs_bio, vfs_pcache,
                        vfs_lockf), descriptors (kern_descrip), pipes,
                        sockets (uipc_socket), terminals (tty), kern_malloc,
-                       typed memory (kern_tym); makesyscalls.sh
+                       typed memory (kern_tym), autoconfiguration
+                       (subr_autoconf), disks as devices (subr_disk);
+                       makesyscalls.sh
     uvm/               physical pages (buddy allocator with reference
                        counts), address spaces and page faults, mmap & co.
     ufs/ext2fs/       ext2 (tmpfs/ and miscfs/procfs/ are tmpfs/devtmpfs
@@ -139,8 +152,9 @@ link to `arch/amd64/include`.
     netinet/           ip.c (Ethernet, ARP, IPv4 with fragments, ICMP, UDP,
                        DHCP, the network thread), tcp.c (TCP)
     dev/               ic/ (16550 serial console, VGA text console, PS/2
-                       keyboard), pci/ (PCI, e1000 as if_em.c, ATA disks (PIO)
-                       as pciide.c), pv/ (virtio disks)
+                       keyboard), isa/ (the ISA bus), pci/ (PCI and pcidevs.h,
+                       e1000 as if_em.c, ATA disks (PIO) as pciide.c), pv/
+                       (virtio, vioblk)
     sys/ net/ ...      the kernel's headers (its own types; no C library
                        headers)
     lib/libkern/       memory and string routines
@@ -149,6 +163,48 @@ link to `arch/amd64/include`.
 `regress/sys/kern` the test programs (k_*.c, and the C library's tests, put
 on the disk image in /root/ktest) and `distrib/mkdisk-ext2.sh` makes the
 ext2 image of a V86BSD root.
+
+## Configuration and autoconfiguration
+
+Which drivers are in a kernel, and where they attach, is a configuration
+file, as in OpenBSD: `arch/amd64/conf/GENERIC`.  `config(8)`
+(`usr.sbin/config/README.md`) reads it with `conf/files` and
+`arch/amd64/conf/files.amd64` and writes the compile directory
+`arch/amd64/compile/NAME` (`cd arch/amd64/conf; config NAME`; `buildkernel`
+does it, `KERNCONF=NAME` picks the configuration).  A device that is not in
+the file is not compiled in: `file dev/pci/if_em.c em` in `conf/files` is
+the line for em, and a kernel without `em* at pci?` has no network driver.
+
+`kern/subr_autoconf.c` is the kernel's side, as OpenBSD's: `struct cfdriver`
+and `struct cfattach` (match and attach functions) in each driver,
+`cfdata[]` (the table, `ioconf.c`), `config_found()` for a bus to offer what
+it found, `config_scan()` for one that has to ask the table.  `kmain` calls
+`cpu_configure()`, which finds `mainbus0`; its attach finds `cpu0`, `pci0`
+and `isa0`, and so on down.  The tree is printed as it is found:
+
+    mainbus0 at root
+    cpu0 at mainbus0: (uniprocessor)
+    pci0 at mainbus0 bus 0
+    "Intel 82441FX" rev 0x02 at pci0 dev 0 function 0 not configured
+    pciide0 at pci0 dev 1 function 1 "Intel 82371SB IDE" rev 0x00
+    disk0 at pciide0 channel 0 drive 0: <QEMU HARDDISK>
+    em0 at pci0 dev 3 function 0 "Intel 82540EM" rev 0x03: irq 11, address 52:54:00:12:34:56
+    virtio0 at pci0 dev 4 function 0 "Qumranet Virtio Storage" rev 0x00
+    vioblk0 at virtio0
+    disk1 at vioblk0: <VirtIO, Block Device>
+    isa0 at mainbus0
+    com0 at isa0 port 0x3f8/8 irq 4: ns16550a, 16 byte fifo
+    pckbc0 at isa0 port 0x60/5 irq 1
+    pckbd0 at pckbc0 (kbd slot)
+    vga0 at isa0 port 0x3b0/48 iomem 0xa0000/131072: console (80x25)
+
+`dev/pci/pcidevs.h` has the names of the vendors and products of QEMU's
+machines; what is not in it is printed with its numbers, and a device no
+driver takes gets `not configured`.  The console is set up before any of
+this (`serial_init`, `vga_init`, polled output), so the first messages
+appear; `com0` and `vga0` attach to it later.  The device names are those of
+autoconf; the block devices (`sda`, `vda`) and `eth0` are named as Linux's
+until the next step of the fork renames them.
 
 ## Building and running
 
@@ -164,7 +220,9 @@ in the top directory:
 (The head of `boot.sh` lists its options.)  Inside the system everything
 needed is there:
 
-    cd /usr/src/sys/arch/amd64/compile/GENERIC
+    cd /usr/src/sys/arch/amd64/conf
+    config GENERIC                # the compile directory, ../compile/GENERIC
+    cd ../compile/GENERIC
     make                          # bsd: c17 compiles, assembles, links
     cd /usr/src/sbin/init && make       # /sbin/init
     cd /usr/src/regress/sys/kern && make testprogs  # the test programs

@@ -1,8 +1,12 @@
 /* vga.c - 80x25 VGA text console with a small subset of the ANSI/VT100
-   escape sequences (cursor movement, erasing, colours). */
+   escape sequences (cursor movement, erasing, colours).  The console is set
+   up early (vga_init); vga0, the device, attaches when the machine is
+   configured. */
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
+#include <sys/device.h>
+#include <dev/isa/isavar.h>
 #include <machine/cpu.h>
 
 #define COLS 80
@@ -198,3 +202,32 @@ void console_write(const char *s, size_t n) {
   serial_write(s + start, n - start);
   vga_write(s, n);
 }
+
+/* is there a VGA?  Its CRTC cursor-location register holds what is written */
+static int vga_match(struct device *parent, void *match, void *aux) {
+  struct isa_attach_args *ia = aux;
+  (void)parent;
+  (void)match;
+  outb(0x3d4, 15);
+  uint8_t old = inb(0x3d5);
+  outb(0x3d5, 0x5a);
+  bool ok = inb(0x3d5) == 0x5a;
+  outb(0x3d5, old);
+  if (!ok)
+    return 0;
+  ia->ia_iobase = 0x3b0;
+  ia->ia_iosize = 48;
+  ia->ia_maddr = 0xa0000;
+  ia->ia_msize = 131072;
+  return 1;
+}
+
+static void vga_attach(struct device *parent, struct device *self, void *aux) {
+  (void)parent;
+  (void)self;
+  (void)aux;
+  printk(": console (%dx%d)\n", COLS, ROWS);
+}
+
+struct cfdriver vga_cd = {NULL, "vga", DV_DULL, 0};
+struct cfattach vga_ca = {sizeof(struct device), vga_match, vga_attach};

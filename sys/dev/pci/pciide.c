@@ -1,5 +1,6 @@
-/* ata.c - ATA disks on the legacy IDE ports, PIO with polling, 28- and
-   48-bit LBA.  Names as Linux's libata: sda, sdb, ...
+/* pciide.c - ATA disks on the legacy IDE ports of a PCI IDE controller,
+   PIO with polling, 28- and 48-bit LBA.  Names as Linux's libata: sda,
+   sdb, ... (disk0, disk1 ... as devices).
 
    Interrupts stay on while the driver polls (the drive's own interrupt is
    off), so the clock keeps time and the terminals take their input while
@@ -10,6 +11,10 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
+#include <sys/device.h>
+#include <sys/disk.h>
+#include <dev/pci/pcivar.h>
+#include <dev/pci/pcidevs.h>
 #include <uvm/uvm.h>
 #include <machine/cpu.h>
 
@@ -104,9 +109,11 @@ static int ata_write(struct blockdev *b, uint64_t s, unsigned c, const void *buf
   return ata_rw(b, s, c, (void *)buf, true);
 }
 
-static void probe(uint16_t base, uint16_t ctl, int slave) {
+/* a disk on a channel: identified (ATA IDENTIFY), its block device made
+   (not registered: the disk device does it) or NULL if there is none */
+static struct blockdev *ata_probe(uint16_t base, uint16_t ctl, int slave, char *model, size_t msize) {
   if (inb(base + 7) == 0xff)
-    return; /* no controller */
+    return NULL; /* no controller */
   outb(base + 6, (uint8_t)(0xa0 | slave << 4));
   for (int i = 0; i < 15; i++)
     inb(base + 7);
@@ -116,21 +123,21 @@ static void probe(uint16_t base, uint16_t ctl, int slave) {
   outb(base + 5, 0);
   outb(base + 7, 0xec); /* IDENTIFY */
   if (inb(base + 7) == 0)
-    return;
+    return NULL;
   int i;
   for (i = 0; i < 1000000 && (inb(base + 7) & 0x80); i++)
     ;
   if (inb(base + 4) || inb(base + 5))
-    return; /* ATAPI or SATA: not a plain ATA disk */
+    return NULL; /* ATAPI or SATA: not a plain ATA disk */
   for (i = 0; i < 1000000; i++) {
     uint8_t s = inb(base + 7);
     if (s & 1)
-      return;
+      return NULL;
     if (s & 8)
       break;
   }
   if (i == 1000000)
-    return;
+    return NULL;
   uint16_t id[256];
   insw(base, id, 256);
   struct ata *a = kzalloc(sizeof(*a));
@@ -142,6 +149,15 @@ static void probe(uint16_t base, uint16_t ctl, int slave) {
     a->lba48 = true;
     sectors = (uint64_t)id[100] | (uint64_t)id[101] << 16 | (uint64_t)id[102] << 32 | (uint64_t)id[103] << 48;
   }
+  /* the model: words 27-46, two characters each, the first in the high byte */
+  size_t n = 0;
+  for (int w = 27; w <= 46 && n + 2 < msize; w++) {
+    model[n++] = (char)(id[w] >> 8);
+    model[n++] = (char)id[w];
+  }
+  while (n > 0 && (model[n - 1] == ' ' || model[n - 1] == 0))
+    n--;
+  model[n] = 0;
   struct blockdev *b = kzalloc(sizeof(*b));
   snprintf(b->name, sizeof(b->name), "sd%c", 'a' + ndisks);
   b->dev = MKDEV(8, ndisks * 16);
@@ -152,12 +168,54 @@ static void probe(uint16_t base, uint16_t ctl, int slave) {
   b->priv = a;
   ndisks++;
   outb(ctl, 0x02); /* no interrupts: we poll */
-  blockdev_register(b);
+  return b;
 }
 
-void ata_init(void) {
-  probe(0x1f0, 0x3f6, 0);
-  probe(0x1f0, 0x3f6, 1);
-  probe(0x170, 0x376, 0);
-  probe(0x170, 0x376, 1);
+/* the aux of a disk at pciide */
+struct pciide_disk_args {
+  struct disk_attach_args da; /* first */
+  int channel, drive;
+};
+
+static int pciide_disk_print(void *aux, const char *pnp) {
+  struct pciide_disk_args *a = aux;
+  if (pnp)
+    printk("disk at %s", pnp);
+  printk(" channel %d drive %d", a->channel, a->drive);
+  return QUIET;
 }
+
+static bool pciide_attached;
+
+/* the controller is the PIIX's IDE function, or any other in compatibility
+   mode: the class says so.  Its channels are the legacy ports; one controller
+   is all there is (the ports are not the controller's own) */
+static int pciide_match(struct device *parent, void *match, void *aux) {
+  struct pci_dev *d = aux;
+  (void)parent;
+  (void)match;
+  return !pciide_attached && PCI_CLASS(d->class) == PCI_CLASS_MASS_STORAGE &&
+         PCI_SUBCLASS(d->class) == PCI_SUBCLASS_MASS_STORAGE_IDE;
+}
+
+static void pciide_attach(struct device *parent, struct device *self, void *aux) {
+  static const struct {
+    uint16_t base, ctl;
+  } channel[2] = {{0x1f0, 0x3f6}, {0x170, 0x376}};
+  (void)parent;
+  (void)aux;
+  pciide_attached = true;
+  printk("\n");
+  for (int c = 0; c < 2; c++)
+    for (int drive = 0; drive < 2; drive++) {
+      char model[48];
+      struct blockdev *b = ata_probe(channel[c].base, channel[c].ctl, drive, model, sizeof(model));
+      if (!b)
+        continue;
+      struct pciide_disk_args a = {{b, model}, c, drive};
+      config_found(self, &a, pciide_disk_print);
+    }
+}
+
+struct cfdriver pciide_cd = {NULL, "pciide", DV_DULL, 0};
+struct cfattach pciide_ca = {sizeof(struct device), pciide_match, pciide_attach};

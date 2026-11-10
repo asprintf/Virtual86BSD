@@ -41,14 +41,15 @@ Tests, the test suites of the ports).
     usr.bin/        the other utilities, one directory each (README.md: the
                     list, with tests); tl/ is the test language of their
                     tests (not POSIX, but installed too: /usr/bin/tl)
-    sys/            the kernel (README.md); sys/arch/amd64/compile/GENERIC
-                    builds it
+    usr.sbin/       config (README.md), which makes the kernel's compile directory
+    sys/            the kernel (README.md); sys/arch/amd64/conf/GENERIC is
+                    its configuration
     sbin/init/      init, the first process
     etc/            the configuration files of a Virtual/86 BSD system
     share/doc/      conformance.md: the external test suites and their results
     distrib/        the scripts behind all of that: build.sh (the stages),
                     mkdisk.sh, boot.sh, chroot.sh
-    regress/        the tests: regress/{bin,sbin,usr.bin}/<utility>, lib/libc
+    regress/        the tests: regress/{bin,sbin,usr.bin,usr.sbin}/<utility>, lib/libc
                     (the C library), sys (the kernel), run_tests.sh
     ports/          third-party software for it: ncurses, Rogue, Lua, SQLite,
                     sqllogictest, Mbed TLS, curl
@@ -123,7 +124,7 @@ compiler, and gives the same files:
     cd /usr/src && make buildworld buildkernel
 
 (or `sh /usr/src/bootstrap.sh /tmp/again`), and so does the kernel
-(`cd /usr/src/sys/arch/amd64/compile/GENERIC; make`).  In an
+(`cd /usr/src/sys/arch/amd64/conf; config GENERIC; cd ../compile/GENERIC; make`).  In an
 interactive shell `/etc/profile` already sets `CC=c17`; scripts that do
 not start from such a shell, such as `/etc/rc`, give `CC=c17` themselves.
 Without `DESTDIR` the `install` targets would install into the running

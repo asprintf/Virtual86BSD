@@ -1,0 +1,89 @@
+# files - the machine-independent sources of the kernel, and the devices
+# its drivers attach (read by config(8) with arch/MACHINE/conf/files.MACHINE
+# and the configuration, GENERIC).
+#
+#   defopt NAME...                  options a configuration may set (option NAME)
+#   device NAME [{loc = default,...}]
+#                                   a driver; its children are given the locators
+#   attach NAME at PARENT...        where it attaches: the parent drivers, or root.
+#                                   The driver defines NAME_cd and NAME_ca
+#                                   (struct cfdriver, struct cfattach)
+#   file PATH [CONDITION]           a source file, compiled when the CONDITION
+#                                   holds: a device in the configuration, an
+#                                   option that is set, !, &, | and ( )
+#
+# (Paths are from sys/.  Files compiled in this order.)
+
+defopt DIAGNOSTIC
+defopt COMPAT_LINUX
+
+# buses and devices
+device pci {dev = -1, function = -1}
+attach pci at mainbus
+device isa {port = -1, iomem = -1, iosiz = 0, irq = -1}
+attach isa at mainbus
+device pciide
+attach pciide at pci
+device virtio
+attach virtio at pci
+device vioblk
+attach vioblk at virtio
+device disk
+attach disk at pciide, vioblk
+device em
+attach em at pci
+device com
+attach com at isa
+device pckbc
+attach pckbc at isa
+device pckbd
+attach pckbd at pckbc
+device vga
+attach vga at isa
+
+# the kernel proper
+file kern/init_main.c
+file lib/libkern/libkern.c
+file kern/subr_prf.c
+file kern/subr_autoconf.c
+file kern/kern_sched.c
+file kern/kern_proc.c
+file kern/kern_sig.c
+file kern/kern_exec.c
+file kern/sys_futex.c
+file kern/kern_time.c
+file kern/kern_xxx.c
+file kern/sysv_ipc.c
+file kern/sys_mqueue.c
+file kern/init_sysent.c
+file uvm/uvm_page.c
+file kern/kern_malloc.c
+file uvm/uvm_map.c
+file uvm/uvm_mmap.c
+file kern/vfs_subr.c
+file kern/kern_descrip.c
+file kern/vfs_lookup.c
+file kern/vfs_bio.c
+file ufs/ext2fs/ext2fs.c
+file tmpfs/tmpfs.c
+file miscfs/procfs/procfs.c
+file kern/sys_pipe.c
+file kern/vfs_lockf.c
+file kern/uipc_socket.c
+file kern/vfs_pcache.c
+file netinet/ip.c
+file netinet/tcp.c
+file kern/kern_tym.c
+file kern/tty.c
+
+# drivers
+file dev/pci/pci.c pci
+file dev/pci/if_em.c em
+file dev/pci/pciide.c pciide
+file dev/pv/virtio.c virtio | vioblk
+file dev/pv/vioblk.c vioblk
+file kern/subr_disk.c disk
+file dev/isa/isa.c isa
+file dev/ic/com.c com
+file dev/ic/vga.c vga
+file dev/ic/pckbc.c pckbc | pckbd

@@ -4,13 +4,15 @@
 
 #include <sys/systm.h>
 
+/* configuring the machine: the devices (arch/amd64/amd64/autoconf.c) */
+void cpu_configure(void);
+
 /* console output: every console device (serial, VGA) */
 void console_write(const char *s, size_t n);
 void serial_init(void);
 void serial_write(const char *s, size_t n);
 void vga_init(void);
 void vga_write(const char *s, size_t n);
-void kbd_init(void);
 size_t log_read(char *dst, size_t n);
 
 /* Linux device numbers */
@@ -45,15 +47,13 @@ void blockdev_register(struct blockdev *b);
 struct blockdev *blockdev_get(dev_t dev);
 struct blockdev *blockdev_by_name(const char *name);
 struct blockdev *blockdev_nth(int i);
-void ata_init(void);
-void virtio_blk_init(void);
 
 /* typed memory objects (drivers/tym.c) */
 void tym_init(const char *conf);
 void tym_populate(void);
 
 /* network cards */
-bool e1000_init(void);
+void em_start(void);   /* the card's interrupt on (the network is ready for it) */
 void e1000_poll(void); /* received frames to net_rx (the network thread) */
 
 /* random numbers (drivers/mem.c) */

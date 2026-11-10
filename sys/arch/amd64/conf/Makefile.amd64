@@ -1,0 +1,75 @@
+# Makefile.amd64 - the kernel's Makefile, as config(8) makes it: the lines
+# %OBJS%, %HDRS% and %RULES% are replaced by the object files, the headers
+# and the rule for each source file; %S%, %CONF% and %MACHINE% by the
+# relative path of sys/, the name of the configuration and the machine.
+# What config writes is Makefile in the compile directory (POSIX make).
+#
+#   make            bsd (a Multiboot image) and bsd.elf
+#   make proto      sys/syscallargs.h again
+#   make gnu        with the host's gcc and binutils instead of c17
+#   make run        boot it in QEMU on disk.img
+#   make clean      the objects and the images (config's files stay)
+#
+# vers.c (the banner, ostype, osrelease: sys/conf/newvers.sh) is made again
+# whenever an object changes; BUILDER=user@host names the builder in it.
+#
+# By default the system's own tools build it: c17 compiles the C, assembles the
+# assembly and links the kernel (with ld.script) -- inside a running system,
+# nothing else is needed.  The files are named from $(S) (a relative path,
+# the same in every build: it is what __FILE__ is), and the compile directory
+# has what config wrote: ioconf.c, options.h, locators.h and the link
+# machine to <machine/...>.
+
+S = %S%
+CC = c17
+CFLAGS = -D_KERNEL -I$(S) -I.
+AS = c17 -c
+LD = c17
+LDFLAGS = -B standalone
+HOSTCC = c17
+
+GNU_CFLAGS = -std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -Wno-cast-function-type -ffreestanding -fno-pic \
+	-mcmodel=kernel -mno-red-zone -mno-sse -mno-mmx -mno-80387 -fno-stack-protector \
+	-fno-asynchronous-unwind-tables -fno-omit-frame-pointer -D_KERNEL -I$(S) -I.
+GNU_LDFLAGS = -nostdlib -z max-page-size=4096 -z noexecstack --no-warn-rwx-segments -T
+QEMU = qemu-system-x86_64
+QEMUFLAGS = -m 512M -nographic -no-reboot
+APPEND = root=/dev/vda CONSOLE=/dev/ttyS0
+DISK = disk.img
+
+%OBJS%
+OBJS = $(OBJS0) vers.o
+
+all: bsd
+
+bsd: bsd.elf mkimage
+	./mkimage bsd.elf $@
+
+bsd.elf: $(OBJS) $(S)/arch/%MACHINE%/conf/ld.script
+	$(LD) $(LDFLAGS) $(S)/arch/%MACHINE%/conf/ld.script -o $@ $(OBJS)
+
+gnu:
+	$(MAKE) CC=gcc CFLAGS="$(GNU_CFLAGS)" AS=as LD=ld LDFLAGS="$(GNU_LDFLAGS)" HOSTCC=cc all
+
+mkimage: $(S)/arch/%MACHINE%/stand/mkimage/mkimage.c
+	$(HOSTCC) -o $@ $(S)/arch/%MACHINE%/stand/mkimage/mkimage.c
+
+%HDRS%
+
+$(OBJS0): options.h locators.h $(HDRS)
+
+vers.c: $(S)/conf/newvers.sh $(S)/conf/RELDATE $(OBJS0)
+	sh $(S)/conf/newvers.sh %CONF%
+vers.o: vers.c
+	$(CC) $(CFLAGS) -c -o $@ vers.c
+
+%RULES%
+
+proto:
+	sh $(S)/kern/makesyscalls.sh $(S)
+
+run: bsd
+	$(QEMU) $(QEMUFLAGS) -kernel bsd -append "$(APPEND)" -drive file=$(DISK),format=raw,if=virtio
+
+clean:
+	rm -f $(OBJS) vers.c vers.c.new bsd bsd.elf mkimage
