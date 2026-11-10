@@ -38,9 +38,9 @@ void pci_devinfo(const struct pci_dev *d, char *buf, size_t n) {
   if (vn && pn)
     snprintf(buf, n, "\"%s %s\" rev 0x%02x", vn, pn, PCI_REVISION(d->class));
   else if (vn)
-    snprintf(buf, n, "\"%s product 0x%04x\" rev 0x%02x", vn, d->device, PCI_REVISION(d->class));
+    snprintf(buf, n, "vendor \"%s\", unknown product 0x%04x rev 0x%02x", vn, d->device, PCI_REVISION(d->class));
   else
-    snprintf(buf, n, "\"vendor 0x%04x product 0x%04x\" rev 0x%02x", d->vendor, d->device, PCI_REVISION(d->class));
+    snprintf(buf, n, "vendor 0x%04x, unknown product 0x%04x rev 0x%02x", d->vendor, d->device, PCI_REVISION(d->class));
 }
 
 /* the bus's own print function: where a device is (and what, as the line
@@ -50,14 +50,14 @@ static int pci_print(void *aux, const char *pnp) {
   char info[96];
   if (pnp) {
     pci_devinfo(d, info, sizeof(info));
-    printk("%s at %s", info, pnp);
+    printf("%s at %s", info, pnp);
   }
   if (d->bus)
-    printk(" bus %d", d->bus);
-  printk(" dev %d function %d", d->dev, d->fn);
+    printf(" bus %d", d->bus);
+  printf(" dev %d function %d", d->dev, d->fn);
   if (!pnp) {
     pci_devinfo(d, info, sizeof(info));
-    printk(" %s", info);
+    printf(" %s", info);
   }
   return UNCONF;
 }
@@ -83,7 +83,7 @@ static int pci_match(struct device *parent, void *match, void *aux) {
 static void pci_attach(struct device *parent, struct device *self, void *aux) {
   (void)parent;
   (void)aux;
-  printk("\n");
+  printf("\n");
   for (int bus = 0; bus < 256; bus++)
     for (int dev = 0; dev < 32; dev++)
       for (int fn = 0; fn < 8; fn++) {

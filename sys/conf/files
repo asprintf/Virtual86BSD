@@ -20,8 +20,12 @@ defopt COMPAT_LINUX
 # buses and devices
 device pci {dev = -1, function = -1}
 attach pci at mainbus
+device pchb
+attach pchb at pci
+device pcib
+attach pcib at pci
 device isa {port = -1, iomem = -1, iosiz = 0, irq = -1}
-attach isa at mainbus
+attach isa at pcib
 device pciide
 attach pciide at pci
 device virtio
@@ -40,6 +44,10 @@ device pckbd
 attach pckbd at pckbc
 device vga
 attach vga at isa
+device wskbd
+attach wskbd at pckbd
+device wsdisplay
+attach wsdisplay at vga
 
 # the kernel proper
 file kern/init_main.c
@@ -78,12 +86,16 @@ file kern/tty.c
 
 # drivers
 file dev/pci/pci.c pci
+file dev/pci/pchb.c pchb
+file dev/pci/pcib.c pcib
 file dev/pci/if_em.c em
 file dev/pci/pciide.c pciide
 file dev/pv/virtio.c virtio | vioblk
 file dev/pv/vioblk.c vioblk
-file kern/subr_disk.c disk
+file kern/subr_disk.c
 file dev/isa/isa.c isa
 file dev/ic/com.c com
 file dev/ic/vga.c vga
 file dev/ic/pckbc.c pckbc | pckbd
+file dev/wscons/wskbd.c wskbd
+file dev/wscons/wsdisplay.c wsdisplay

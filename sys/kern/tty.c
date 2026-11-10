@@ -1026,7 +1026,7 @@ static int pts_open(struct inode *ino, struct file *f) {
   return 0;
 }
 
-/* character devices: major 4 (ttyS, tty1), 5 (tty, console, ptmx), 136 */
+/* character devices: major 4 (tty00 and cua00, ttyC0), 5 (tty, console, ptmx), 136 */
 static int tty4_open(struct inode *ino, struct file *f) { return console_open(ino, f); }
 
 static int tty5_open(struct inode *ino, struct file *f) {

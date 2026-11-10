@@ -7,6 +7,9 @@
 
 volatile uint64_t jiffies;
 static uint64_t tsc0, tsc_hz;
+
+/* the calibrated TSC rate (the cpu0 line says it in MHz) */
+uint64_t tsc_frequency(void) { return tsc_hz; }
 static int64_t realtime_offset; /* realtime = monotonic + offset */
 
 uint64_t monotonic_ns(void) {
@@ -73,7 +76,6 @@ void time_init(void) {
     tsc_hz = 1000000;
   tsc0 = rdtsc64();
   set_realtime_ns((uint64_t)rtc_read() * 1000000000UL);
-  printk("clock: TSC at %lu kHz\n", tsc_hz / 1000);
 }
 
 /* ---- clocks ---- */

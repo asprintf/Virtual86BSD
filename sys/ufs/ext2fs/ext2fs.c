@@ -1165,7 +1165,7 @@ static struct super *ext2_mount(struct blockdev *b, int flags, const char *data)
   e->b = b;
   e->bs = 1024U << rd32(raw + 24);
   if (rd32(raw + 24) > 2) { /* blocks larger than a page (the page cache assumes not) */
-    printk("ext2: %u-byte blocks not supported\n", e->bs);
+    printf("ext2: %u-byte blocks not supported\n", e->bs);
     kfree(e);
     return ERR_PTR(-EINVAL);
   }
@@ -1184,7 +1184,7 @@ static struct super *ext2_mount(struct blockdev *b, int flags, const char *data)
     return ERR_PTR(-EINVAL);
   }
   if (e->incompat & ~(uint32_t)INCOMPAT_FILETYPE) {
-    printk("ext2: %s: unsupported features %#x\n", b->name, e->incompat & ~INCOMPAT_FILETYPE);
+    printf("ext2: %s: unsupported features %#x\n", b->name, e->incompat & ~INCOMPAT_FILETYPE);
     kfree(e);
     return ERR_PTR(-EINVAL);
   }
@@ -1204,7 +1204,7 @@ static struct super *ext2_mount(struct blockdev *b, int flags, const char *data)
   e->sb = sb;
   sb->rdonly = (flags & MS_RDONLY) || (e->rocompat & ~(uint32_t)(RO_SPARSE | RO_LARGE | RO_BTREE));
   if (sb->rdonly && !(flags & MS_RDONLY))
-    printk("ext2: %s: read-only features %#x: mounted read-only\n", b->name, e->rocompat);
+    printf("ext2: %s: read-only features %#x: mounted read-only\n", b->name, e->rocompat);
   struct inode *root = iget(sb, ROOT_INO);
   if (IS_ERR(root)) {
     kfree(e->gd);
@@ -1221,7 +1221,7 @@ static struct super *ext2_mount(struct blockdev *b, int flags, const char *data)
     uint16_t state = rd16(e->raw + 58);
     e->mount_state = state;
     if (!(state & 1) || (state & 2))
-      printk("ext2: %s was not unmounted cleanly%s: check it with e2fsck\n", b->name,
+      printf("ext2: %s was not unmounted cleanly%s: check it with e2fsck\n", b->name,
              state & 2 ? " and has errors" : "");
     wr16(e->raw + 58, (uint16_t)(state & ~1));
     wr16(e->raw + 52, (uint16_t)(rd16(e->raw + 52) + 1)); /* mount count */

@@ -31,7 +31,7 @@ static const char *virtio_devname(int id) {
 static int virtio_print(void *aux, const char *pnp) {
   struct virtio_attach_args *va = aux;
   if (pnp)
-    printk("virtio %s (%d) at %s", virtio_devname(va->va_devid), va->va_devid, pnp);
+    printf("virtio %s (%d) at %s", virtio_devname(va->va_devid), va->va_devid, pnp);
   return UNCONF;
 }
 
@@ -39,7 +39,7 @@ static void virtio_attach(struct device *parent, struct device *self, void *aux)
   struct pci_dev *d = aux;
   struct virtio_attach_args va;
   (void)parent;
-  printk("\n");
+  printf("\n");
   va.va_pd = d;
   va.va_devid = (int)(pci_read(d, 0x2c) >> 16); /* subsystem ID */
   config_found(self, &va, virtio_print);

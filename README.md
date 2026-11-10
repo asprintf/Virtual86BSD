@@ -170,8 +170,9 @@ that every time).  What you change inside stays in
 `root/` (`-s size` in MiB; operands name another root and image; for
 another root, give `boot.sh` its kernel with `-k root/bsd`).
 
-The disk is a virtio disk (`/dev/vda` inside); `-i` makes it a PC's IDE
-disk (`/dev/sda`) instead, which is much slower.  `boot.sh` options: `-m 2G` the memory (default 1G), `-g` a window with
+The disk is a virtio disk (`/dev/disk0` inside, with the root on its
+partition `/dev/disk0s1`); `-i` makes it a PC's IDE disk (also `disk0`)
+instead, which is much slower.  `boot.sh` options: `-m 2G` the memory (default 1G), `-g` a window with
 the VGA screen and the keyboard instead of this terminal, `-n` no network,
 `-p 8080:80` forwards port 8080 of the host (127.0.0.1) to port 80 of the
 system, `-k kernel` another kernel, `-e` no KVM, and after `--` more

@@ -87,7 +87,7 @@ struct device *config_attach(struct device *parent, struct cfdata *cf, void *aux
   dev->dv_parent = parent;
   snprintf(dev->dv_xname, sizeof(dev->dv_xname), "%s%d", cd->cd_name, unit);
   cd->cd_devs[unit] = dev;
-  printk("%s at %s", dev->dv_xname, parent ? parent->dv_xname : "root");
+  printf("%s at %s", dev->dv_xname, parent ? parent->dv_xname : "root");
   if (print)
     print(aux, NULL);
   ca->ca_attach(parent, dev, aux);
@@ -99,7 +99,7 @@ struct device *config_found_sm(struct device *parent, void *aux, cfprint_t print
   if (cf)
     return config_attach(parent, cf, aux, print);
   if (print && print(aux, parent->dv_xname) == UNCONF)
-    printk(" not configured\n");
+    printf(" not configured\n");
   return NULL;
 }
 
@@ -124,4 +124,28 @@ void config_scan(cfmatch_t scanner, struct device *parent) {
   for (struct cfdata *cf = cfdata; cf->cf_attach; cf++)
     if (cf->cf_fstate != FSTATE_FOUND && parent_is(cf, parent))
       scanner(parent, cf, NULL);
+}
+
+/* what is to be done after the tree has been walked, in order (a bridge's
+   bus: OpenBSD's config_defer) */
+#define NDEFER 16
+static struct {
+  struct device *dev;
+  void (*fn)(struct device *);
+} deferred[NDEFER];
+static int ndeferred;
+
+void config_defer(struct device *dev, void (*fn)(struct device *)) {
+  if (ndeferred == NDEFER)
+    panic("config_defer: too many");
+  deferred[ndeferred].dev = dev;
+  deferred[ndeferred].fn = fn;
+  ndeferred++;
+}
+
+/* (a deferred call may defer more: they run after those before them) */
+void config_process_deferred(void) {
+  for (int i = 0; i < ndeferred; i++)
+    deferred[i].fn(deferred[i].dev);
+  ndeferred = 0;
 }

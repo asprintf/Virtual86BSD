@@ -43,6 +43,9 @@
 #define PCI_REVISION(x) ((x) & 0xff)
 #define PCI_CLASS_MASS_STORAGE 0x01
 #define PCI_SUBCLASS_MASS_STORAGE_IDE 0x01
+#define PCI_CLASS_BRIDGE 0x06
+#define PCI_SUBCLASS_BRIDGE_HOST 0x00
+#define PCI_SUBCLASS_BRIDGE_ISA 0x01
 
 #ifdef PCIDEVS_DATA
 struct pci_vendor_name {

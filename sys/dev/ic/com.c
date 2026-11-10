@@ -1,4 +1,4 @@
-/* com.c - 16550 UART on COM1 (/dev/ttyS0): console output, input to the tty.
+/* com.c - 16550 UART on COM1 (/dev/tty00, /dev/cua00): console output, input to the tty.
 
    The console is set up early (serial_init, before the first message and
    before there is an allocator: output is polled); com0, the device, attaches
@@ -59,8 +59,8 @@ static void com_attach(struct device *parent, struct device *self, void *aux) {
   struct isa_attach_args *ia = aux;
   uint8_t fifo = inb(COM1 + 2) & 0xc0; /* the FIFO bits of the interrupt id */
   (void)parent;
-  printk(": %s\n", fifo == 0xc0 ? "ns16550a, 16 byte fifo" : fifo == 0x80 ? "ns16550, broken fifo" : "ns16450, no fifo");
-  printk("%s: console\n", self->dv_xname);
+  printf(": %s\n", fifo == 0xc0 ? "ns16550a, 16 byte fifo" : fifo == 0x80 ? "ns16550, broken fifo" : "ns16450, no fifo");
+  printf("%s: console\n", self->dv_xname);
   irq_register(ia->ia_irq, serial_irq);
   outb(COM1 + 1, 0x01); /* received-data interrupt */
 }

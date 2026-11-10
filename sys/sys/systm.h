@@ -23,7 +23,8 @@ int vsnprintf(char *buf, size_t n, const char *fmt, va_list ap);
 int snprintf(char *buf, size_t n, const char *fmt, ...);
 
 /* kern/subr_prf.c */
-void printk(const char *fmt, ...);
+void printf(const char *fmt, ...);
+uint64_t tsc_frequency(void); /* kern/kern_time.c */
 
 /* the system's identity: vers.c, made by conf/newvers.sh */
 extern const char ostype[], osrelease[], osversion[], version[];

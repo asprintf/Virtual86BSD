@@ -4,6 +4,11 @@
 
 #include <sys/systm.h>
 
+/* the aux of isa itself, from the bridge that offers the bus (pcib) */
+struct isabus_attach_args {
+  const char *iba_name; /* "isa" */
+};
+
 /* the aux of a device at isa: from the locators of its line of the table
    (-1: not given); its match function sets what the device uses where it
    was not (the I/O ports it takes, the interrupt) and the sizes, for the

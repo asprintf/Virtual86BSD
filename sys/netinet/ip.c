@@ -618,7 +618,7 @@ static void dhcp_input(const uint8_t *b, size_t len) {
     eth0.configured = true;
     dhcp_state = 3;
     dhcp_running = false;
-    printk("eth0: %u.%u.%u.%u/%d by DHCP, gateway %u.%u.%u.%u\n", yi >> 24, (yi >> 16) & 255, (yi >> 8) & 255,
+    printf("em0: %u.%u.%u.%u/%d by DHCP, gateway %u.%u.%u.%u\n", yi >> 24, (yi >> 16) & 255, (yi >> 8) & 255,
            yi & 255, prefix_of(eth0.mask), router >> 24, (router >> 16) & 255,
            (router >> 8) & 255, router & 255);
   } else if (type == 6 && dhcp_state == 2) { /* nak: again */
@@ -705,13 +705,13 @@ void net_init_conf(const char *conf, const char *loss) {
     return;
   em_start();
   if (!strcmp(conf, "off")) {
-    printk("eth0: not configured (ip=off)\n");
+    printf("em0: not configured (ip=off)\n");
   } else if (conf[0] && strcmp(conf, "dhcp")) {
     const char *s = conf;
     uint32_t a, g = 0, d = 0;
     int prefix = 24;
     if (!parse_ip(&s, &a)) {
-      printk("eth0: bad ip=%s\n", conf);
+      printf("em0: bad ip=%s\n", conf);
       return;
     }
     if (*s == '/') {
@@ -730,7 +730,7 @@ void net_init_conf(const char *conf, const char *loss) {
     if (d)
       eth0.dns[0] = d, eth0.ndns = 1;
     eth0.configured = true;
-    printk("eth0: %s\n", conf);
+    printf("em0: %s\n", conf);
   } else {
     /* DHCP: wait for it here a few seconds (by polling: the thread is not
        there yet), then the thread goes on trying */
@@ -743,10 +743,10 @@ void net_init_conf(const char *conf, const char *loss) {
       arp_timers(net_now_ms());
     }
     if (!eth0.configured)
-      printk("eth0: no DHCP answer yet\n");
+      printf("em0: no DHCP answer yet\n");
   }
   if (loss_every)
-    printk("eth0: losing every %uth frame (netloss=)\n", loss_every);
+    printf("em0: losing every %uth frame (netloss=)\n", loss_every);
   kthread_create("net", net_thread, NULL);
 }
 

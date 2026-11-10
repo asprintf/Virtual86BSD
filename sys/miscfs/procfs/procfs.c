@@ -550,7 +550,7 @@ static int make_text(struct inode *i, struct sbuf *s) {
     sb_printf(s, "    lo:       0       0    0    0    0     0          0         0"
                  "        0       0    0    0    0     0       0          0\n");
     if (eth0.present)
-      sb_printf(s, "  eth0: %7lu %7lu    0 %4lu    0     0          0         0 %8lu %7lu    0 %4lu    0     0       0          0\n",
+      sb_printf(s, "   em0: %7lu %7lu    0 %4lu    0     0          0         0 %8lu %7lu    0 %4lu    0     0       0          0\n",
                 eth0.rx_bytes, eth0.rx_packets, eth0.rx_dropped, eth0.tx_bytes, eth0.tx_packets, eth0.tx_dropped);
     return 0;
   case R_NETPNP:

@@ -915,8 +915,7 @@ static void write_ioconf(const char *dir)
             bputs(&b, ", 0, NULL, -1, 0},\n");
     }
     bputs(&b, "    {NULL}\n};\n");
-    if (rootdev && *rootdev)
-        bprintf(&b, "\nconst char cf_rootdev[] = \"%s\";\n", rootdev);
+    bprintf(&b, "\nconst char cf_rootdev[] = \"%s\";\n", rootdev ? rootdev : "");
     put(dir, "ioconf.c", &b);
     free(b.s);
 }

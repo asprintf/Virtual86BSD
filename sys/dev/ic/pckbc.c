@@ -123,8 +123,8 @@ static int pckbc_match(struct device *parent, void *match, void *aux) {
 static int pckbc_print(void *aux, const char *pnp) {
   struct pckbc_attach_args *pa = aux;
   if (pnp)
-    printk("device at %s", pnp);
-  printk(" (%s slot)", pa->pa_slot == PCKBC_KBD_SLOT ? "kbd" : "aux");
+    printf("device at %s", pnp);
+  printf(" (%s slot)", pa->pa_slot == PCKBC_KBD_SLOT ? "kbd" : "aux");
   return UNCONF;
 }
 
@@ -132,7 +132,7 @@ static void pckbc_attach(struct device *parent, struct device *self, void *aux) 
   struct isa_attach_args *ia = aux;
   struct pckbc_attach_args pa = {PCKBC_KBD_SLOT};
   (void)parent;
-  printk("\n");
+  printf("\n");
   while (inb(0x64) & 1)
     inb(0x60);
   kbd_irq_line = ia->ia_irq;
@@ -148,10 +148,10 @@ static int pckbd_match(struct device *parent, void *match, void *aux) {
 
 static void pckbd_attach(struct device *parent, struct device *self, void *aux) {
   (void)parent;
-  (void)self;
   (void)aux;
-  printk("\n");
+  printf("\n");
   irq_register(kbd_irq_line, kbd_irq);
+  config_found(self, NULL, NULL); /* wskbd0 */
 }
 
 struct cfdriver pckbc_cd = {NULL, "pckbc", DV_DULL, 0};

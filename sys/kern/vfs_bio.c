@@ -12,7 +12,6 @@
 #include <sys/buf.h>
 #include <uvm/uvm.h>
 
-#define NBLOCKDEV 16
 #define HASH 16384
 #define MIN_BUFS 8192
 
@@ -32,7 +31,6 @@ void blockdev_register(struct blockdev *b) {
   for (int i = 0; i < NBLOCKDEV; i++)
     if (!bdevs[i]) {
       bdevs[i] = b;
-      printk("%s: %lu sectors (%lu MiB)\n", b->name, b->sectors, b->sectors >> 11);
       return;
     }
 }
@@ -51,7 +49,7 @@ struct blockdev *blockdev_by_name(const char *name) {
   return NULL;
 }
 
-struct blockdev *blockdev_nth(int i) { return i < NBLOCKDEV ? bdevs[i] : NULL; }
+struct blockdev *blockdev_nth(int i) { return i >= 0 && i < NBLOCKDEV ? bdevs[i] : NULL; }
 
 void bcache_init(void) {
   for (int i = 0; i < HASH; i++)
@@ -104,7 +102,7 @@ static int bwrite(struct buf *bp) {
     bp->dirty = false;
     list_del(&bp->dirty_link);
   } else
-    printk("%s: write error at block %lu\n", bp->bdev->name, bp->block);
+    printf("%s: write error at block %lu\n", bp->bdev->name, bp->block);
   return e;
 }
 
@@ -171,7 +169,7 @@ struct buf *bread(struct blockdev *b, uint64_t block, unsigned size) {
   if (!bp->valid) {
     unsigned spb = size / 512;
     if (b->read(b, block * spb, spb, bp->data)) {
-      printk("%s: read error at block %lu\n", b->name, block);
+      printf("%s: read error at block %lu\n", b->name, block);
       memset(bp->data, 0, size);
     }
     bp->valid = true;
@@ -198,7 +196,7 @@ static void flush_devices(struct blockdev *b) {
     if (d && (!b || d == b) && d->unflushed && d->flush) {
       d->unflushed = false;
       if (d->flush(d))
-        printk("%s: cache flush failed\n", d->name);
+        printf("%s: cache flush failed\n", d->name);
     }
   }
 }

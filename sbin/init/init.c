@@ -8,7 +8,7 @@
  * The terminal: the kernel's console= parameter is not visible here, so
  * init takes CONSOLE from its environment (the kernel passes unknown
  * name=value words of its command line on as environment, as Linux does),
- * default /dev/ttyS0.
+ * default /dev/tty00.
  *
  * POSIX C, plus reboot(2) of Linux for the power-off (poweroff.s: V86BSD's
  * C library has no reboot()).
@@ -102,7 +102,7 @@ int main(void) {
     (void)!chdir("/");
   const char *tty = getenv("CONSOLE");
   if (!tty)
-    tty = "/dev/ttyS0";
+    tty = "/dev/tty00";
   struct stat st;
   if (stat("/etc/rc", &st) == 0) {
     const char *rc[] = {"/bin/sh", "/etc/rc", NULL};

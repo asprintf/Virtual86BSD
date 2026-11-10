@@ -47,7 +47,7 @@ The configuration file (`#` starts a comment):
     option NAME                  an option (declared by defopt): #define NAME 1
     option NAME=VALUE            ... #define NAME VALUE
     config bsd [root on DEVICE]  the kernel is bsd; DEVICE is written to
-                                 ioconf.c as cf_rootdev
+                                 ioconf.c as cf_rootdev ("" without root on)
     NAME0 at PARENT0 [locator number]...
     NAME* at PARENT?             a device: a unit, or * (as many as are found,
                                  any unit); a parent unit, or ? (any)

@@ -1,6 +1,6 @@
 /* pciide.c - ATA disks on the legacy IDE ports of a PCI IDE controller,
-   PIO with polling, 28- and 48-bit LBA.  Names as Linux's libata: sda,
-   sdb, ... (disk0, disk1 ... as devices).
+   PIO with polling, 28- and 48-bit LBA.  The disks are devices (disk0,
+   disk1 ...: kern/subr_disk.c), at the channel and drive.
 
    Interrupts stay on while the driver polls (the drive's own interrupt is
    off), so the clock keeps time and the terminals take their input while
@@ -23,8 +23,6 @@ struct ata {
   int slave;
   bool lba48;
 };
-
-static int ndisks;
 
 static int wait_ready(struct ata *a) {
   for (int i = 0; i < 10000000; i++) {
@@ -159,14 +157,11 @@ static struct blockdev *ata_probe(uint16_t base, uint16_t ctl, int slave, char *
     n--;
   model[n] = 0;
   struct blockdev *b = kzalloc(sizeof(*b));
-  snprintf(b->name, sizeof(b->name), "sd%c", 'a' + ndisks);
-  b->dev = MKDEV(8, ndisks * 16);
   b->sectors = sectors;
   b->read = ata_read;
   b->write = ata_write;
   b->flush = ata_flush;
   b->priv = a;
-  ndisks++;
   outb(ctl, 0x02); /* no interrupts: we poll */
   return b;
 }
@@ -180,8 +175,8 @@ struct pciide_disk_args {
 static int pciide_disk_print(void *aux, const char *pnp) {
   struct pciide_disk_args *a = aux;
   if (pnp)
-    printk("disk at %s", pnp);
-  printk(" channel %d drive %d", a->channel, a->drive);
+    printf("disk at %s", pnp);
+  printf(" channel %d drive %d", a->channel, a->drive);
   return QUIET;
 }
 
@@ -205,7 +200,7 @@ static void pciide_attach(struct device *parent, struct device *self, void *aux)
   (void)parent;
   (void)aux;
   pciide_attached = true;
-  printk("\n");
+  printf("\n");
   for (int c = 0; c < 2; c++)
     for (int drive = 0; drive < 2; drive++) {
       char model[48];

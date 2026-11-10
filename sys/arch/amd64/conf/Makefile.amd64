@@ -34,7 +34,7 @@ GNU_CFLAGS = -std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -Wno-cast-function
 GNU_LDFLAGS = -nostdlib -z max-page-size=4096 -z noexecstack --no-warn-rwx-segments -T
 QEMU = qemu-system-x86_64
 QEMUFLAGS = -m 512M -nographic -no-reboot
-APPEND = root=/dev/vda CONSOLE=/dev/ttyS0
+APPEND = CONSOLE=/dev/tty00
 DISK = disk.img
 
 %OBJS%

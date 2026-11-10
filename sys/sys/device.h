@@ -70,5 +70,9 @@ struct cfdata *config_search(cfmatch_t submatch, struct device *parent, void *au
 int config_match(struct device *parent, void *match, void *aux);
 struct device *config_attach(struct device *parent, struct cfdata *cf, void *aux, cfprint_t print);
 void config_scan(cfmatch_t scanner, struct device *parent);
+/* fn(dev) is called once the devices found so far are attached (a bridge:
+   its child bus comes after the devices of the bus it is on) */
+void config_defer(struct device *dev, void (*fn)(struct device *));
+void config_process_deferred(void);
 
 #endif

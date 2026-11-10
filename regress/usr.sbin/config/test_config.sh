@@ -197,8 +197,9 @@ if [ -f "$SYS/arch/amd64/conf/GENERIC" ]; then
     has "GENERIC: the root" "$RB/ioconf.c" "    {&mainbus_ca, &mainbus_cd, 0, FSTATE_NORMAL, NULL, 0, NULL, -1, 0},"
     has "GENERIC: DIAGNOSTIC" "$RB/options.h" "#define DIAGNOSTIC 1"
     has "GENERIC: COMPAT_LINUX" "$RB/options.h" "#define COMPAT_LINUX 1"
-    has "GENERIC: the serial port" "$RB/ioconf.c" "    {&com_ca, &com_cd, 0, FSTATE_NORMAL, loc10, 0, &isa_cd, 0, 0},"
-    has "GENERIC: its port and irq" "$RB/ioconf.c" "static int loc10[] = {0x3f8, -1, 0, 4};"
+    has "GENERIC: the serial port" "$RB/ioconf.c" "    {&com_ca, &com_cd, 0, FSTATE_NORMAL, loc12, 0, &isa_cd, 0, 0},"
+    has "GENERIC: its port and irq" "$RB/ioconf.c" "static int loc12[] = {0x3f8, -1, 0, 4};"
+    has "GENERIC: root on disk0s1" "$RB/ioconf.c" "const char cf_rootdev[] = \"disk0s1\";"
     has "GENERIC: the Makefile's S" "$RB/Makefile" "S = ../../../.."
     # the kernel is compiled from $(S) paths of one form: what __FILE__ is
     hasnt "GENERIC: no absolute path in the Makefile" "$RB/Makefile" "$R"

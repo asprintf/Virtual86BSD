@@ -17,6 +17,7 @@ testprogs:
 	$(C17) -o k_net k_net.c
 	$(C17) -o k_timer k_timer.c
 	$(C17) -o k_maxmap k_maxmap.c
+	$(C17) -o k_disk k_disk.c
 	mkdir -p libc
 	cp $(LIBCTESTS)/collate.def libc/
 	for t in $(LIBCTESTS)/s_*.c; do \
@@ -25,6 +26,6 @@ testprogs:
 	done
 
 clean:
-	rm -f k_sigwait k_shm k_fpu k_clofork k_mmap k_inet k_net k_timer k_maxmap libc/s_* libc/collate.def
+	rm -f k_sigwait k_shm k_fpu k_clofork k_mmap k_inet k_net k_timer k_maxmap k_disk libc/s_* libc/collate.def
 
 .PHONY: testprogs clean

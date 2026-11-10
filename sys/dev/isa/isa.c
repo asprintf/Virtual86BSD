@@ -6,7 +6,6 @@
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <dev/isa/isavar.h>
-#include <machine/mainbus.h>
 #include <locators.h>
 
 /* the place of a device on the bus: port, memory, interrupt */
@@ -15,15 +14,15 @@ static int isa_print(void *aux, const char *pnp) {
   if (pnp)
     return UNCONF;
   if (ia->ia_iosize)
-    printk(" port 0x%x/%d", ia->ia_iobase, ia->ia_iosize);
+    printf(" port 0x%x/%d", ia->ia_iobase, ia->ia_iosize);
   else if (ia->ia_iobase != -1)
-    printk(" port 0x%x", ia->ia_iobase);
+    printf(" port 0x%x", ia->ia_iobase);
   if (ia->ia_msize)
-    printk(" iomem 0x%x/%d", ia->ia_maddr, ia->ia_msize);
+    printf(" iomem 0x%x/%d", ia->ia_maddr, ia->ia_msize);
   else if (ia->ia_maddr != -1)
-    printk(" iomem 0x%x", ia->ia_maddr);
+    printf(" iomem 0x%x", ia->ia_maddr);
   if (ia->ia_irq != -1)
-    printk(" irq %d", ia->ia_irq);
+    printf(" irq %d", ia->ia_irq);
   return QUIET;
 }
 
@@ -42,16 +41,16 @@ static int isa_scan(struct device *parent, void *match, void *aux) {
 }
 
 static int isa_match(struct device *parent, void *match, void *aux) {
-  struct mainbus_attach_args *ma = aux;
+  struct isabus_attach_args *iba = aux;
   (void)parent;
   (void)match;
-  return !strcmp(ma->maa_name, "isa");
+  return !strcmp(iba->iba_name, "isa");
 }
 
 static void isa_attach(struct device *parent, struct device *self, void *aux) {
   (void)parent;
   (void)aux;
-  printk("\n");
+  printf("\n");
   config_scan(isa_scan, self);
 }
 

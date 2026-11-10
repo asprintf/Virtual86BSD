@@ -127,11 +127,11 @@ void arch_init(void) {
 }
 
 static void dump_regs(struct regs *r) {
-  printk("rip %016lx cs %lx rflags %lx rsp %016lx ss %lx\n", r->rip, r->cs, r->rflags, r->rsp, r->ss);
-  printk("rax %016lx rbx %016lx rcx %016lx rdx %016lx\n", r->rax, r->rbx, r->rcx, r->rdx);
-  printk("rsi %016lx rdi %016lx rbp %016lx r8  %016lx\n", r->rsi, r->rdi, r->rbp, r->r8);
-  printk("r9  %016lx r10 %016lx r11 %016lx r12 %016lx\n", r->r9, r->r10, r->r11, r->r12);
-  printk("r13 %016lx r14 %016lx r15 %016lx cr2 %016lx\n", r->r13, r->r14, r->r15, read_cr2());
+  printf("rip %016lx cs %lx rflags %lx rsp %016lx ss %lx\n", r->rip, r->cs, r->rflags, r->rsp, r->ss);
+  printf("rax %016lx rbx %016lx rcx %016lx rdx %016lx\n", r->rax, r->rbx, r->rcx, r->rdx);
+  printf("rsi %016lx rdi %016lx rbp %016lx r8  %016lx\n", r->rsi, r->rdi, r->rbp, r->r8);
+  printf("r9  %016lx r10 %016lx r11 %016lx r12 %016lx\n", r->r9, r->r10, r->r11, r->r12);
+  printf("r13 %016lx r14 %016lx r15 %016lx cr2 %016lx\n", r->r13, r->r14, r->r15, read_cr2());
 }
 
 static const char *exc_name[32] = {
@@ -176,15 +176,15 @@ void trap_handler(struct regs *r) {
     force_signal(sig, code, v == 0 || v == 6 || v == 16 || v == 19 ? r->rip : 0, (int)v, r->err);
     return;
   }
-  printk("\n%s (vector %lu, error %lx) in kernel mode\n", v < 32 ? exc_name[v] : "?", v, r->err);
+  printf("\nkernel: %s trap, code=%lx\n", v < 32 ? exc_name[v] : "unknown", r->err);
   dump_regs(r);
-  panic("unexpected exception");
+  panic("trap type %lu in kernel mode", v);
 }
 
 void kernel_fault(struct regs *r, uint64_t addr) {
-  printk("\nkernel page fault at %016lx (error %lx)\n", addr, r->err);
+  printf("\nkernel: page fault trap, code=%lx\nfault address %016lx\n", r->err, addr);
   dump_regs(r);
-  panic("page fault in kernel mode");
+  panic("trap type 14 in kernel mode");
 }
 
 /* PIT at HZ */

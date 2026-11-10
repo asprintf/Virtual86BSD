@@ -12,14 +12,17 @@ option		DIAGNOSTIC		# KASSERT and its friends
 option		COMPAT_LINUX		# Linux's system calls and ABI (compat/linux, later)
 
 # the kernel is bsd.  The root file system is root=/dev/... on the kernel's
-# command line or else the first disk: a `root on disk0s1' here comes with
-# the disk names (disk0, disk0s1: later)
-config		bsd
+# command line, or else the `root on' here: the first partition of the first
+# disk (disk0s1: the whole disk, an image with no partition table, if
+# there is no such partition)
+config		bsd root on disk0s1
 
 mainbus0	at root
 cpu0		at mainbus0
 pci*		at mainbus0
-isa0		at mainbus0
+pchb*		at pci?
+pcib*		at pci?
+isa*		at pcib?
 
 pciide*		at pci?
 disk*		at pciide?
@@ -31,4 +34,6 @@ em*		at pci?
 com0		at isa0 port 0x3f8 irq 4
 pckbc0		at isa0
 pckbd0		at pckbc?
+wskbd*		at pckbd?
 vga0		at isa0
+wsdisplay*	at vga?

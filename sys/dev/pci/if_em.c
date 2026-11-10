@@ -144,7 +144,7 @@ static void em_attach(struct device *parent, struct device *self, void *aux) {
   (void)parent;
   (void)self;
   if (d.bar[0] & 1) {
-    printk(": BAR 0 is not memory\n");
+    printf(": BAR 0 is not memory\n");
     return;
   }
   uint64_t phys = d.bar[0] & ~0xfU;
@@ -153,7 +153,7 @@ static void em_attach(struct device *parent, struct device *self, void *aux) {
   pci_write(&d, 0x04, pci_read(&d, 0x04) | 0x6); /* memory, bus master */
   regs = ioremap(phys, 128 * 1024);
   if (!regs) {
-    printk(": cannot map the registers\n");
+    printf(": cannot map the registers\n");
     return;
   }
 
@@ -181,7 +181,7 @@ static void em_attach(struct device *parent, struct device *self, void *aux) {
   /* rings: descriptors in one page each, buffers two to a page */
   uint64_t rp = alloc_zeroed_page(), tp = alloc_zeroed_page();
   if (!rp || !tp) {
-    printk(": out of memory\n");
+    printf(": out of memory\n");
     return;
   }
   rx = P2V(rp);
@@ -189,7 +189,7 @@ static void em_attach(struct device *parent, struct device *self, void *aux) {
   for (int i = 0; i < NRX; i += 2) {
     uint64_t pg = alloc_zeroed_page();
     if (!pg) {
-      printk(": out of memory\n");
+      printf(": out of memory\n");
       return;
     }
     rxbuf[i] = pg, rxbuf[i + 1] = pg + BUFSZ;
@@ -198,7 +198,7 @@ static void em_attach(struct device *parent, struct device *self, void *aux) {
   for (int i = 0; i < NTX; i += 2) {
     uint64_t pg = alloc_zeroed_page();
     if (!pg) {
-      printk(": out of memory\n");
+      printf(": out of memory\n");
       return;
     }
     txbuf[i] = pg, txbuf[i + 1] = pg + BUFSZ;
@@ -225,7 +225,7 @@ static void em_attach(struct device *parent, struct device *self, void *aux) {
   eth0.xmit = e1000_xmit;
   eth0.present = true;
   em_irq_line = d.irq;
-  printk(": irq %d, address %02x:%02x:%02x:%02x:%02x:%02x\n", d.irq, eth0.mac[0], eth0.mac[1], eth0.mac[2],
+  printf(": irq %d, address %02x:%02x:%02x:%02x:%02x:%02x\n", d.irq, eth0.mac[0], eth0.mac[1], eth0.mac[2],
          eth0.mac[3], eth0.mac[4], eth0.mac[5]);
 }
 

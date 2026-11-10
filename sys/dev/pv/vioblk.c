@@ -70,7 +70,6 @@ struct vblk {
   uint64_t hdr_phys;
 };
 
-static int nvdisks;
 
 /* the physical address of kernel memory: the direct map, or the image */
 static uint64_t phys_of(const void *v) {
@@ -118,7 +117,7 @@ static int request(struct vblk *v, uint32_t type, uint64_t sector, void *buf, si
   uint64_t deadline = monotonic_ns() + 30000000000UL;
   while (v->used[1] == v->used_seen) {
     if (monotonic_ns() > deadline) {
-      printk("virtio-blk: request timed out\n");
+      printf("virtio-blk: request timed out\n");
       return -EIO;
     }
     cpu_pause();
@@ -176,7 +175,7 @@ static void vioblk_attach(struct device *parent, struct device *self, void *aux)
   unsigned qsize = inw((uint16_t)(io + R_QUEUE_SIZE));
   if (qsize < MAX_SEG) {
     outb((uint16_t)(io + R_STATUS), S_FAILED);
-    printk(": queue of %u entries\n", qsize);
+    printf(": queue of %u entries\n", qsize);
     return;
   }
   /* the queue: descriptors and available ring, then (page-aligned) the used ring */
@@ -190,7 +189,7 @@ static void vioblk_attach(struct device *parent, struct device *self, void *aux)
   struct vblk *v = kzalloc(sizeof(*v));
   if (!q || !hp || !v) {
     outb((uint16_t)(io + R_STATUS), S_FAILED);
-    printk(": out of memory\n");
+    printf(": out of memory\n");
     return;
   }
   memset(P2V(q), 0, PAGE_SIZE << order);
@@ -208,15 +207,12 @@ static void vioblk_attach(struct device *parent, struct device *self, void *aux)
   outb((uint16_t)(io + R_STATUS), S_ACK | S_DRIVER | S_DRIVER_OK);
   uint64_t sectors = inl((uint16_t)(io + R_CONFIG)) | (uint64_t)inl((uint16_t)(io + R_CONFIG + 4)) << 32;
   struct blockdev *b = kzalloc(sizeof(*b));
-  snprintf(b->name, sizeof(b->name), "vd%c", 'a' + nvdisks);
-  b->dev = MKDEV(254, nvdisks * 16);
   b->sectors = sectors;
   b->read = vblk_read;
   b->write = vblk_write;
   b->flush = vblk_flush;
   b->priv = v;
-  nvdisks++;
-  printk("\n");
+  printf("\n");
   struct disk_attach_args da = {b, "VirtIO, Block Device"};
   config_found(self, &da, NULL);
 }

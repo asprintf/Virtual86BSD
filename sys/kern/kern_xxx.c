@@ -78,6 +78,7 @@ long sys_reboot(long m1, long m2, long cmd) {
     return -EINVAL;
   if ((uint32_t)cmd == RB_CAD_ON || cmd == RB_CAD_OFF)
     return 0;
+  printf("syncing disks... ");
   sync_all();
   bsync(NULL);
   list_for_each(p, &mounts) {
@@ -85,7 +86,13 @@ long sys_reboot(long m1, long m2, long cmd) {
     if (m->sb->ops && m->sb->ops->shutdown)
       m->sb->ops->shutdown(m->sb);
   }
-  printk("System %s.\n", (uint32_t)cmd == RB_RESTART ? "restarting" : "halted");
+  printf("done\n");
+  if ((uint32_t)cmd == RB_RESTART)
+    printf("rebooting...\n");
+  else if ((uint32_t)cmd == RB_POWER_OFF)
+    printf("powering off...\n");
+  else
+    printf("The operating system has halted.\n");
   cli();
   if ((uint32_t)cmd == RB_RESTART) {
     outb(0x64, 0xfe); /* keyboard controller reset */

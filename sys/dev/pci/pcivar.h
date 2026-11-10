@@ -14,7 +14,7 @@ struct pci_dev {
 };
 uint32_t pci_read(const struct pci_dev *d, int off);
 void pci_write(const struct pci_dev *d, int off, uint32_t v);
-/* "Intel 82540EM" rev 0x03 (into buf) */
+/* "Intel 82540EM" rev 0x03, or vendor "Kioxia", unknown product 0x0010 rev 0x01 (into buf) */
 void pci_devinfo(const struct pci_dev *d, char *buf, size_t n);
 
 #endif

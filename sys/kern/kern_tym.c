@@ -249,7 +249,7 @@ void tym_init(const char *conf) {
     while ((PAGE_SIZE << order) < size)
       order++;
     if (!k || !size || order > 10) {
-      printk("tym: %s: size not supported (at most 4 MiB)\n", p->name);
+      printf("tym: %s: size not supported (at most 4 MiB)\n", p->name);
       p->name[0] = 0;
       continue;
     }
@@ -258,17 +258,26 @@ void tym_init(const char *conf) {
     p->alloc = kzalloc(p->npages);
     p->pinned = kzalloc(p->npages * sizeof(uint16_t));
     if (!p->base || !p->alloc || !p->pinned) {
-      printk("tym: no memory for %s\n", p->name);
+      printf("tym: no memory for %s\n", p->name);
       kfree(p->alloc), kfree(p->pinned);
       if (p->base)
         free_pages(p->base, order);
       memset(p, 0, sizeof(*p));
       continue;
     }
-    printk("tym: /%s, %lu KiB at %lx\n", p->name, (unsigned long)(p->npages * 4), p->base);
     npools++;
   }
   chrdev_register(TYM_MAJOR, &tym_dev);
+}
+
+/* what there is, as one line of dmesg: tym0: ram0 4096KB at 0x3f800000, ... */
+void tym_report(void) {
+  if (!npools)
+    return;
+  printf("tym0:");
+  for (int i = 0; i < npools; i++)
+    printf("%s %s %luKB at 0x%lx", i ? "," : "", pools[i].name, (unsigned long)(pools[i].npages * 4), pools[i].base);
+  printf("\n");
 }
 
 void tym_populate(void) {

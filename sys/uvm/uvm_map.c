@@ -526,7 +526,7 @@ void page_fault(struct regs *r) {
     else {
       struct proc *p = cur_proc();
       if (p->sigact[SIGSEGV - 1].handler == SIG_DFL)
-        printk("%s[%d]: segfault at %lx ip %lx sp %lx error %lx\n", p->comm, current->tid, addr, r->rip,
+        printf("%s[%d]: segfault at %lx ip %lx sp %lx error %lx\n", p->comm, current->tid, addr, r->rip,
                r->rsp, r->err);
       force_signal(SIGSEGV, v ? SEGV_ACCERR : SEGV_MAPERR, addr, 14, r->err);
     }

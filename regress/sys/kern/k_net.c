@@ -55,14 +55,14 @@ int main(int argc, char **argv)
 	signal(SIGPIPE, SIG_IGN);
 
 	/* the interface */
-	CHECK(if_nametoindex("eth0") == 2);
+	CHECK(if_nametoindex("em0") == 2);
 	{
 		struct { char name[16]; struct sockaddr_in addr; char pad[8]; } r;   /* Linux's struct ifreq */
 		memset(&r, 0, sizeof r);
-		strcpy(r.name, "eth0");
+		strcpy(r.name, "em0");
 		fd = socket(AF_INET, SOCK_DGRAM, 0);
 		CHECK(ioctl(fd, 0x8915 /* SIOCGIFADDR */, &r) == 0);
-		printf("eth0 %s\n", inet_ntoa(r.addr.sin_addr));
+		printf("em0 %s\n", inet_ntoa(r.addr.sin_addr));
 		close(fd);
 	}
 

@@ -202,9 +202,47 @@ and `isa0`, and so on down.  The tree is printed as it is found:
 machines; what is not in it is printed with its numbers, and a device no
 driver takes gets `not configured`.  The console is set up before any of
 this (`serial_init`, `vga_init`, polled output), so the first messages
-appear; `com0` and `vga0` attach to it later.  The device names are those of
-autoconf; the block devices (`sda`, `vda`) and `eth0` are named as Linux's
-until the next step of the fork renames them.
+appear; `com0` and `vga0` attach to it later.  The messages are OpenBSD's:
+the banner, `real mem` and `avail mem`, `bootargs:` (what follows the
+kernel's name on the command line, if anything), the `xx0 at yy0` tree
+(`cpu0: apid 0 (boot processor)` and its brand string, MHz and
+family-model-stepping; `pchb0` and `pcib0` as the PCI bridges, `isa0 at pcib0`
+once the PCI bus is walked; `wskbd0` and `wsdisplay0` only say what the
+console is), `tym0:` and `root on disk0s1 (ext2)`.  The kernel's own `printf`
+is what prints them.  A panic is `panic: ...` and `The operating system has
+halted.`; a trap in the kernel is `kernel: ... trap, code=...`; a reboot says
+`syncing disks... done` and then `rebooting...`, `powering off...` or the
+halt line.
+
+### Devices, names and partitions
+
+* The network card is `em0` (and `lo0` the loopback): in `SIOCGIFNAME`
+  and friends, `/proc/net/dev` and the DHCP line.  (`eth0` is only the name
+  of the C object.)
+* The serial console, COM1, is `/dev/tty00` (dial-in) and `/dev/cua00`
+  (call-out): the same device, major 4 minor 64.  The VGA console is
+  `/dev/ttyC0` (major 4 minor 1).  `/dev/pts` and `ptmx` stay.
+* Disks are `disk0`, `disk1` ... in the order they attach, whichever
+  controller (`pciide`, `vioblk`) they are on: `/dev/disk0` is the whole
+  disk (block device, major 8 minor `unit * 16`) and `/dev/disk0s1` ... its
+  partitions (minor `unit * 16 + n`, n from 1, at most 15).
+  `/dev/rdisk0` and `/dev/rdisk0s1` are the raw devices: character devices
+  (major 241, the same minors) that read and write the sectors with no buffer
+  cache, in whole sectors from a multiple of 512.  A partition is a block
+  device of its own, so it has buffers of its own: nothing should write
+  `disk0` while one of its partitions is mounted.
+* The table is read when the disk attaches (`kern/subr_disk.c`): the four
+  primary entries of an MBR (extended partitions are not looked at), or the
+  GPT if the MBR is a protective one (type 0xee): both headers and the entry
+  array have to have good CRC-32s, else dmesg says so (`disk0: GPT entries
+  checksum is bad`) and the disk has no partitions.
+  `disk0: MBR, 1 partition` is what dmesg says.
+* The root is `root=` on the command line, else the `root on` of the
+  configuration (GENERIC: `disk0s1`); if that is not there, the first
+  disk (an image with no partition table: `root on disk0`).
+  `mkdisk.sh` makes an image with an MBR and one partition of type 0x83 from
+  sector 2048 (1 MiB), the ext2 file system: `e2fsck 'image?offset=1048576'`
+  checks it, and `dd skip=2048` takes it out.
 
 ## Building and running
 
@@ -246,14 +284,14 @@ the image, the entry point and `_kernel_end`; the Multiboot header is in a
 section `.boot`, which c17 (and `kernel.ld` for ld) puts first, and
 `mkimage` makes the flat image from the program headers either way.
 
-Kernel command line (`-append`): `root=/dev/vda` or `/dev/sda` (default:
-the first disk),
+Kernel command line (`-append`): `root=/dev/disk0s1` (default: the
+`root on` of the configuration, GENERIC: disk0s1),
 `rootfstype=ext2`, `ro`, `init=/path`; `ip=dhcp` (default when there is a
 card), `ip=off` or `ip=ADDR/PREFIX[,GATEWAY[,DNS]]`; `tym=NAME:SIZE,...`
 (typed memory pools, `off` for none); `netloss=N` (testing: lose every
 Nth frame each way).  As on Linux, other `name=value`
 words become init's environment; init uses `CONSOLE` (default
-`/dev/ttyS0`) as the terminal for its shell.
+`/dev/tty00`) as the terminal for its shell.
 
 ## How it boots
 
@@ -326,9 +364,9 @@ words become init's environment; init uses `CONSOLE` (default
   allocator runs out (`Buffers` in `/proc/meminfo`).  ext2's state is
   "not clean" while mounted and "clean" again after a proper shutdown, so
   `e2fsck -p` (which `boot.sh` runs) checks a disk after QEMU was
-  stopped.  Disks: virtio (`vda`, QEMU's `if=virtio`, what `boot.sh`
+  stopped.  Disks: virtio (`disk0` at `vioblk0`, QEMU's `if=virtio`, what `boot.sh`
   uses: one request per block, waited for by watching the used ring in
-  memory) and ATA by PIO (`sda`, the PC's IDE disk: polled with
+  memory) and ATA by PIO (`disk0` at `pciide0`, the PC's IDE disk: polled with
   interrupts on, so the clock and the terminals keep going while the
   disk works; much slower, especially under KVM);
   tmpfs; devtmpfs; procfs (what `ps`, `fuser`, `df`, `ipcs` and the C

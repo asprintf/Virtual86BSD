@@ -224,9 +224,9 @@ static int vga_match(struct device *parent, void *match, void *aux) {
 
 static void vga_attach(struct device *parent, struct device *self, void *aux) {
   (void)parent;
-  (void)self;
   (void)aux;
-  printk(": console (%dx%d)\n", COLS, ROWS);
+  printf(": console (%dx%d)\n", COLS, ROWS);
+  config_found(self, NULL, NULL); /* wsdisplay0 */
 }
 
 struct cfdriver vga_cd = {NULL, "vga", DV_DULL, 0};

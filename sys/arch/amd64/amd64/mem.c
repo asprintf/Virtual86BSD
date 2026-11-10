@@ -4,6 +4,7 @@
 #include <sys/systm.h>
 #include <sys/file.h>
 #include <sys/buf.h>
+#include <sys/disk.h>
 #include <uvm/uvm.h>
 #include <machine/cpu.h>
 
@@ -111,7 +112,7 @@ static ssize_t kmsg_write(struct file *f, const char *buf, size_t n, off_t *pos)
   if (copy_from_user(tmp, buf, c))
     return -EFAULT;
   tmp[c] = 0;
-  printk("%s", tmp);
+  printf("%s", tmp);
   return (ssize_t)n;
 }
 
@@ -231,16 +232,21 @@ int devtmpfs_populate(struct super *sb) {
       {"urandom", S_IFCHR | 0666, 1, 9},  {"kmsg", S_IFCHR | 0644, 1, 11},
       {"tty", S_IFCHR | 0666, 5, 0},      {"console", S_IFCHR | 0600, 5, 1},
       {"ptmx", S_IFCHR | 0666, 5, 2},     {"tty0", S_IFCHR | 0620, 4, 0},
-      {"tty1", S_IFCHR | 0620, 4, 1},     {"ttyS0", S_IFCHR | 0660, 4, 64},
+      {"ttyC0", S_IFCHR | 0620, 4, 1},    {"tty00", S_IFCHR | 0660, 4, 64},
+      {"cua00", S_IFCHR | 0660, 4, 64},
   };
   for (size_t i = 0; i < ARRAY_SIZE(nodes); i++)
     tmpfs_mknod_path(sb, nodes[i].name, nodes[i].mode, MKDEV(nodes[i].ma, nodes[i].mi));
-  for (int i = 0;; i++) {
+  for (int i = 0; i < NBLOCKDEV; i++) {
     struct blockdev *b = blockdev_nth(i);
-    if (i >= 16)
-      break;
-    if (b)
-      tmpfs_mknod_path(sb, b->name, S_IFBLK | 0660, b->dev);
+    if (!b)
+      continue;
+    tmpfs_mknod_path(sb, b->name, S_IFBLK | 0660, b->dev);
+    if (rdisk_present) {
+      char raw[24];
+      snprintf(raw, sizeof(raw), "r%s", b->name);
+      tmpfs_mknod_path(sb, raw, S_IFCHR | 0660, MKDEV(RDISK_MAJOR, MINOR(b->dev)));
+    }
   }
   tmpfs_mknod_path(sb, "pts", S_IFDIR | 0755, 0);
   tym_populate();

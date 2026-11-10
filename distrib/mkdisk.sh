@@ -16,7 +16,8 @@
 # as a link to the kernel's /proc/net/pnp, the name server DHCP gave), and
 # written into the image with every file owned by root.
 #
-# Inside the booted system the disk is /dev/vda (/dev/sda with boot.sh -i); whatever is written there
+# Inside the booted system the disk is disk0 and the file system its partition
+# disk0s1; whatever is written there
 # stays in the image for the next boot.  (Shut down with "exit" from the
 # console shell, so that init writes everything back, rather than by
 # killing QEMU.)

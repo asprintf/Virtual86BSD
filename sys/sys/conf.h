@@ -43,6 +43,7 @@ struct blockdev {
   bool unflushed;                    /* written since the last flush */
   void *priv;
 };
+#define NBLOCKDEV 64 /* disks and their partitions */
 void blockdev_register(struct blockdev *b);
 struct blockdev *blockdev_get(dev_t dev);
 struct blockdev *blockdev_by_name(const char *name);
@@ -51,6 +52,7 @@ struct blockdev *blockdev_nth(int i);
 /* typed memory objects (drivers/tym.c) */
 void tym_init(const char *conf);
 void tym_populate(void);
+void tym_report(void);
 
 /* network cards */
 void em_start(void);   /* the card's interrupt on (the network is ready for it) */

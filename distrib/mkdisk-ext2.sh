@@ -1,13 +1,16 @@
 #!/bin/sh
-# mkdisk-ext2.sh - make an ext2 disk image of a V86BSD root.
+# mkdisk-ext2.sh - make a disk image of a V86BSD root: an MBR with one
+# partition (type 0x83, from sector 2048, 1 MiB in) holding an ext2 file
+# system -- disk0s1 in the system, which boots from it.
 #
 # Usage: sh distrib/mkdisk-ext2.sh rootdir image [size-in-MiB]
 #
 # The root is copied to a staging directory, completed with what a booted
 # system needs (/dev, /proc, /tmp; /sbin/init is in the root), and written
-# with the host's mke2fs -d (e2fsprogs).  Files are owned by root.  Plain
-# ext2: filetype, sparse_super, large_file.  Run from the top of the tree
-# (distrib/mkdisk.sh does): the kernel's test programs are taken from there.
+# with the host's mke2fs -d (e2fsprogs) into a file, which goes to the
+# partition.  Files are owned by root.  Plain ext2: filetype, sparse_super,
+# large_file.  Run from the top of the tree (distrib/mkdisk.sh does): the
+# kernel's test programs are taken from there.
 set -e
 root=$1
 img=$2
@@ -43,6 +46,29 @@ if [ -n "$(ls $ktest/libc/s_* 2>/dev/null)" ]; then
     cp -pR regress/sys/kern/libc "$stage/root/ktest/libc"
 fi
 rm -f "$img"
+[ "$size" -ge 4 ] || { echo "mkdisk: the image is at least 4 MiB" >&2; exit 1; }
+fsfile=$img.fs
 mke2fs -q -t ext2 -b 4096 -O ^resize_inode,^dir_index,^ext_attr -L v86bsd \
-    -E root_owner=0:0 -d "$stage" "$img" "${size}M"
+    -E root_owner=0:0 -d "$stage" "$fsfile" "$((size - 1))M"
 rm -rf "$stage"
+# the partition table: sector 0 of the disk, one entry, the file system
+# 1 MiB in (the usual alignment), all the rest of the disk
+le32() {
+    n=$1
+    printf "\\$(printf %03o $((n & 255)))\\$(printf %03o $(((n >> 8) & 255)))"
+    printf "\\$(printf %03o $(((n >> 16) & 255)))\\$(printf %03o $(((n >> 24) & 255)))"
+}
+nsect=$(( (size - 1) * 2048 ))
+dd if=/dev/null of="$img" bs=1M seek="$size" 2>/dev/null
+{
+    dd if=/dev/zero bs=446 count=1 2>/dev/null
+    printf '\000\376\377\377\203\376\377\377'  # boot flag, CHS (use LBA), type 0x83, CHS
+    le32 2048
+    le32 "$nsect"
+    dd if=/dev/zero bs=48 count=1 2>/dev/null       # the three other entries
+    printf '\125\252'
+} > "$img.mbr"
+dd if="$img.mbr" of="$img" bs=512 count=1 conv=notrunc 2>/dev/null
+rm -f "$img.mbr"
+dd if="$fsfile" of="$img" bs=1M seek=1 conv=notrunc,sparse 2>/dev/null
+rm -f "$fsfile"

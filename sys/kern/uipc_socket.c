@@ -2131,7 +2131,7 @@ static long if_ioctl(unsigned cmd, uint64_t arg) {
         continue;
       if (ubuf && len >= out + 40) {
         memset(r, 0, sizeof(r));
-        strcpy(r, i == 1 ? "lo" : "eth0");
+        strcpy(r, i == 1 ? "lo" : "em0");
         put_ip4(r + 16, i == 1 ? 0x7f000001U : eth0.addr);
         if (copy_to_user((char *)ubuf + out, r, 40))
           return -EFAULT;
@@ -2148,10 +2148,10 @@ static long if_ioctl(unsigned cmd, uint64_t arg) {
     if (idx < 1 || idx > nif)
       return -ENODEV;
     memset(r, 0, 16);
-    strcpy(r, idx == 1 ? "lo" : "eth0");
+    strcpy(r, idx == 1 ? "lo" : "em0");
   } else {
     r[15] = 0;
-    int i = !strcmp(r, "lo") ? 1 : !strcmp(r, "eth0") && nif == 2 ? 2 : 0;
+    int i = !strcmp(r, "lo") ? 1 : !strcmp(r, "em0") && nif == 2 ? 2 : 0;
     if (!i)
       return -ENODEV;
     memset(r + 16, 0, 24);

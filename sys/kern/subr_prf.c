@@ -1,4 +1,4 @@
-/* printk.c - kernel messages: to the console devices and a log buffer that
+/* subr_prf.c - kernel messages: to the console devices and a log buffer that
    syslog(2)/dmesg can read. */
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -25,7 +25,7 @@ size_t log_read(char *dst, size_t n) {
   return n;
 }
 
-void printk(const char *fmt, ...) {
+void printf(const char *fmt, ...) {
   char buf[512];
   va_list ap;
   va_start(ap, fmt);
@@ -46,7 +46,7 @@ void panic(const char *fmt, ...) {
   va_start(ap, fmt);
   vsnprintf(buf, sizeof(buf), fmt, ap);
   va_end(ap);
-  printk("\nKernel panic: %s\n", buf);
+  printf("\npanic: %s\nThe operating system has halted.\n", buf);
   for (;;)
     hlt();
 }

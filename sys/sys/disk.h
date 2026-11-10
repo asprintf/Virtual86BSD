@@ -14,4 +14,22 @@ struct disk_attach_args {
   const char *da_desc; /* the drive's name: <QEMU HARDDISK> */
 };
 
+/* a partition table entry (kern/subr_disk.c): its number in the table, where
+   it starts and how long it is, in sectors */
+struct ptab_entry {
+  int index; /* 1 ...: the name's number, disk0s<index> */
+  uint64_t start, sectors;
+  int type;  /* MBR: the type byte */
+};
+
+/* what a disk's table says (pure functions of the sectors, for the tests too) */
+uint32_t crc32(const void *buf, size_t n);
+int ptab_mbr(const uint8_t *s0, uint64_t disksectors, struct ptab_entry *e, bool *protective);
+int ptab_gpt(const uint8_t *hdr, uint64_t disksectors, int (*get)(void *arg, uint64_t lba, unsigned n, void *buf),
+             void *arg, struct ptab_entry *e, int maxe, const char **why);
+
+/* the raw devices rdisk0, rdisk0s1 ...: a character major of their own */
+#define RDISK_MAJOR 241
+extern bool rdisk_present;
+
 #endif

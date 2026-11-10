@@ -98,33 +98,42 @@ static bool cmdline_flag(const char *name) {
   return false;
 }
 
+/* the root: root= on the command line, else the `root on' of the
+   configuration (GENERIC: disk0s1), else the first disk (an image with no
+   partition table) */
+extern const char cf_rootdev[]; /* ioconf.c */
+
 static void mount_root_fs(void) {
   char root[64] = "", type[32] = "ext2";
-  cmdline_get("root", root, sizeof(root));
-  if (!root[0]) /* without root=: the first disk, ATA or virtio */
-    snprintf(root, sizeof(root), "/dev/%s", blockdev_nth(0) ? blockdev_nth(0)->name : "sda");
+  bool given = cmdline_get("root", root, sizeof(root)) && root[0];
+  if (!given)
+    snprintf(root, sizeof(root), "%s", cf_rootdev);
   cmdline_get("rootfstype", type, sizeof(type));
   const char *name = !strncmp(root, "/dev/", 5) ? root + 5 : root;
-  struct blockdev *b = blockdev_by_name(name);
+  struct blockdev *b = name[0] ? blockdev_by_name(name) : NULL;
+  if (!b && !given)
+    b = blockdev_nth(0); /* (the configured one is not there: the first disk) */
   int e = -ENODEV;
   if (b) {
+    name = b->name;
     e = mount_root(type, b);
     if (!e && cmdline_flag("ro"))
       root_mount->sb->rdonly = true, root_mount->flags |= MS_RDONLY;
   }
   if (e) {
-    printk("cannot mount the root file system %s (%s): error %d; using an empty tmpfs\n", root, type, -e);
+    printf("cannot mount root from %s, error = %d\n", name[0] ? name : "(none)", -e);
     if (mount_root("tmpfs", NULL))
       panic("no root file system");
+    printf("root on tmpfs\n");
     return;
   }
-  printk("root file system: %s (%s%s)\n", root, type, root_mount->sb->rdonly ? ", read-only" : "");
+  printf("root on %s (%s%s)\n", name, type, root_mount->sb->rdonly ? ", read-only" : "");
 }
 
 static void auto_mount(const char *dir, const char *type) {
   int e = do_mount(type, dir, type, 0, NULL);
   if (e && e != -ENOENT)
-    printk("cannot mount %s on %s: error %d\n", type, dir, -e);
+    printf("cannot mount %s on %s: error %d\n", type, dir, -e);
 }
 
 static int open_console(void) {
@@ -148,7 +157,7 @@ static long run_init(void *arg) {
   auto_mount("/dev", "devtmpfs");
   auto_mount("/proc", "proc");
   if (open_console())
-    printk("warning: unable to open an initial console\n");
+    printf("warning: unable to open an initial console\n");
   /* as Linux: name=value words the kernel does not know go to init's
      environment */
   static const char *known[] = {"root=", "rootfstype=", "init=", "console=", NULL};
@@ -188,21 +197,35 @@ static long run_init(void *arg) {
       enter_user(current->regs);
     }
     if (e != -ENOENT)
-      printk("cannot run %s: error %d\n", tries[i], -e);
+      printf("cannot run %s: error %d\n", tries[i], -e);
   }
-  panic("no init found: try passing init= to the kernel");
+  panic("no init");
 }
 
 void kmain(uint32_t magic, uint32_t mbi) {
   serial_init();
   vga_init();
-  printk("%s", version);
+  printf("%s", version);
   parse_multiboot(magic, mbi);
-  printk("command line: %s\n", kernel_cmdline);
   page_init((uint64_t)_kernel_end - KERNEL_BASE, ranges, nranges, reserved, nreserved);
   vm_init();
   page_init_high(ranges, nranges, reserved, nreserved);
-  printk("memory: %lu MiB usable, %lu MiB free\n", total_pages >> 8, free_pages_count >> 8);
+  {
+    /* as OpenBSD: the memory there is, then what the kernel has left */
+    uint64_t real = 0, avail = free_pages_count * PAGE_SIZE;
+    for (int i = 0; i < nranges; i++)
+      real += ranges[2 * i + 1] - ranges[2 * i];
+    printf("real mem = %lu (%luMB)\n", real, (real + 0x80000) >> 20);
+    printf("avail mem = %lu (%luMB)\n", avail, (avail + 0x80000) >> 20);
+    /* what follows the name of the kernel (the loader puts that first) */
+    const char *args = kernel_cmdline;
+    while (*args && *args != ' ')
+      args++;
+    while (*args == ' ')
+      args++;
+    if (*args)
+      printf("bootargs: %s\n", args);
+  }
   arch_init();
   time_init();
   sched_init();
@@ -216,6 +239,7 @@ void kmain(uint32_t magic, uint32_t mbi) {
   }
   tty_init();
   cpu_configure(); /* the devices: mainbus0 and all it finds, as config(8) says */
+  tym_report();
   sti();
   vfs_init();
   mount_root_fs();

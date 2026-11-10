@@ -12,8 +12,8 @@
 #             console on this terminal (the serial port)
 #   -n        no network card
 #   -e        QEMU's emulation of the processor, also where KVM is available
-#   -i        the disk as a PC's IDE disk (/dev/sda: the ATA driver, much
-#             slower) instead of a virtio disk (/dev/vda)
+#   -i        the disk as a PC's IDE disk (disk0 at pciide0: the ATA driver,
+#             much slower) instead of a virtio disk (disk0 at vioblk0)
 #   -p H:G    forward TCP port H of this host (127.0.0.1) to port G of
 #             the system (repeatable), for a server in it
 #   -- ...    more arguments for qemu-system-x86_64
@@ -78,20 +78,21 @@ command -v qemu-system-x86_64 >/dev/null 2>&1 ||
 # is marked "not clean", and e2fsck -p repairs what it safely can
 PATH=$PATH:/sbin:/usr/sbin
 if command -v e2fsck >/dev/null 2>&1; then
-	e2fsck -p "$img"
+	# (the file system is the partition: 1 MiB into the disk)
+	e2fsck -p "$img?offset=1048576"
 	st=$?
 	if [ $st -ge 4 ]; then
-		echo "boot: $img has errors e2fsck -p cannot repair: run e2fsck -f $img" >&2
+		echo "boot: $img has errors e2fsck -p cannot repair: run e2fsck -f '$img?offset=1048576'" >&2
 		exit 1
 	fi
 else
 	echo "boot: no e2fsck (e2fsprogs): the disk is not checked" >&2
 fi
 
-# the disk: virtio (vda), or with -i the IDE disk of a PC (sda, the slower
-# ATA driver)
-if $ide; then dev=sda if=ide; else dev=vda if=virtio; fi
-set -- -m "$mem" -no-reboot -kernel "$kernel" -append "root=/dev/$dev CONSOLE=/dev/ttyS0" \
+# the disk: virtio, or with -i the IDE disk of a PC (the slower ATA driver).
+# Either way it is disk0 and the root is disk0s1 (the kernel's `root on')
+if $ide; then if=ide; else if=virtio; fi
+set -- -m "$mem" -no-reboot -kernel "$kernel" -append "CONSOLE=/dev/tty00" \
 	-drive "file=$img,format=raw,if=$if" "$@"
 if $net; then
 	set -- "$@" -nic "user,model=e1000$fwd"
@@ -100,7 +101,7 @@ else
 fi
 # without -g the serial port is this terminal; with it, the console shows
 # on the VGA screen too and takes the keyboard's input (it is the same
-# terminal, /dev/ttyS0)
+# terminal, /dev/tty00)
 $graphic || set -- "$@" -nographic
 # KVM where this user may use it, else QEMU's emulation
 if $kvm && [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
