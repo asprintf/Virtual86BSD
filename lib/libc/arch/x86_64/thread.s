@@ -41,7 +41,7 @@ __cp_cancel:
 	.hidden	__clone
 	.type	__clone,@function
 __clone:
-	mov	$56,%eax		# SYS_clone(flags, stack, ptid, ctid, tls)
+	mov	$SYS_clone,%eax		# SYS_clone(flags, stack, ptid, ctid, tls)
 	mov	%rdi,%r11
 	mov	%rdx,%rdi
 	mov	%r8,%rdx
@@ -58,7 +58,7 @@ __clone:
 	pop	%rdi
 	call	*%r9
 	mov	%eax,%edi
-	mov	$60,%eax		# SYS_exit
+	mov	$SYS_exit,%eax		# SYS_exit
 	syscall
 	hlt
 1:	ret
@@ -70,10 +70,10 @@ __clone:
 	.hidden	__unmapself
 	.type	__unmapself,@function
 __unmapself:
-	mov	$11,%eax		# SYS_munmap
+	mov	$SYS_munmap,%eax		# SYS_munmap
 	syscall
 	xor	%edi,%edi
-	mov	$60,%eax		# SYS_exit
+	mov	$SYS_exit,%eax		# SYS_exit
 	syscall
 	hlt
 	.size	__unmapself,.-__unmapself

@@ -197,19 +197,41 @@ do_newroot() {
 # installed under ROOT/usr.  With LIBC (stage 3), the C library is not
 # built but installed from the build directory LIBC, and the utilities are
 # stripped: those of bin/ and sbin/ linked statically, the rest dynamically.
+# abi_headers INCLUDEDIR ABI: what the kernel's sys/ gives the C library's
+# include/: reboot.h always (it is a symlink to sys/sys in the tree, a
+# file here), syscall.h, V86BSD's own numbers, only for the native ABI
+abi_headers() {
+	rm -f "$1/sys/reboot.h" "$1/sys/syscall.h"
+	cp "$SRC/sys/sys/reboot.h" "$1/sys/reboot.h" || fail "reboot.h"
+	if [ "$2" = native ]; then
+		cp "$SRC/sys/sys/syscall.h" "$1/sys/syscall.h" || fail "syscall.h"
+	fi
+}
+
+# stage N TOOLS C17DIR TO [LIBCDIR]: ABI is the system call ABI of the
+# library and the programs: linux in stages 1 and 2 (they run on the host's
+# Linux, or as Linux programs on V86BSD), native (V86BSD's own numbers and
+# brand) in stage 3, the world
 stage() {
 	n=$1 tools=$2 c17dir=$3 to=$4 libcdir=$5 forsystem=$5
 	S=$obj/stage$n
+	abi=linux
+	[ -z "$forsystem" ] || abi=native
 	mkdir -p "$to/usr"
 	if [ -z "$libcdir" ]; then
 		say "stage $n: the C library, with c17 from $tools"
 		copy include "$S/include"
+		abi_headers "$S/include" $abi
 		copy lib/libc "$S/lib/libc"
 		libcdir=$S/lib/libc
 		c17libc=$to/usr      # (include/ and lib/: linked statically)
 		how="statically linked" rtc17=./c17
 	else
-		say "stage $n: the C library of $libcdir installed"
+		say "stage $n: the C library, native ABI (V86BSD's own system call numbers)"
+		copy include "$S/include"
+		abi_headers "$S/include" $abi
+		copy lib/libc "$S/lib/libc"
+		libcdir=$S/lib/libc
 		# a profile for c17: V86BSD's C library in root, dynamically linked
 		c17libc=$obj/stage$n.profile
 		cat > "$c17libc" <<-EOF
@@ -229,8 +251,8 @@ stage() {
 		C17_LIBC=$to/usr
 		export PATH C17_LIBDIR C17_LIBC
 		cd "$libcdir" &&
-		"$tools/make" CCNAME=c17 &&
-		"$tools/make" CCNAME=c17 PREFIX=/usr DESTDIR="$to" install
+		"$tools/make" CCNAME=c17 TARGET_ABI=$abi SYSCALL_H="$SRC/sys/sys/syscall.h" &&
+		"$tools/make" CCNAME=c17 TARGET_ABI=$abi SYSCALL_H="$SRC/sys/sys/syscall.h" PREFIX=/usr DESTDIR="$to" install
 	) >> "$log" 2>&1 || fail "stage $n: the C library"
 	say "stage $n: the utilities, with c17 on V86BSD's C library ($how)"
 	copy bin "$S/bin"
@@ -317,7 +339,7 @@ do_world() {
 	[ "$differ" = 0 ] || fail "stage 1 and stage 2 differ"
 
 	# ------------------------------------------------------------ stage 3
-	stage 3 "$R2/usr/bin" "$R2/usr/lib/c17" "$W" "$obj/stage2/lib/libc"
+	stage 3 "$R2/usr/bin" "$R2/usr/lib/c17" "$W" native
 
 	# ------------------------------------------------------------ init
 	say "init: /sbin/init, with c17 of stage 2 (statically linked)"
@@ -342,6 +364,10 @@ do_kernel() {
 		{ echo "build: no world in $obj: make buildworld first" >&2; exit 1; }
 	[ -d "$obj" ] || mkdir -p "$obj" || exit 1
 	rm -rf "$obj/sys"
+	# mkimage runs here, in the build: it is built by the host's compiler (its
+	# own C library and ABI), not by c17 of the world, whose library is native
+	hostcc=$(command -v "${cc%% *}") || { echo "build: no C compiler $cc (set CC)" >&2; exit 1; }
+	case $cc in *\ *) hostcc="$hostcc ${cc#* }" ;; esac
 	say "kernel: bsd ($kernconf), with c17 of stage 2"
 	copy sys "$obj/sys"
 	# (what a build in the tree left in the compile directories is not kept)
@@ -356,7 +382,7 @@ do_kernel() {
 		cd "$obj/sys/arch/amd64/conf" &&
 		"$R2/usr/bin/config" "$kernconf" &&
 		cd "../compile/$kernconf" &&
-		"$R2/usr/bin/make" all
+		"$R2/usr/bin/make" HOSTCC="$hostcc" all
 	) >> "$log" 2>&1 || fail "the kernel"
 	say "kernel: $obj/sys/arch/amd64/compile/$kernconf/bsd"
 }

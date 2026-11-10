@@ -118,8 +118,32 @@ struct itimer {
   uint64_t interval;
 };
 
+/* A system call table: the calls a process of one ABI can make (the native
+   one, kern/init_sysent.c; compat/linux's).  Each call takes the six
+   argument registers and returns the result or -errno. */
+typedef long (*sy_call_t)(long, long, long, long, long, long);
+struct sysent {
+  sy_call_t sy_call;
+};
+
+/* An emulation: how a process sees the kernel (struct proc's p_emul),
+   chosen by exec from the program's brand. */
+struct emul {
+  const char *e_name;
+  const struct sysent *e_sysent;
+  int e_nsysent;
+  int e_sigreturn;           /* the number of sigreturn: the restored rax stands */
+  const char *e_ostype;      /* uname -s */
+  const char *e_osrelease;   /* uname -r */
+};
+extern const struct emul emul_native;
+#ifdef COMPAT_LINUX
+extern const struct emul emul_linux;
+#endif
+
 struct proc {
   pid_t pid;
+  const struct emul *p_emul;
   int state;
   struct proc *parent;
   struct list children, sibling;

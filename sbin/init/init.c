@@ -10,8 +10,7 @@
  * name=value words of its command line on as environment, as Linux does),
  * default /dev/tty00.
  *
- * POSIX C, plus reboot(2) of Linux for the power-off (poweroff.s: V86BSD's
- * C library has no reboot()).
+ * POSIX C, plus reboot(2) (<sys/reboot.h>) for the power-off.
  */
 #define _XOPEN_SOURCE 800
 #include <errno.h>
@@ -22,9 +21,8 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <sys/reboot.h>
 #include <unistd.h>
-
-long linux_poweroff(void); /* poweroff.s */
 
 static void say(const char *s) {
   (void)!write(2, "init: ", 6);
@@ -35,7 +33,7 @@ static void say(const char *s) {
 static void poweroff(void) {
   say("syncing disks and powering off");
   sync();
-  linux_poweroff();
+  reboot(RB_POWERDOWN | RB_HALT);
   for (;;)
     pause();
 }

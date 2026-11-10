@@ -138,13 +138,17 @@ and the `machine` link.
                        (kern_sched), processes (kern_proc, kern_exec,
                        kern_sig, kern_time), System V IPC (sysv_ipc), futexes,
                        POSIX message queues, kern_xxx (uname/sysinfo/
-                       reboot/syslog), init_sysent (the system call table),
+                       reboot/syslog), init_sysent (the native system call
+                       table, generated from syscalls.master),
                        the VFS (vfs_subr, vfs_lookup, vfs_bio, vfs_pcache,
                        vfs_lockf), descriptors (kern_descrip), pipes,
                        sockets (uipc_socket), terminals (tty), kern_malloc,
                        typed memory (kern_tym), autoconfiguration
                        (subr_autoconf), disks as devices (subr_disk);
-                       makesyscalls.sh
+                       makesyscalls.sh (syscalls.conf: what it writes)
+    compat/linux/      the Linux emulation (option COMPAT_LINUX): its own
+                       table (syscalls.master, linux_sysent.c), linux_exec
+                       (struct emul), linux_misc (uname, personality, reboot)
     uvm/               physical pages (buddy allocator with reference
                        counts), address spaces and page faults, mmap & co.
     ufs/ext2fs/       ext2 (tmpfs/ and miscfs/procfs/ are tmpfs/devtmpfs
@@ -416,16 +420,36 @@ words become init's environment; init uses `CONSOLE` (default
 
 ## System calls
 
-224 of Linux's x86-64 system calls, among them every one V86BSD's C
-library uses.
-`AF_NETLINK` exists only as the channel of `mq_notify(SIGEV_THREAD)`.
-Absent calls answer `ENOSYS`, as Linux does for those it lacks.
+There are two system call ABIs, as in OpenBSD's compat layers.  A process
+has an emulation (`struct emul`, `p_emul`): the table of its call numbers,
+the number of its sigreturn, and what `uname` says.  `exec` chooses it from
+the program: one that carries the V86BSD brand (a PT_NOTE with the note
+`V86BSD`, type 1, that the C library's start files `crt1.o`, `Scrt1.o` and
+`rcrt1.o` have in the native build) runs by the **native** numbers; any
+other runs as a **Linux** program, by Linux's numbers (a kernel without
+`option COMPAT_LINUX` refuses it, `ENOEXEC`).  Fork and clone keep the
+emulation, exec sets it.
 
-`uname` says what `sys/conf/newvers.sh` writes into `vers.c`: `V86BSD`,
-release `0.9.1`, version `GENERIC#1`, machine `amd64`.  The Linux emulation
-will keep `Linux` and `6.9.0` for its own programs (a later phase: today
-every process gets the native identity, so a glibc binary that checks the
-release in its start-up test refuses to run).
+* **Native:** `kern/syscalls.master`, with numbers of V86BSD's own (the first
+  six are OpenBSD's: exit, fork, read, write, open, close; no number equals
+  the Linux number of the same call; a number is never reused, new calls go
+  at the end).  `kern/makesyscalls.sh` writes `sys/syscall.h` (`SYS_name`),
+  `sys/syscallargs.h` and `kern/init_sysent.c` from it.  The arguments and
+  structures are still Linux's (a first native ABI changes the numbers and
+  the identity only), and `reboot(2)` takes OpenBSD's `howto`
+  (`<sys/reboot.h>`).  `uname` says what `sys/conf/newvers.sh` writes into
+  `vers.c`: `V86BSD`, release `0.9.1`, version `GENERIC#1`, machine `amd64`.
+* **Linux:** `compat/linux/syscalls.master`, the 224 of Linux's x86-64
+  system calls the kernel has, among them every one the C library uses
+  (generated into `linux_syscall.h`, `linux_syscallargs.h`, `linux_sysent.c`).
+  The calls the two share are the same functions; `uname` (`Linux`, release
+  `6.9.0`, `x86_64`), `personality` and `reboot` are Linux's own
+  (`compat/linux/linux_misc.c`).  The emulation does not add calls: it is the
+  table the kernel always had.  Absent calls answer `ENOSYS`, as Linux does
+  for those it lacks.
+
+The generated files are in the tree; `sh kern/makesyscalls.sh .` (from
+`sys/`) or `make proto` in a compile directory writes them again.
 
 The kernel prints its banner first, as OpenBSD's does:
 

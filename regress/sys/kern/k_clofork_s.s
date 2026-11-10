@@ -1,10 +1,11 @@
-# long rawgetfd(int fd): fcntl(fd, F_GETFD) straight to the kernel,
-# bypassing the C library's emulation of FD_CLOFORK
+# long rawgetfd_nr(int fd, long nr): fcntl(fd, F_GETFD) straight to the kernel
+# (nr is its system call number: the ABI's), bypassing the C library's
+# emulation of FD_CLOFORK
 	.text
-	.globl rawgetfd
-rawgetfd:
+	.globl rawgetfd_nr
+rawgetfd_nr:
 	movslq %edi, %rdi
+	movq %rsi, %rax        # SYS_fcntl
 	movl $1, %esi          # F_GETFD
-	movl $72, %eax         # SYS_fcntl
 	syscall
 	ret

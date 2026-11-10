@@ -117,6 +117,7 @@ struct proc *proc_alloc(void) {
   waitq_init(&p->child_wait);
   waitq_init(&p->vfork_wait);
   p->state = P_ALIVE;
+  p->p_emul = &emul_native;
   p->start_time = monotonic_ns();
   return p;
 }
@@ -217,6 +218,7 @@ long do_fork(uint64_t flags, uint64_t stack, uint64_t ptid, uint64_t ctid, uint6
       return -EAGAIN;
     }
     p->pid = t->tid;
+    p->p_emul = parent->p_emul;
     if (flags & CLONE_VM) {
       p->mm = parent->mm;
       p->mm->ref++;
@@ -1069,11 +1071,6 @@ long sys_prctl(long op, long a2) {
   }
   }
   return -EINVAL;
-}
-
-long sys_personality(long v) {
-  (void)v;
-  return 0;
 }
 
 /* ---- scheduling parameters (one processor, round robin for all) ---- */

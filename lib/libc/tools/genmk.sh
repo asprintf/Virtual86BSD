@@ -47,6 +47,21 @@ objs() {   # objs NAME FILTER: the object list of the sources the filter passes
 		*/crt*|*/Scrt*|*/rcrt*) o='$(B)/lib/'$n.o; d='$(B)/lib';;
 		*)      o='$(B)/obj/'${f%.s}.o; d=$(dirname "$o");;
 		esac
-		printf '%s: %s\n\tmkdir -p %s\n\t$(AS) -o $@ %s\n\n' "$o" "$f" "$d" "$f"
+		# what depends on the ABI (tools/mkabi.sh) is put before the source:
+		# the system call numbers, and the brand of the native start files
+		case $n in
+		syscall|sigsetjmp|thread) pre='$(B)/abi/nr.sed' ;;
+		crt1|Scrt1|rcrt1) pre='$(B)/abi/note.s' ;;
+		*) pre= ;;
+		esac
+		if [ -n "$pre" ]; then
+			case $pre in
+			*.sed) mk="sed -f $pre $f" ;;
+			*) mk="cat $pre $f" ;;
+			esac
+			printf '%s: %s %s\n\tmkdir -p %s $(B)/abi\n\t%s > $(B)/abi/%s.s\n\t$(AS) -o $@ $(B)/abi/%s.s\n\n' "$o" "$pre" "$f" "$d" "$mk" "$n" "$n"
+		else
+			printf '%s: %s\n\tmkdir -p %s\n\t$(AS) -o $@ %s\n\n' "$o" "$f" "$d" "$f"
+		fi
 	done
 }

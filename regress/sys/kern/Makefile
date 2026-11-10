@@ -11,7 +11,8 @@ testprogs:
 	$(C17) -o k_sigwait k_sigwait.c
 	$(C17) -o k_shm k_shm.c
 	$(C17) -o k_fpu k_fpu.c k_fpu_s.s
-	$(C17) -o k_clofork k_clofork.c k_clofork_s.s
+	nr=`awk '$$2 == "SYS_fcntl" { print $$3 }' /usr/include/sys/syscall.h 2>/dev/null`; \
+	$(C17) -DFCNTL_NR=$${nr:-72} -o k_clofork k_clofork.c k_clofork_s.s
 	$(C17) -o k_mmap k_mmap.c
 	$(C17) -o k_inet k_inet.c
 	$(C17) -o k_net k_net.c

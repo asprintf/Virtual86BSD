@@ -67,6 +67,16 @@ atomics (`src/internal/atomic.h` / `atomic.s`) and for reading the thread
 pointer.  Everything compiler-specific is confined to those three places,
 so the C sources are plain C17.
 
+**System call ABI.**  `make TARGET_ABI=linux` (the default) builds for Linux's
+system call numbers (`src/internal/syscall_nr_linux.h`), which any Linux
+kernel and V86BSD's `compat/linux` run.  `make TARGET_ABI=native
+SYSCALL_H=...` builds for V86BSD's own: the numbers come from the kernel's
+generated `sys/syscall.h`, and the start files carry the brand
+(`config/note_native.s`, an ELF note that the kernel's exec looks for).
+`tools/mkabi.sh` writes what depends on it into `build/<cc>/abi/` (the
+numbers as a C header, a `sed` script for the few the assembly uses, the
+note); the objects are built again only when it changes.
+
 **Start-up.**  `_start` (crt1.s) hands the initial stack to
 `__libc_start_main`, which finds the auxiliary vector, sets up static TLS
 and the thread pointer, seeds the stack-protector canary from

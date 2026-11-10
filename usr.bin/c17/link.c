@@ -30,7 +30,10 @@
  *    TLS sequences are rewritten to the local-exec form.
  *  - Sections that do not occupy memory are kept (concatenated by name)
  *    unless -s: debugging information then still works.  .eh_frame,
- *    .comment and .note sections are discarded.
+ *    .comment and .note sections are discarded, except the one that
+ *    brands a program for V86BSD (.note.v86bsd.ident, from the C
+ *    library's start file): it is loaded, and PT_NOTE names it, so the
+ *    kernel runs the program by its own system call numbers.
  *  - A shared library (c17 -G) is position-independent (ET_DYN at 0).  Its
  *    functions bind to itself (as with ld's -Bsymbolic-functions), and so
  *    do symbols of hidden or internal visibility and those of c17's
@@ -947,7 +950,7 @@ static char *out_name(InSec *s, int *prio) {
   if (s->type == SHT_NULL || s->type == SHT_SYMTAB || s->type == SHT_STRTAB ||
       s->type == SHT_RELA || s->type == SHT_GROUP || s->type == SHT_X86_64_UNWIND)
     return NULL;
-  if (!strcmp(n, ".eh_frame") || !strcmp(n, ".comment") || startswith(n, ".note") ||
+  if (!strcmp(n, ".eh_frame") || !strcmp(n, ".comment") || (startswith(n, ".note") && strcmp(n, ".note.v86bsd.ident")) ||
       startswith(n, ".gnu.") || !strcmp(n, ".llvm_addrsig"))
     return NULL;
   static char *prefixes[] = {".text", ".rodata", ".data.rel.ro", ".data", ".bss", ".tdata",
@@ -2228,8 +2231,10 @@ int link_executable(LinkOptions *opts) {
     if (outs[i]->flags & SHF_TLS)
       has_tls = true;
   /* + PT_GNU_STACK; PT_PHDR, PT_INTERP and PT_DYNAMIC if dynamic (a
-     shared library: PT_DYNAMIC only) */
-  int nphdr = nseg_used + 1 + (has_tls ? 1 : 0) + (dynamic ? (shared ? 1 : 3) : 0);
+     shared library: PT_DYNAMIC only); PT_NOTE for the V86BSD brand */
+  OutSec *note_sec = find_out(".note.v86bsd.ident");
+  int nphdr = nseg_used + 1 + (has_tls ? 1 : 0) + (dynamic ? (shared ? 1 : 3) : 0) +
+              (note_sec ? 1 : 0);
 
   uint64_t seg_vaddr[3] = {0}, seg_off[3] = {0}, seg_filesz[3] = {0}, seg_memsz[3] = {0};
   uint64_t addr = base_addr, off = 0;
@@ -2642,6 +2647,17 @@ int link_executable(LinkOptions *opts) {
     wr64(ph + 32, seg_filesz[s]);
     wr64(ph + 40, s == 0 && seg_memsz[0] < seg_filesz[0] ? seg_filesz[0] : seg_memsz[s]);
     wr64(ph + 48, PAGE);
+    ph += PHDR_SIZE;
+  }
+  if (note_sec) {
+    wr32(ph, PT_NOTE);
+    wr32(ph + 4, PF_R);
+    wr64(ph + 8, note_sec->fileoff);
+    wr64(ph + 16, note_sec->addr);
+    wr64(ph + 24, note_sec->addr);
+    wr64(ph + 32, note_sec->size);
+    wr64(ph + 40, note_sec->size);
+    wr64(ph + 48, 4);
     ph += PHDR_SIZE;
   }
   if (has_tls) {

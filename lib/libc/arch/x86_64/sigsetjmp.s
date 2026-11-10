@@ -9,7 +9,7 @@ sigsetjmp:
 	test	%esi,%esi
 	jz	1f
 	mov	%rdi,%r9
-	mov	$14,%eax		# rt_sigprocmask(SIG_BLOCK, 0, &env->mask, 8)
+	mov	$SYS_rt_sigprocmask,%eax	# rt_sigprocmask(SIG_BLOCK, 0, &env->mask, 8)
 	xor	%edi,%edi
 	xor	%esi,%esi
 	lea	72(%r9),%rdx
@@ -26,7 +26,7 @@ siglongjmp:
 	je	1f
 	mov	%rdi,%r8
 	mov	%esi,%r9d
-	mov	$14,%eax		# rt_sigprocmask(SIG_SETMASK, &env->mask, 0, 8)
+	mov	$SYS_rt_sigprocmask,%eax	# rt_sigprocmask(SIG_SETMASK, &env->mask, 0, 8)
 	mov	$2,%edi
 	lea	72(%r8),%rsi
 	xor	%edx,%edx

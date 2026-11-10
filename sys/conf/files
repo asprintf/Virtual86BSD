@@ -64,6 +64,9 @@ file kern/kern_xxx.c
 file kern/sysv_ipc.c
 file kern/sys_mqueue.c
 file kern/init_sysent.c
+file compat/linux/linux_sysent.c COMPAT_LINUX
+file compat/linux/linux_misc.c COMPAT_LINUX
+file compat/linux/linux_exec.c COMPAT_LINUX
 file uvm/uvm_page.c
 file kern/kern_malloc.c
 file uvm/uvm_map.c

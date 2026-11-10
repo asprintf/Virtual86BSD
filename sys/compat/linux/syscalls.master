@@ -1,0 +1,237 @@
+;	sys/compat/linux/syscalls.master - the system calls of the Linux emulation,
+;	by Linux's x86-64 numbers (asm/unistd_64.h).
+;
+;	number	type	{ prototype }
+;
+;	STD	implemented.  A name starting "sys_" is shared with the native
+;		table (kern/syscalls.master); "linux_sys_" is Linux's own,
+;		in compat/linux/linux_misc.c.
+;	A number that is not listed is not implemented (sys_nosys: ENOSYS).
+;
+;	Written by kern/makesyscalls.sh into linux_syscall.h, linux_syscallargs.h
+;	and linux_sysent.c (sh makesyscalls.sh compat/linux/syscalls.conf).
+
+0	STD	{ long sys_read(long fd, long buf, long n); }
+1	STD	{ long sys_write(long fd, long buf, long n); }
+2	STD	{ long sys_open(long path, long flags, long mode); }
+3	STD	{ long sys_close(long fd); }
+4	STD	{ long sys_stat(long path, long ust); }
+5	STD	{ long sys_fstat(long fd, long ust); }
+6	STD	{ long sys_lstat(long path, long ust); }
+7	STD	{ long sys_poll(long ufds, long n, long timeout); }
+8	STD	{ long sys_lseek(long fd, long off, long whence); }
+9	STD	{ long sys_mmap(long addr, long len, long prot, long flags, long fd, long off); }
+10	STD	{ long sys_mprotect(long addr, long len, long prot); }
+11	STD	{ long sys_munmap(long addr, long len); }
+12	STD	{ long sys_brk(long addr); }
+13	STD	{ long sys_rt_sigaction(long sig, long unew, long uold, long size); }
+14	STD	{ long sys_rt_sigprocmask(long how, long uset, long uold, long size); }
+15	STD	{ long sys_rt_sigreturn(void); }
+16	STD	{ long sys_ioctl(long fd, long cmd, long arg); }
+17	STD	{ long sys_pread64(long fd, long buf, long n, long off); }
+18	STD	{ long sys_pwrite64(long fd, long buf, long n, long off); }
+19	STD	{ long sys_readv(long fd, long iov, long cnt); }
+20	STD	{ long sys_writev(long fd, long iov, long cnt); }
+21	STD	{ long sys_access(long path, long mode); }
+22	STD	{ long sys_pipe(long ufds); }
+23	STD	{ long sys_select(long n, long ur, long uw, long ue, long utv); }
+24	STD	{ long sys_sched_yield(void); }
+25	STD	{ long sys_mremap(long oaddr, long olen, long nlen, long flags, long naddr); }
+26	STD	{ long sys_msync(long addr, long len, long flags); }
+27	STD	{ long sys_mincore(long addr, long len, long uvec); }
+28	STD	{ long sys_madvise(long addr, long len, long advice); }
+29	STD	{ long sys_shmget(long key, long size, long flg); }
+30	STD	{ long sys_shmat(long id, long addr, long flg); }
+31	STD	{ long sys_shmctl(long id, long cmd, long ubuf); }
+32	STD	{ long sys_dup(long fd); }
+33	STD	{ long sys_dup2(long oldfd, long newfd); }
+34	STD	{ long sys_pause(void); }
+35	STD	{ long sys_nanosleep(long ureq, long urem); }
+36	STD	{ long sys_getitimer(long which, long uv); }
+37	STD	{ long sys_alarm(long secs); }
+38	STD	{ long sys_setitimer(long which, long unew, long uold); }
+39	STD	{ long sys_getpid(void); }
+41	STD	{ long sys_socket(long domain, long type, long proto); }
+42	STD	{ long sys_connect(long fd, long uaddr, long len); }
+43	STD	{ long sys_accept(long fd, long uaddr, long ulen); }
+44	STD	{ long sys_sendto(long fd, long buf, long len, long flags, long uaddr, long alen); }
+45	STD	{ long sys_recvfrom(long fd, long buf, long len, long flags, long uaddr, long ulen); }
+46	STD	{ long sys_sendmsg(long fd, long umsg, long flags); }
+47	STD	{ long sys_recvmsg(long fd, long umsg, long flags); }
+48	STD	{ long sys_shutdown(long fd, long how); }
+49	STD	{ long sys_bind(long fd, long uaddr, long len); }
+50	STD	{ long sys_listen(long fd, long backlog); }
+51	STD	{ long sys_getsockname(long fd, long uaddr, long ulen); }
+52	STD	{ long sys_getpeername(long fd, long uaddr, long ulen); }
+53	STD	{ long sys_socketpair(long domain, long type, long proto, long usv); }
+54	STD	{ long sys_setsockopt(long fd, long level, long opt, long uval, long len); }
+55	STD	{ long sys_getsockopt(long fd, long level, long opt, long uval, long ulen); }
+56	STD	{ long sys_clone(long flags, long stack, long ptid, long ctid, long tls); }
+57	STD	{ long sys_fork(void); }
+58	STD	{ long sys_vfork(void); }
+59	STD	{ long sys_execve(long path, long argv, long envp); }
+60	STD	{ long sys_exit(long code); }
+61	STD	{ long sys_wait4(long pid, long ustatus, long options, long uru); }
+62	STD	{ long sys_kill(long pid, long sig); }
+63	STD	{ long linux_sys_uname(long ubuf); }
+64	STD	{ long sys_semget(long key, long nsems, long flg); }
+65	STD	{ long sys_semop(long id, long uops, long nops); }
+66	STD	{ long sys_semctl(long id, long num, long cmd, long arg); }
+67	STD	{ long sys_shmdt(long addr); }
+68	STD	{ long sys_msgget(long key, long flg); }
+69	STD	{ long sys_msgsnd(long id, long umsg, long size, long flg); }
+70	STD	{ long sys_msgrcv(long id, long umsg, long size, long type, long flg); }
+71	STD	{ long sys_msgctl(long id, long cmd, long ubuf); }
+72	STD	{ long sys_fcntl(long fd, long cmd, long arg); }
+73	STD	{ long sys_flock(long fd, long op); }
+74	STD	{ long sys_fsync(long fd); }
+75	STD	{ long sys_fdatasync(long fd); }
+76	STD	{ long sys_truncate(long path, long len); }
+77	STD	{ long sys_ftruncate(long fd, long len); }
+79	STD	{ long sys_getcwd(long ubuf, long size); }
+80	STD	{ long sys_chdir(long path); }
+81	STD	{ long sys_fchdir(long fd); }
+82	STD	{ long sys_rename(long o, long n); }
+83	STD	{ long sys_mkdir(long path, long mode); }
+84	STD	{ long sys_rmdir(long path); }
+85	STD	{ long sys_creat(long path, long mode); }
+86	STD	{ long sys_link(long o, long n); }
+87	STD	{ long sys_unlink(long path); }
+88	STD	{ long sys_symlink(long target, long path); }
+89	STD	{ long sys_readlink(long path, long buf, long n); }
+90	STD	{ long sys_chmod(long path, long mode); }
+91	STD	{ long sys_fchmod(long fd, long mode); }
+92	STD	{ long sys_chown(long p, long u, long g); }
+93	STD	{ long sys_fchown(long fd, long uid, long gid); }
+94	STD	{ long sys_lchown(long p, long u, long g); }
+95	STD	{ long sys_umask(long m); }
+96	STD	{ long sys_gettimeofday(long utv, long utz); }
+97	STD	{ long sys_getrlimit(long res, long u); }
+98	STD	{ long sys_getrusage(long who, long uru); }
+99	STD	{ long sys_sysinfo(long u); }
+100	STD	{ long sys_times(long ubuf); }
+102	STD	{ long sys_getuid(void); }
+103	STD	{ long sys_syslog(long type, long ubuf, long len); }
+104	STD	{ long sys_getgid(void); }
+105	STD	{ long sys_setuid(long uid); }
+106	STD	{ long sys_setgid(long gid); }
+107	STD	{ long sys_geteuid(void); }
+108	STD	{ long sys_getegid(void); }
+109	STD	{ long sys_setpgid(long pid, long pgid); }
+110	STD	{ long sys_getppid(void); }
+111	STD	{ long sys_getpgrp(void); }
+112	STD	{ long sys_setsid(void); }
+113	STD	{ long sys_setreuid(long r, long e); }
+114	STD	{ long sys_setregid(long r, long e); }
+115	STD	{ long sys_getgroups(long n, long ulist); }
+116	STD	{ long sys_setgroups(long n, long ulist); }
+117	STD	{ long sys_setresuid(long r, long e, long s); }
+118	STD	{ long sys_getresuid(long r, long e, long s); }
+119	STD	{ long sys_setresgid(long r, long e, long s); }
+120	STD	{ long sys_getresgid(long r, long e, long s); }
+121	STD	{ long sys_getpgid(long pid); }
+122	STD	{ long sys_setfsuid(long uid); }
+123	STD	{ long sys_setfsgid(long gid); }
+124	STD	{ long sys_getsid(long pid); }
+125	STD	{ long sys_capget(long uhdr, long udata); }
+126	STD	{ long sys_capset(long uhdr, long udata); }
+127	STD	{ long sys_rt_sigpending(long uset, long size); }
+128	STD	{ long sys_rt_sigtimedwait(long uset, long uinfo, long uts, long size); }
+129	STD	{ long sys_rt_sigqueueinfo(long pid, long sig, long uinfo); }
+130	STD	{ long sys_rt_sigsuspend(long uset, long size); }
+131	STD	{ long sys_sigaltstack(long unew, long uold); }
+133	STD	{ long sys_mknod(long path, long mode, long dev); }
+135	STD	{ long linux_sys_personality(long v); }
+137	STD	{ long sys_statfs(long upath, long ubuf); }
+138	STD	{ long sys_fstatfs(long fd, long ubuf); }
+140	STD	{ long sys_getpriority(long which, long who); }
+141	STD	{ long sys_setpriority(long which, long who, long nice); }
+142	STD	{ long sys_sched_setparam(long pid, long up); }
+143	STD	{ long sys_sched_getparam(long pid, long up); }
+144	STD	{ long sys_sched_setscheduler(long pid, long policy, long up); }
+145	STD	{ long sys_sched_getscheduler(long pid); }
+146	STD	{ long sys_sched_get_priority_max(long policy); }
+147	STD	{ long sys_sched_get_priority_min(long policy); }
+148	STD	{ long sys_sched_rr_get_interval(long pid, long uts); }
+149	STD	{ long sys_mlock(long addr, long len); }
+150	STD	{ long sys_munlock(long addr, long len); }
+151	STD	{ long sys_mlockall(long flags); }
+152	STD	{ long sys_munlockall(void); }
+157	STD	{ long sys_prctl(long op, long a2); }
+158	STD	{ long sys_arch_prctl(long code, long addr); }
+160	STD	{ long sys_setrlimit(long res, long u); }
+161	STD	{ long sys_chroot(long path); }
+162	STD	{ long sys_sync(void); }
+164	STD	{ long sys_settimeofday(long utv, long utz); }
+165	STD	{ long sys_mount(long udev, long udir, long utype, long flags, long udata); }
+166	STD	{ long sys_umount2(long udir, long flags); }
+169	STD	{ long linux_sys_reboot(long m1, long m2, long cmd); }
+170	STD	{ long sys_sethostname(long name, long len); }
+171	STD	{ long sys_setdomainname(long name, long len); }
+186	STD	{ long sys_gettid(void); }
+200	STD	{ long sys_tkill(long tid, long sig); }
+201	STD	{ long sys_time(long ut); }
+202	STD	{ long sys_futex(long uaddr, long op, long val, long uts, long uaddr2, long val3); }
+203	STD	{ long sys_sched_setaffinity(long pid, long len, long umask); }
+204	STD	{ long sys_sched_getaffinity(long pid, long len, long umask); }
+217	STD	{ long sys_getdents64(long fd, long ubuf, long size); }
+218	STD	{ long sys_set_tid_address(long a); }
+220	STD	{ long sys_semtimedop(long id, long uops, long nops, long uts); }
+221	STD	{ long sys_fadvise64(long fd, long off, long len, long advice); }
+222	STD	{ long sys_timer_create(long clk, long usev, long uid); }
+223	STD	{ long sys_timer_settime(long id, long flags, long unew, long uold); }
+224	STD	{ long sys_timer_gettime(long id, long uv); }
+225	STD	{ long sys_timer_getoverrun(long id); }
+226	STD	{ long sys_timer_delete(long id); }
+227	STD	{ long sys_clock_settime(long clk, long uts); }
+228	STD	{ long sys_clock_gettime(long clk, long uts); }
+229	STD	{ long sys_clock_getres(long clk, long uts); }
+230	STD	{ long sys_clock_nanosleep(long clk, long flags, long ureq, long urem); }
+231	STD	{ long sys_exit_group(long code); }
+234	STD	{ long sys_tgkill(long tgid, long tid, long sig); }
+235	STD	{ long sys_utimes(long upath, long utv); }
+240	STD	{ long sys_mq_open(long uname, long flags, long mode, long uattr); }
+241	STD	{ long sys_mq_unlink(long uname); }
+242	STD	{ long sys_mq_timedsend(long fd, long umsg, long len, long prio, long uts); }
+243	STD	{ long sys_mq_timedreceive(long fd, long umsg, long len, long uprio, long uts); }
+244	STD	{ long sys_mq_notify(long fd, long usev); }
+245	STD	{ long sys_mq_getsetattr(long fd, long unew, long uold); }
+247	STD	{ long sys_waitid(long which, long id, long uinfo, long options, long uru); }
+257	STD	{ long sys_openat(long dirfd, long path, long flags, long mode); }
+258	STD	{ long sys_mkdirat(long dirfd, long path, long mode); }
+259	STD	{ long sys_mknodat(long dirfd, long path, long mode, long dev); }
+260	STD	{ long sys_fchownat(long dirfd, long path, long uid, long gid, long flags); }
+262	STD	{ long sys_newfstatat(long dirfd, long path, long ust, long flags); }
+263	STD	{ long sys_unlinkat(long dirfd, long upath, long flags); }
+264	STD	{ long sys_renameat(long od, long o, long nd, long n); }
+265	STD	{ long sys_linkat(long odirfd, long uold, long ndirfd, long unew, long flags); }
+266	STD	{ long sys_symlinkat(long utarget, long dirfd, long upath); }
+267	STD	{ long sys_readlinkat(long dirfd, long upath, long ubuf, long n); }
+268	STD	{ long sys_fchmodat(long dirfd, long path, long mode); }
+269	STD	{ long sys_faccessat(long dirfd, long path, long mode); }
+270	STD	{ long sys_pselect6(long n, long ur, long uw, long ue, long uts, long usig); }
+271	STD	{ long sys_ppoll(long ufds, long n, long uts, long umask, long size); }
+273	STD	{ long sys_set_robust_list(long head, long len); }
+274	STD	{ long sys_get_robust_list(long pid, long uhead, long ulen); }
+280	STD	{ long sys_utimensat(long dirfd, long upath, long uts, long flags); }
+285	STD	{ long sys_fallocate(long fd, long mode, long off, long len); }
+288	STD	{ long sys_accept4(long fd, long uaddr, long ulen, long flags); }
+292	STD	{ long sys_dup3(long oldfd, long newfd, long flags); }
+293	STD	{ long sys_pipe2(long ufds, long flags); }
+295	STD	{ long sys_preadv(long fd, long iov, long cnt, long off); }
+296	STD	{ long sys_pwritev(long fd, long iov, long cnt, long off); }
+297	STD	{ long sys_rt_tgsigqueueinfo(long tgid, long tid, long sig, long uinfo); }
+302	STD	{ long sys_prlimit64(long pid, long res, long unew, long uold); }
+306	STD	{ long sys_syncfs(long fd); }
+309	STD	{ long sys_getcpu(long ucpu, long unode); }
+316	STD	{ long sys_renameat2(long odirfd, long uold, long ndirfd, long unew, long flags); }
+318	STD	{ long sys_getrandom(long ubuf, long n, long flags); }
+322	STD	{ long sys_execveat(long dirfd, long path, long argv, long envp, long flags); }
+327	STD	{ long sys_preadv2(long fd, long iov, long cnt, long off, long offhi, long flags); }
+328	STD	{ long sys_pwritev2(long fd, long iov, long cnt, long off, long offhi, long flags); }
+332	STD	{ long sys_statx(long dirfd, long upath, long flags, long mask, long ubuf); }
+435	STD	{ long sys_clone3(long uargs, long size); }
+436	STD	{ long sys_close_range(long first, long last, long flags); }
+437	STD	{ long sys_openat2(long dirfd, long path, long uhow, long size); }
+439	STD	{ long sys_faccessat2(long dirfd, long path, long mode, long flags); }
+452	STD	{ long sys_fchmodat2(long dirfd, long path, long mode, long flags); }

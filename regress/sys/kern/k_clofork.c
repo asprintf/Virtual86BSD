@@ -16,7 +16,11 @@ extern char **environ;
 static int fails;
 #define CHECK(c) do { if (!(c)) { printf("FAIL line %d: %s\n", __LINE__, #c); fails++; } } while (0)
 
-long rawgetfd(int fd);                  /* k_clofork_s.s */
+long rawgetfd_nr(int fd, long nr);      /* k_clofork_s.s */
+#ifndef FCNTL_NR
+#define FCNTL_NR 72                     /* Linux's; the Makefile gives the system's */
+#endif
+#define rawgetfd(fd) rawgetfd_nr((fd), FCNTL_NR)
 
 /* in a child: is fd open? */
 static int open_in_child(int fd)

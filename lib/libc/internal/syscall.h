@@ -7,7 +7,7 @@
  */
 #ifndef _INTERNAL_SYSCALL_H
 #define _INTERNAL_SYSCALL_H
-#include "syscall_nr.h"
+#include <syscall_nr.h>
 
 long __syscall6(long, long, long, long, long, long, long);
 long __syscall_ret(unsigned long);

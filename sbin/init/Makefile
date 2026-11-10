@@ -7,8 +7,8 @@
 C17 = c17 -B static
 BINDIR = /sbin
 
-init: init.c poweroff.s
-	$(C17) -o $@ init.c poweroff.s
+init: init.c
+	$(C17) -o $@ init.c
 
 install: init
 	mkdir -p $(DESTDIR)$(BINDIR)

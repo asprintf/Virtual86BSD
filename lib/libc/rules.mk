@@ -64,6 +64,7 @@ HDRS = \
 	../../include/sys/ipc.h \
 	../../include/sys/mman.h \
 	../../include/sys/msg.h \
+	../../include/sys/reboot.h \
 	../../include/sys/resource.h \
 	../../include/sys/select.h \
 	../../include/sys/sem.h \
@@ -121,7 +122,7 @@ HDRS = \
 	internal/stdio_impl.h \
 	internal/strptime_impl.h \
 	internal/syscall.h \
-	internal/syscall_nr.h \
+	internal/syscall_nr_linux.h \
 	internal/time_impl.h \
 	intl/intl_impl.h \
 	locale/charsets_data.h \
@@ -257,6 +258,7 @@ OBJS = \
 	$(B)/obj/misc/misc.o \
 	$(B)/obj/misc/mman.o \
 	$(B)/obj/misc/posix_devctl.o \
+	$(B)/obj/misc/reboot.o \
 	$(B)/obj/misc/resource.o \
 	$(B)/obj/misc/select.o \
 	$(B)/obj/misc/termios.o \
@@ -916,6 +918,10 @@ $(B)/obj/misc/mman.o: misc/mman.c $(HDRS)
 $(B)/obj/misc/posix_devctl.o: misc/posix_devctl.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/posix_devctl.c
+
+$(B)/obj/misc/reboot.o: misc/reboot.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/reboot.c
 
 $(B)/obj/misc/resource.o: misc/resource.c $(HDRS)
 	mkdir -p $(B)/obj/misc
@@ -1725,17 +1731,19 @@ $(B)/obj/wstring/wstring_posix.o: wstring/wstring_posix.c $(HDRS)
 	mkdir -p $(B)/obj/wstring
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ wstring/wstring_posix.c
 
-$(B)/lib/Scrt1.o: arch/x86_64/Scrt1.s
-	mkdir -p $(B)/lib
-	$(AS) -o $@ arch/x86_64/Scrt1.s
+$(B)/lib/Scrt1.o: $(B)/abi/note.s arch/x86_64/Scrt1.s
+	mkdir -p $(B)/lib $(B)/abi
+	cat $(B)/abi/note.s arch/x86_64/Scrt1.s > $(B)/abi/Scrt1.s
+	$(AS) -o $@ $(B)/abi/Scrt1.s
 
 $(B)/obj/arch/x86_64/atomic.o: arch/x86_64/atomic.s
 	mkdir -p $(B)/obj/arch/x86_64
 	$(AS) -o $@ arch/x86_64/atomic.s
 
-$(B)/lib/crt1.o: arch/x86_64/crt1.s
-	mkdir -p $(B)/lib
-	$(AS) -o $@ arch/x86_64/crt1.s
+$(B)/lib/crt1.o: $(B)/abi/note.s arch/x86_64/crt1.s
+	mkdir -p $(B)/lib $(B)/abi
+	cat $(B)/abi/note.s arch/x86_64/crt1.s > $(B)/abi/crt1.s
+	$(AS) -o $@ $(B)/abi/crt1.s
 
 $(B)/lib/crti.o: arch/x86_64/crti.s
 	mkdir -p $(B)/lib
@@ -1753,29 +1761,33 @@ $(B)/obj/arch/x86_64/fenv_prim.o: arch/x86_64/fenv_prim.s
 	mkdir -p $(B)/obj/arch/x86_64
 	$(AS) -o $@ arch/x86_64/fenv_prim.s
 
-$(B)/lib/rcrt1.o: arch/x86_64/rcrt1.s
-	mkdir -p $(B)/lib
-	$(AS) -o $@ arch/x86_64/rcrt1.s
+$(B)/lib/rcrt1.o: $(B)/abi/note.s arch/x86_64/rcrt1.s
+	mkdir -p $(B)/lib $(B)/abi
+	cat $(B)/abi/note.s arch/x86_64/rcrt1.s > $(B)/abi/rcrt1.s
+	$(AS) -o $@ $(B)/abi/rcrt1.s
 
 $(B)/obj/arch/x86_64/setjmp.o: arch/x86_64/setjmp.s
 	mkdir -p $(B)/obj/arch/x86_64
 	$(AS) -o $@ arch/x86_64/setjmp.s
 
-$(B)/obj/arch/x86_64/sigsetjmp.o: arch/x86_64/sigsetjmp.s
-	mkdir -p $(B)/obj/arch/x86_64
-	$(AS) -o $@ arch/x86_64/sigsetjmp.s
+$(B)/obj/arch/x86_64/sigsetjmp.o: $(B)/abi/nr.sed arch/x86_64/sigsetjmp.s
+	mkdir -p $(B)/obj/arch/x86_64 $(B)/abi
+	sed -f $(B)/abi/nr.sed arch/x86_64/sigsetjmp.s > $(B)/abi/sigsetjmp.s
+	$(AS) -o $@ $(B)/abi/sigsetjmp.s
 
 $(B)/obj/arch/x86_64/string.o: arch/x86_64/string.s
 	mkdir -p $(B)/obj/arch/x86_64
 	$(AS) -o $@ arch/x86_64/string.s
 
-$(B)/obj/arch/x86_64/syscall.o: arch/x86_64/syscall.s
-	mkdir -p $(B)/obj/arch/x86_64
-	$(AS) -o $@ arch/x86_64/syscall.s
+$(B)/obj/arch/x86_64/syscall.o: $(B)/abi/nr.sed arch/x86_64/syscall.s
+	mkdir -p $(B)/obj/arch/x86_64 $(B)/abi
+	sed -f $(B)/abi/nr.sed arch/x86_64/syscall.s > $(B)/abi/syscall.s
+	$(AS) -o $@ $(B)/abi/syscall.s
 
-$(B)/obj/arch/x86_64/thread.o: arch/x86_64/thread.s
-	mkdir -p $(B)/obj/arch/x86_64
-	$(AS) -o $@ arch/x86_64/thread.s
+$(B)/obj/arch/x86_64/thread.o: $(B)/abi/nr.sed arch/x86_64/thread.s
+	mkdir -p $(B)/obj/arch/x86_64 $(B)/abi
+	sed -f $(B)/abi/nr.sed arch/x86_64/thread.s > $(B)/abi/thread.s
+	$(AS) -o $@ $(B)/abi/thread.s
 
 $(B)/obj/arch/x86_64/tzdata.o: arch/x86_64/tzdata.s
 	mkdir -p $(B)/obj/arch/x86_64

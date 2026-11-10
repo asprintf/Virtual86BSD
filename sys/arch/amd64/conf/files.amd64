@@ -9,6 +9,7 @@ file arch/amd64/amd64/boot.s
 file arch/amd64/amd64/cpu.s
 file arch/amd64/amd64/entry.s
 file arch/amd64/amd64/x86.c
+file arch/amd64/amd64/syscall.c
 file arch/amd64/amd64/autoconf.c
 file arch/amd64/amd64/mainbus.c mainbus
 file arch/amd64/amd64/cpu_attach.c cpu

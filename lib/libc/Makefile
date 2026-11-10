@@ -18,7 +18,15 @@ CCNAME   = gcc
 B        = build/$(CCNAME)
 AR       = ar
 INCLUDE  = ../../include
-CPPFLAGS = -I$(INCLUDE) -Iinternal -D_XOPEN_SOURCE=800
+CPPFLAGS = -I$(INCLUDE) -Iinternal -I$(ABIDIR) -D_XOPEN_SOURCE=800
+
+# The system call ABI the library is built for (tools/mkabi.sh): linux,
+# Linux's numbers (any Linux kernel, V86BSD's compat/linux too), or native,
+# V86BSD's own, from the kernel's sys/syscall.h (SYSCALL_H) with the brand
+# in the start files.
+TARGET_ABI = linux
+SYSCALL_H  = ../../sys/sys/syscall.h
+ABIDIR     = $(B)/abi
 
 CRT = $(B)/lib/crt1.o $(B)/lib/crti.o $(B)/lib/crtn.o
 # libm, librt, libpthread, libxnet, libdl and libcrypt are in libc.a; the c17 utility
@@ -29,6 +37,13 @@ EMPTY = $(B)/lib/libm.a $(B)/lib/librt.a $(B)/lib/libpthread.a $(B)/lib/libxnet.
 all: # (the default target; its prerequisites follow the includes)
 include rules.mk
 include config/$(CCNAME).mk
+
+# written again when the ABI changes (only then do the objects)
+$(ABIDIR)/syscall_nr.h: FORCE
+	sh tools/mkabi.sh $(TARGET_ABI) $(SYSCALL_H) $(ABIDIR)
+$(ABIDIR)/nr.sed $(ABIDIR)/note.s: $(ABIDIR)/syscall_nr.h
+$(OBJS) $(STATIC_OBJS) $(DYN_OBJS): $(ABIDIR)/syscall_nr.h
+FORCE:
 
 # SHARED (config/*.mk): libc.so, Scrt1.o (PIE), rcrt1.o (static PIE)
 all: $(B)/lib/libc.a $(CRT) $(EMPTY) $(SHARED)

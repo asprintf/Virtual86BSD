@@ -3,8 +3,17 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/file.h>
+#include <sys/proc.h>
+#include <sys/syscall.h>
 #include <uvm/uvm.h>
 #include <machine/cpu.h>
+
+extern const struct sysent sysent[];
+
+/* V86BSD's own ABI: the numbers of syscalls.master */
+const struct emul emul_native = {
+    "native", sysent, SYS_MAXSYSCALL, SYS_rt_sigreturn, ostype, osrelease,
+};
 
 struct elf_ehdr {
   uint8_t ident[16];
@@ -22,6 +31,7 @@ struct elf_phdr {
 
 #define PT_LOAD 1
 #define PT_INTERP 3
+#define PT_NOTE 4
 #define PT_PHDR 6
 #define PT_GNU_STACK 0x6474e551
 #define PF_X 1
@@ -405,6 +415,35 @@ static int build_stack(struct mm *mm, struct args *a, const char *execfn, struct
   return 0;
 }
 
+/* The brand of a program: V86BSD's own, a PT_NOTE holding the note named
+   "V86BSD" of type 1 (libc's start files, lib/libc/config/note_native.s).
+   The file is the user's: every length is checked. */
+#define NT_V86BSD_IDENT 1
+#define NOTE_MAX 256
+
+static bool elf_branded(struct file *f, const struct elf_phdr *ph, int n) {
+  uint32_t buf[NOTE_MAX / 4];
+  for (int i = 0; i < n; i++) {
+    if (ph[i].type != PT_NOTE || ph[i].filesz < 12 || ph[i].filesz > NOTE_MAX)
+      continue;
+    size_t len = ph[i].filesz;
+    if (kernel_read(f, buf, len, (off_t)ph[i].offset) != (ssize_t)len)
+      continue;
+    for (size_t off = 0; off + 12 <= len;) {
+      uint32_t namesz = buf[off / 4], descsz = buf[off / 4 + 1], type = buf[off / 4 + 2];
+      if (namesz > len || descsz > len)
+        break;
+      size_t nsz = (namesz + 3) & ~3UL, dsz = (descsz + 3) & ~3UL;
+      if (off + 12 + nsz + dsz > len)
+        break;
+      if (type == NT_V86BSD_IDENT && namesz == 7 && !memcmp((char *)buf + off + 12, "V86BSD", 7))
+        return true;
+      off += 12 + nsz + dsz;
+    }
+  }
+  return false;
+}
+
 static int exec_file(struct file *f, struct args *a, const char *execfn, const char *abspath) {
   struct proc *p = cur_proc();
   struct elf_ehdr eh;
@@ -412,6 +451,17 @@ static int exec_file(struct file *f, struct args *a, const char *execfn, const c
   int e = read_ehdr(f, &eh, &ph);
   if (e)
     return e;
+  /* the ABI: V86BSD's if the program is branded, else Linux's (when the
+     kernel has the emulation) */
+  const struct emul *emul = &emul_native;
+  if (!elf_branded(f, ph, eh.phnum)) {
+#ifdef COMPAT_LINUX
+    emul = &emul_linux;
+#else
+    kfree(ph);
+    return -ENOEXEC;
+#endif
+  }
   char *interp = NULL;
   struct file *ifile = NULL;
   for (int i = 0; i < eh.phnum; i++)
@@ -500,6 +550,7 @@ static int exec_file(struct file *f, struct args *a, const char *execfn, const c
   kfree(p->exe);
   p->exe = kstrdup(abspath);
   p->did_exec = true;
+  p->p_emul = emul;
   proc_vfork_release(p);
   t->fsbase = 0;
   wrmsr(MSR_FS_BASE, 0);

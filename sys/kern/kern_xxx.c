@@ -3,14 +3,17 @@
 #include <sys/systm.h>
 #include <sys/file.h>
 #include <sys/buf.h>
+#include <sys/reboot.h>
 #include <uvm/uvm.h>
 #include <machine/cpu.h>
 
 /* uname: the system's identity is that of vers.c (conf/newvers.sh): V86BSD,
-   the release, GENERIC#1.  Linux programs get the same until the Linux
-   emulation has its own (uname -r 6.9.0 there). */
+   the release, GENERIC#1.  The Linux emulation has its own
+   (compat/linux/linux_misc.c). */
 char uts_nodename[65] = "v86bsd";
-static char uts_domain[65] = "(none)";
+char uts_domain[65] = "(none)";
+
+long sys_nosys(void) { return -ENOSYS; }
 
 long sys_uname(long ubuf) {
   char u[6][65];
@@ -63,42 +66,35 @@ long sys_sysinfo(long u) {
   return copy_to_user((void *)u, &si, sizeof(si)) ? -EFAULT : 0;
 }
 
-#define REBOOT_MAGIC1 0xfee1dead
-#define RB_HALT 0xcdef0123
-#define RB_POWER_OFF 0x4321fedc
-#define RB_RESTART 0x01234567
-#define RB_CAD_ON 0x89abcdef
-#define RB_CAD_OFF 0
-
-long sys_reboot(long m1, long m2, long cmd) {
-  (void)m2;
+/* reboot(2): howto is RB_* of <sys/reboot.h>.  Called also for the Linux
+   emulation (linux_sys_reboot translates). */
+long sys_reboot(long howto) {
   if (!capable())
     return -EPERM;
-  if ((uint32_t)m1 != REBOOT_MAGIC1)
-    return -EINVAL;
-  if ((uint32_t)cmd == RB_CAD_ON || cmd == RB_CAD_OFF)
-    return 0;
-  printf("syncing disks... ");
-  sync_all();
-  bsync(NULL);
-  list_for_each(p, &mounts) {
-    struct mount *m = list_entry(p, struct mount, link);
-    if (m->sb->ops && m->sb->ops->shutdown)
-      m->sb->ops->shutdown(m->sb);
+  if (!(howto & RB_NOSYNC)) {
+    printf("syncing disks... ");
+    sync_all();
+    bsync(NULL);
+    list_for_each(p, &mounts) {
+      struct mount *m = list_entry(p, struct mount, link);
+      if (m->sb->ops && m->sb->ops->shutdown)
+        m->sb->ops->shutdown(m->sb);
+    }
+    printf("done\n");
   }
-  printf("done\n");
-  if ((uint32_t)cmd == RB_RESTART)
-    printf("rebooting...\n");
-  else if ((uint32_t)cmd == RB_POWER_OFF)
+  bool power = (howto & RB_POWERDOWN) != 0, halt = (howto & RB_HALT) != 0;
+  if (power)
     printf("powering off...\n");
-  else
+  else if (halt)
     printf("The operating system has halted.\n");
+  else
+    printf("rebooting...\n");
   cli();
-  if ((uint32_t)cmd == RB_RESTART) {
-    outb(0x64, 0xfe); /* keyboard controller reset */
-  } else if ((uint32_t)cmd == RB_POWER_OFF) {
+  if (power) {
     outw(0x604, 0x2000);  /* QEMU q35 / piix ACPI */
     outw(0xb004, 0x2000); /* older QEMU, Bochs */
+  } else if (!halt) {
+    outb(0x64, 0xfe); /* keyboard controller reset */
   }
   for (;;)
     hlt();
