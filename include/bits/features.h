@@ -98,6 +98,19 @@
 #define __C11_VISIBLE 0
 #endif
 
+/* Interfaces of the X/Open System Interfaces (XSI) option that were marked
+ * obsolescent and later removed, kept for programs written for those
+ * editions of the standard.  Each is visible with no feature-test macro
+ * (everything), and with _XOPEN_SOURCE of the editions that have it; never
+ * with _POSIX_C_SOURCE alone, and never in POSIX.1-2024:
+ *   __XSI_OB  SUSv2, SUSv3, SUSv4 (_XOPEN_SOURCE 500, 600, 700): gettimeofday,
+ *             getitimer, setitimer, sighold, sigrelse, sigignore, sigpause,
+ *             sigset, siginterrupt, setpgrp (removed in Issue 8, 2024)
+ *   __XSI_OB6 SUSv2 and SUSv3 (500, 600): usleep (removed in Issue 7, 2008)
+ * The editions' texts decide the windows (share/doc/legacy.md). */
+#define __XSI_OB  (__EXT_VISIBLE || (__XSI_VISIBLE >= 500 && __XSI_VISIBLE < 800))
+#define __XSI_OB6 (__EXT_VISIBLE || (__XSI_VISIBLE >= 500 && __XSI_VISIBLE < 700))
+
 /* Portable spellings of a few qualifiers. */
 #if defined(__cplusplus)
 # define __RESTRICT

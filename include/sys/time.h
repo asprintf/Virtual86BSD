@@ -33,7 +33,24 @@
 #include <bits/features.h>
 #include <sys/select.h>
 
+#if __XSI_OB
+/* SUSv2-SUSv4, obsolescent, removed in POSIX.1-2024 */
+#define ITIMER_REAL    0
+#define ITIMER_VIRTUAL 1
+#define ITIMER_PROF    2
+
+struct itimerval {
+	struct timeval it_interval;
+	struct timeval it_value;
+};
+#endif
+
 __BEGIN_DECLS
 int utimes(const char *, const struct timeval [2]);
+#if __XSI_OB
+int getitimer(int, struct itimerval *);
+int gettimeofday(struct timeval *__RESTRICT, void *__RESTRICT);
+int setitimer(int, const struct itimerval *__RESTRICT, struct itimerval *__RESTRICT);
+#endif
 __END_DECLS
 #endif

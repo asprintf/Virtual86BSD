@@ -425,6 +425,12 @@ int          getlogin_r(char *, size_t);
 char        *crypt(const char *, const char *);
 void         encrypt(char [64], int);
 #endif
+#if __XSI_OB
+pid_t        setpgrp(void);                /* SUSv2-SUSv4, not POSIX.1-2024 */
+#endif
+#if __XSI_OB6
+int          usleep(useconds_t);           /* SUSv2, SUSv3 only */
+#endif
 #if __EXT_VISIBLE
 int          revoke(const char *);
 #endif

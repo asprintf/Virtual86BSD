@@ -37,6 +37,9 @@ typedef int sig_atomic_t;
 #define SIG_DFL ((void (*)(int))0)
 #define SIG_IGN ((void (*)(int))1)
 #define SIG_ERR ((void (*)(int))-1)
+#if __XSI_OB
+#define SIG_HOLD ((void (*)(int))2)
+#endif
 
 #define SIGINT    2
 #define SIGILL    4
@@ -213,8 +216,8 @@ typedef struct __ucontext {
 #define CLD_STOPPED   5
 #define CLD_CONTINUED 6
 
-/* SIGPOLL's codes: not in POSIX.1-2024 (STREAMS removed) */
-#if __EXT_VISIBLE
+/* SIGPOLL's codes: in SUSv2 to SUSv4 (STREAMS), not in POSIX.1-2024 */
+#if __XSI_OB
 #define POLL_IN  1
 #define POLL_OUT 2
 #define POLL_MSG 3
@@ -251,6 +254,15 @@ int  str2sig(const char *__RESTRICT, int *__RESTRICT);
 #if __XSI_VISIBLE
 int  killpg(pid_t, int);
 int  sigaltstack(const stack_t *__RESTRICT, stack_t *__RESTRICT);
+#endif
+#if __XSI_OB
+/* SUSv2-SUSv4, obsolescent, removed in POSIX.1-2024 */
+int  sighold(int);
+int  sigignore(int);
+int  siginterrupt(int, int);
+int  sigpause(int);
+int  sigrelse(int);
+void (*sigset(int, void (*)(int)))(int);
 #endif
 #endif
 __END_DECLS
