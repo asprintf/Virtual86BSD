@@ -1,0 +1,6 @@
+#!/bin/sh
+# syslogd - the system log daemon (syslog.conf(5)); SIGHUP rereads it
+
+daemon="/usr/sbin/syslogd"
+. /etc/rc.d/rc.subr
+rc_cmd $1

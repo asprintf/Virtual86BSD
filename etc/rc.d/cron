@@ -1,0 +1,7 @@
+#!/bin/sh
+# cron - runs the entries of the crontabs
+
+daemon="/usr/sbin/crond"
+. /etc/rc.d/rc.subr
+rc_reload=NO
+rc_cmd $1

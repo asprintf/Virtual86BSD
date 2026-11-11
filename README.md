@@ -162,10 +162,14 @@ makes the disk image); no root privileges:
 
 The kernel starts `/sbin/init`, which runs `/etc/rc` (the host name from
 `/etc/myname`, `mount -uw /` and `mount -a` from `/etc/fstab`, `/etc/sysctl.conf`,
-clearing `/tmp`, the daemons that `/etc/rc.conf` turns on), then a `getty` on each
+clearing `/tmp`, `dmesg > /var/run/dmesg.boot`, the daemons that `/etc/rc.conf` turns on,
+each a script in `/etc/rc.d`: `syslogd`, `cron`, `atd`), then a `getty` on each
 line `/etc/ttys` switches on (the console, `tty00`), which asks for a login name
 and runs `login`.  root's password is `root` until `passwd` changes it (`make release
 ROOTPW=word` builds a root with another).
+`syslogd` writes the system's log (`/var/log/messages`, the failed logins and root logins in
+`/var/log/authlog`; `/etc/syslog.conf`), `dmesg` shows the kernel's messages, and `rcctl`
+turns daemons on and off (`rcctl enable atd`, `rcctl restart syslogd`, `rcctl ls on`).
 `shutdown -p now` (or `halt -p`, `reboot`) stops the system: init hangs up the
 sessions, runs `/etc/rc.shutdown`, ends every process and powers off after the
 disks are written.  (Without an `/etc/ttys`, init keeps its old behaviour: the

@@ -63,19 +63,29 @@ t "sysctl.conf was applied" "rc.example" 0 sysctl -n kern.domainname
 t "/tmp is empty" "" 0 sh -c 'ls -A /tmp'
 ok "it said so" sh -c 'echo "$1" | grep "^clearing /tmp$" > /dev/null' sh "$out"
 t "/etc/nologin is gone" "gone" 0 sh -c '[ ! -e /etc/nologin ] && echo gone'
-t "/var/run is empty but for an empty utmp" "utmp" 0 sh -c 'ls -A /var/run'
+t "/var/run has what the boot makes: the kernel messages, syslogd's pid, utmp" "dmesg.boot syslog.pid utmp" 0 sh -c 'ls -A /var/run | tr "\n" " " | sed "s/ \$//"'
+ok "dmesg.boot is the kernel's messages" sh -c 'grep "^root on " /var/run/dmesg.boot > /dev/null'
 ok "utmp is empty and mode 644" sh -c '[ ! -s /var/run/utmp ] && [ "$(ls -l /var/run/utmp | cut -c1-10)" = "-rw-r--r--" ]'
-ok "cron_flags is empty by default: crond starts" sh -c 'echo "$1" | grep "^starting daemons: cron\.$" > /dev/null' sh "$out"
+ok "the daemons are on by default, syslogd first" sh -c 'echo "$1" | grep "^starting daemons: syslogd cron\.$" > /dev/null' sh "$out"
 ok "crond is running" sh -c 'ps -A -o comm= | grep "^crond$" > /dev/null'
+ok "syslogd is running" sh -c 'ps -A -o comm= | grep "^syslogd$" > /dev/null'
+ok "its pid file names it" sh -c 'kill -0 "$(cat /var/run/syslog.pid)"'
+ok "/dev/log is there" sh -c '[ -S /dev/log ]'
+logger -p local0.notice -t rctest "message from the rc test"
+i=0; while [ $i -lt 10 ] && ! grep "rctest: message from the rc test" /var/log/messages > /dev/null 2>&1; do sleep 1; i=$((i+1)); done
+ok "a message reached /var/log/messages" sh -c 'grep " rctest: message from the rc test$" /var/log/messages > /dev/null'
+ok "so did the kernel's (the start of the boot)" sh -c 'grep " /bsd: root on " /var/log/messages > /dev/null'
+ok "and syslogd's own start" sh -c 'grep " syslogd: start$" /var/log/messages > /dev/null'
 # stop what it started
-for p in $(ps -A -o pid= -o comm= | awk '$2 == "crond" || $2 == "atd" { print $1 }'); do kill $p 2>/dev/null; done
+stopd() { for p in $(ps -A -o pid= -o comm= | awk '$2 == "crond" || $2 == "atd" || $2 == "syslogd" { print $1 }'); do kill $p 2>/dev/null; done; sleep 1; }
+stopd
 
 # again: the mount is there already (nothing is mounted twice), rc.conf.local
 # changes the daemons and keeps /tmp, rc.local runs
 setup
 umount "$TD/m" 2>/dev/null
 mount -t tmpfs tmpfs "$TD/m"
-printf 'cron_flags=NO\natd_flags=\nclear_tmp=NO\n' > /etc/rc.conf.local
+printf 'syslogd_flags=NO\ncron_flags=NO\natd_flags=\nclear_tmp=NO\n' > /etc/rc.conf.local
 printf 'echo LOCAL RAN > %s/flag\n' "$TD" > /etc/rc.local
 runrc
 t "rc succeeds again" "0" 0 echo $st
@@ -85,19 +95,48 @@ ok "...and nothing was said about it" sh -c '! echo "$1" | grep "clearing" > /de
 ok "atd started, cron not" sh -c 'echo "$1" | grep "^starting daemons: atd\.$" > /dev/null' sh "$out"
 ok "atd is running" sh -c 'ps -A -o comm= | grep "^atd$" > /dev/null'
 ok "crond is not" sh -c '! ps -A -o comm= | grep "^crond$" > /dev/null'
+ok "nor is syslogd" sh -c '! ps -A -o comm= | grep "^syslogd$" > /dev/null'
 t "rc.local ran" "LOCAL RAN" 0 cat "$TD/flag"
 ok "and was announced" sh -c 'echo "$1" | grep "^starting local daemons:$" > /dev/null' sh "$out"
-for p in $(ps -A -o pid= -o comm= | awk '$2 == "crond" || $2 == "atd" { print $1 }'); do kill $p 2>/dev/null; done
+stopd
 rm -f /tmp/rc_junk; rm -rf /tmp/rc_dir
 
 # no /etc/myname: the host name stays; no sysctl.conf: no complaint
 setup
 hostname keepme
 rm -f /etc/myname /etc/sysctl.conf /etc/rc.conf.local /etc/rc.local
-printf 'cron_flags=NO\n' > /etc/rc.conf.local
+printf 'syslogd_flags=NO\ncron_flags=NO\n' > /etc/rc.conf.local
 runrc
 t "rc succeeds without them" "0" 0 echo $st
 t "the host name is as it was" "keepme" 0 hostname
 t "no daemons: no line" "" 0 sh -c 'echo "$1" | grep "starting daemons"; true' sh "$out"
 rm -f /etc/rc.conf.local
+
+# pkg_scripts: a script of /etc/rc.d that rc.conf lists starts after the base
+# ones (whatever its _flags), and rc.shutdown stops it; a script that is not
+# there is told, one that fails too
+setup
+cat > /etc/rc.d/rctest <<'EOT'
+#!/bin/sh
+daemon="/bin/sleep"
+daemon_flags="4321"
+rc_bg=YES
+. /etc/rc.d/rc.subr
+rc_cmd $1
+EOT
+cat > /etc/rc.d/rcfail <<'EOT'
+#!/bin/sh
+daemon="/nonexistent/prog"
+. /etc/rc.d/rc.subr
+rc_cmd $1
+EOT
+printf 'syslogd_flags=NO\ncron_flags=NO\npkg_scripts="rctest rcfail rcgone"\n' > /etc/rc.conf.local
+runrc
+t "rc succeeds with failing scripts" "0" 0 echo $st
+ok "the scripts are announced, the ones that did not start told" sh -c 'echo "$1" | grep "^starting daemons: rctest rcfail(failed) rcgone(absent)\.$" > /dev/null' sh "$out"
+ok "the script's daemon runs" sh -c 'ps -A -o args= | grep "^/bin/sleep 4321$" > /dev/null'
+out=$(sh /etc/rc.shutdown 2>&1); st=$?
+t "rc.shutdown succeeds" "0" 0 echo $st
+ok "and stopped it" sh -c '! ps -A -o args= | grep "^/bin/sleep 4321$" > /dev/null'
+rm -f /etc/rc.d/rctest /etc/rc.d/rcfail /etc/rc.conf.local
 done_tests rc

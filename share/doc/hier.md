@@ -12,14 +12,17 @@ are real directories (not links into `/usr`).
     /dev/           the devices (the kernel mounts devtmpfs here)
     /proc/          the kernel's process file system (it is always mounted)
     /etc/           configuration files (the sources: etc/): passwd, group,
-                    profile, hosts, services, protocols, shells, motd
+                    profile, hosts, services, protocols, shells, motd,
+                    rc, rc.conf, syslog.conf; rc.d/ holds one script per
+                    daemon (rcctl(8) runs them)
     /home/          the home directories of users
     /mnt/           a place to mount file systems for a while
     /root/          root's home directory (mode 700)
     /tmp/           temporary files (mode 1777)
     /usr/bin/       the other utilities (usr.bin/), among them the compiler
                     c17 and make, dynamically linked with /usr/lib/libc.so
-    /usr/sbin/      daemons (crond, atd, uucico)
+    /usr/sbin/      daemons and administration programs (syslogd, crond, atd,
+                    rcctl, uucico)
     /usr/lib/       the C library (libc.a; libc.so, which is also the dynamic
                     linker), c17's support library and profiles (c17/)
     /usr/libexec/   helper programs run by other programs (getty)
@@ -30,8 +33,8 @@ are real directories (not links into `/usr`).
     /usr/local/     what is added to the system: ports/ installs here
                     (bin, lib, include, share/man)
     /usr/src/       these sources, so that the system can rebuild itself
-    /var/log/       log files
-    /var/run/       run-time data (utmp, pid files)
+    /var/log/       log files (syslogd: messages, authlog, daemon)
+    /var/run/       run-time data (utmp, pid files, dmesg.boot)
     /var/db/        databases
     /var/tmp/       temporary files that stay across a boot (mode 1777)
     /var/spool/     queues (cron, at, mail)

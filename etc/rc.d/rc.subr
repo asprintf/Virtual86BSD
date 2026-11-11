@@ -1,0 +1,127 @@
+# /etc/rc.d/rc.subr - what the scripts in /etc/rc.d have in common.
+#
+# A script names its daemon and calls rc_cmd with its first argument:
+#
+#	daemon="/usr/sbin/syslogd"
+#	. /etc/rc.d/rc.subr
+#	rc_cmd $1
+#
+# The commands are start, stop, restart, reload and check; each prints
+# `name(ok)' or `name(failed)' (nothing, when RC_QUIET is set: /etc/rc
+# wants the status only) and returns 0 or 1.
+#
+# What a script can set before the call:
+#
+#	daemon		the program (the path), with arguments that never change
+#	daemon_flags	flags for it when /etc/rc.conf(.local) gives none
+#	rc_bg=YES	the daemon does not go to the background itself: run it
+#			in the background, its input and output on /dev/null
+#	rc_reload=NO	the daemon cannot reread its configuration: `reload'
+#			fails
+#	pexp		the command line the running daemon has, as ps shows
+#			it, when that is not "$daemon $flags"
+#
+# The flags are name_flags from /etc/rc.conf and /etc/rc.conf.local, name
+# being the script's name: NO means the daemon is not started at boot (a
+# command given by hand starts it all the same, with daemon_flags), an
+# empty value the default flags.  RC_CONF names another rc.conf (tests).
+
+rc_name=${0##*/}
+rc_conf=${RC_CONF:-/etc/rc.conf}
+[ -f "$rc_conf" ] && . "$rc_conf"
+[ -f "$rc_conf.local" ] && . "$rc_conf.local"
+eval "rc_conf_flags=\${${rc_name}_flags-NO}"
+
+# the flags the daemon runs with
+rc_flags() {
+	if [ -n "$rc_conf_flags" ] && [ "$rc_conf_flags" != NO ]; then
+		echo "$rc_conf_flags"
+	else
+		echo "$daemon_flags"
+	fi
+}
+
+# the process ids of the daemon: the processes whose command line is pexp
+rc_pids() {
+	_f=$(rc_flags)
+	_p=${pexp-"$daemon${_f:+ $_f}"}
+	ps -A -o pid= -o args= | RC_PEXP=$_p awk '
+	BEGIN { e = ENVIRON["RC_PEXP"]; gsub(/[ \t]+/, " ", e); sub(/^ /, "", e); sub(/ $/, "", e) }
+	{ pid = $1; sub(/^[ \t]*[0-9]+[ \t]+/, ""); gsub(/[ \t]+/, " "); sub(/ $/, "")
+	  if ($0 == e) print pid }'
+}
+
+rc_say() {
+	[ -n "$RC_QUIET" ] || echo "$rc_name($1)"
+}
+
+rc_do_check() {
+	if [ -n "$(rc_pids)" ]; then rc_say ok; return 0; fi
+	rc_say failed
+	return 1
+}
+
+rc_do_start() {
+	if [ -n "$(rc_pids)" ]; then rc_say ok; return 0; fi
+	_prog=${daemon%% *}
+	if [ ! -x "$_prog" ]; then
+		echo "$rc_name: $_prog: not found" >&2
+		rc_say failed
+		return 1
+	fi
+	_f=$(rc_flags)
+	if [ "$rc_bg" = YES ]; then
+		# exec: the background shell becomes the daemon (one that waited for
+		# it would keep the caller's pipes open for as long as it runs)
+		eval "exec $daemon $_f" < /dev/null > /dev/null 2>&1 &
+	else
+		eval "$daemon $_f"
+	fi
+	_i=0
+	# the daemon is there, or it is not coming
+	while [ $_i -lt 5 ]; do
+		if [ -n "$(rc_pids)" ]; then rc_say ok; return 0; fi
+		sleep 1
+		_i=$((_i + 1))
+	done
+	rc_say failed
+	return 1
+}
+
+rc_do_stop() {
+	_pids=$(rc_pids)
+	if [ -z "$_pids" ]; then rc_say failed; return 1; fi
+	kill $_pids 2> /dev/null
+	_i=0
+	while [ $_i -lt 10 ]; do
+		[ -z "$(rc_pids)" ] && { rc_say ok; return 0; }
+		sleep 1
+		_i=$((_i + 1))
+	done
+	kill -9 $(rc_pids) 2> /dev/null	# it would not end
+	sleep 1
+	if [ -z "$(rc_pids)" ]; then rc_say ok; return 0; fi
+	rc_say failed
+	return 1
+}
+
+rc_do_reload() {
+	_pids=$(rc_pids)
+	if [ "$rc_reload" = NO ] || [ -z "$_pids" ]; then rc_say failed; return 1; fi
+	kill -HUP $_pids 2> /dev/null || { rc_say failed; return 1; }
+	rc_say ok
+}
+
+rc_cmd() {
+	case $1 in
+	start) rc_do_start ;;
+	stop) rc_do_stop ;;
+	restart) RC_QUIET=1 rc_do_stop; rc_do_start ;;
+	reload) rc_do_reload ;;
+	check) rc_do_check ;;
+	*)
+		echo "usage: $0 start|stop|restart|reload|check" >&2
+		return 1
+		;;
+	esac
+}

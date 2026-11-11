@@ -48,20 +48,31 @@ rm -f /etc/nologin
 : > /var/run/utmp
 chmod 644 /var/run/utmp
 
-# Daemons: NAME_flags in rc.conf is NO (off) or the flags to start it with,
-# an empty value being no flags.
+# The kernel's messages so far, as they were at the start of the run: the
+# log buffer is a ring and syslogd, which starts next, takes them from it.
+dmesg > /var/run/dmesg.boot 2>/dev/null
+chmod 644 /var/run/dmesg.boot
+
+# Daemons: the scripts of /etc/rc.d, syslogd first, then cron and atd when
+# their NAME_flags in rc.conf is not NO (that is off; anything else, an
+# empty value too, starts it with those flags, empty ones being the
+# default), then the scripts of pkg_scripts, in that order.
 started=
-for d in 'cron /usr/sbin/crond' 'atd /usr/sbin/atd'; do
-	name=${d%% *}
-	prog=${d#* }
-	eval "flags=\${${name}_flags-NO}"
-	[ "$flags" = NO ] && continue
-	if [ -x "$prog" ]; then
-		$prog $flags
-		started="$started $name"
+start_rcd() {
+	if [ ! -f "/etc/rc.d/$1" ]; then
+		started="$started $1(absent)"
+	elif RC_QUIET=1 sh "/etc/rc.d/$1" start; then
+		started="$started $1"
 	else
-		started="$started $name(absent)"
+		started="$started $1(failed)"
 	fi
+}
+for d in syslogd cron atd; do
+	eval "flags=\${${d}_flags-NO}"
+	[ "$flags" = NO ] || start_rcd $d
+done
+for d in $pkg_scripts; do
+	start_rcd $d
 done
 [ -n "$started" ] && echo "starting daemons:$started."
 

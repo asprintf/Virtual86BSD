@@ -30,8 +30,8 @@ The `getty` of the BSDs, much reduced. init(8) runs one on every line of
   answer). With no table the built-in banner is `%s/%m (%h) (%t)` and the prompt `login: `.
 * SIGINT and SIGQUIT are ignored while it waits; login gets them back.
 
-Not there: autobaud, port selectors, parity, upper-case-only terminals, `nx` chains, syslog (there is
-no syslogd yet).
+Not there: autobaud, port selectors, parity, upper-case-only terminals, `nx` chains; getty does not
+log (login does: failed logins and root logins, see syslogd).
 
 ## Testing
 

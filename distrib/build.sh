@@ -468,7 +468,8 @@ do_distribution() {
 	guard_dest new
 	say "distribution: /etc, the sources in /usr/src and the host's data into $dest"
 	hier
-	cp "$SRC"/etc/* "$dest/etc/" || fail "copying etc/"
+	cp -pR "$SRC"/etc/* "$dest/etc/" || fail "copying etc/"
+	chmod 755 "$dest"/etc/rc.d/* && chmod 644 "$dest/etc/rc.d/rc.subr" || fail "modes of etc/rc.d"
 	chmod 600 "$dest/etc/master.passwd"	# (the hashes: git keeps no modes but the x bit)
 	# ROOTPW=word: root's password is that (the tree's is `root'), with a
 	# salt of its own; the word goes to openssl by its input, not its arguments

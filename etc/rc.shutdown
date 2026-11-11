@@ -1,8 +1,23 @@
 # /etc/rc.shutdown - run by init(8) before the system stops (halt, reboot,
 # power off), after the login sessions have been hung up.
 #
-# The daemons are not stopped one by one: when this ends, init sends TERM to
-# every process and KILL to what is left, and reboot(2) writes the file
-# systems.  Put here what has to happen before that.
+# The daemons of the base system are not stopped one by one: when this ends,
+# init sends TERM to every process and KILL to what is left, and reboot(2)
+# writes the file systems.  What pkg_scripts started is stopped here, in
+# the opposite order.  Put here what else has to happen before that.
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin
+export PATH
+[ -f /etc/rc.conf ] && . /etc/rc.conf
+[ -f /etc/rc.conf.local ] && . /etc/rc.conf.local
+
+# What pkg_scripts started is stopped, the last one first.
+rev=
+for d in $pkg_scripts; do
+	rev="$d $rev"
+done
+for d in $rev; do
+	[ -f "/etc/rc.d/$d" ] && RC_QUIET=1 sh "/etc/rc.d/$d" stop
+done
 
 exit 0
