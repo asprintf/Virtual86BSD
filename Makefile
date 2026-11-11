@@ -128,7 +128,7 @@ regress-sys:
 	sh regress/sys/kern/run.sh
 
 clean:
-	@for d in bin sbin usr.bin usr.sbin lib/libc sbin/init; do \
+	@for d in bin sbin libexec usr.bin usr.sbin lib/libc sbin/init; do \
 	    (cd $$d && $(MAKE) clean) || exit 1; \
 	done
 

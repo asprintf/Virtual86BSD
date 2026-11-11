@@ -91,7 +91,8 @@
 #   stage 3  The utilities of stage 2 build the utilities once more, for
 #            the system, into objdir/world, where they are where hier(7)
 #            has them: those of bin/ in /bin and of sbin/ in /sbin, linked
-#            statically (they need nothing in /usr), the rest of usr.bin/ in
+#            statically (they need nothing in /usr), libexec/ (getty) in
+#            /usr/libexec statically too, the rest of usr.bin/ in
 #            /usr/bin and usr.sbin/ (config) in /usr/sbin, dynamically linked
 #            with V86BSD's libc.so (the C
 #            library, which is also the dynamic linker, /usr/lib/libc.so);
@@ -287,6 +288,7 @@ stage() {
 	say "stage $n: the utilities, with c17 on V86BSD's C library ($how)"
 	copy bin "$S/bin"
 	copy sbin "$S/sbin"
+	copy libexec "$S/libexec"
 	copy usr.bin "$S/usr.bin"
 	copy usr.sbin "$S/usr.sbin"
 	copy lib/libxcu "$S/lib/libxcu"
@@ -295,7 +297,7 @@ stage() {
 		C17_LIBDIR=$c17dir
 		C17_LIBC=$c17libc
 		export PATH C17_LIBDIR C17_LIBC
-		for d in bin sbin usr.bin usr.sbin; do
+		for d in bin sbin libexec usr.bin usr.sbin; do
 			if [ -z "$forsystem" ]; then
 				bindir=BINDIR=/usr/bin lf=	# (all together, for the next stage)
 			elif $static || { [ "$d" != usr.bin ] && [ "$d" != usr.sbin ]; }; then
@@ -467,7 +469,7 @@ do_distribution() {
 	hier
 	cp "$SRC"/etc/* "$dest/etc/" || fail "copying etc/"
 	mkdir -p "$dest/usr/src"
-	for d in README.md LICENSE Makefile bootstrap.sh chroot.sh mkdisk.sh boot.sh distrib etc share include lib bin sbin usr.bin usr.sbin sys regress ports; do
+	for d in README.md LICENSE Makefile bootstrap.sh chroot.sh mkdisk.sh boot.sh distrib etc share include lib bin sbin libexec usr.bin usr.sbin sys regress ports; do
 		cp -pR "$SRC/$d" "$dest/usr/src/" || fail "copying the sources"
 		# (not all of /usr/src: the ports' sources may be there already)
 		find "$dest/usr/src/$d" \( -name "*.o" -o -name "*.a" \) -type f -exec rm -f {} +
