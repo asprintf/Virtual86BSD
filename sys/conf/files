@@ -43,7 +43,7 @@ attach pckbc at isa
 device pckbd
 attach pckbd at pckbc
 device vga
-attach vga at isa
+attach vga at pci
 device wskbd
 attach wskbd at pckbd
 device wsdisplay

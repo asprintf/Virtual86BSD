@@ -30,10 +30,10 @@ virtio*		at pci?
 vioblk*		at virtio?
 disk*		at vioblk?
 em*		at pci?
+vga*		at pci?
+wsdisplay*	at vga?
 
 com0		at isa0 port 0x3f8 irq 4
 pckbc0		at isa0
 pckbd0		at pckbc?
 wskbd*		at pckbd?
-vga0		at isa0
-wsdisplay*	at vga?

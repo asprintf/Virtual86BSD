@@ -193,6 +193,8 @@ and `isa0`, and so on down.  The tree is printed as it is found:
     "Intel 82441FX" rev 0x02 at pci0 dev 0 function 0 not configured
     pciide0 at pci0 dev 1 function 1 "Intel 82371SB IDE" rev 0x00
     disk0 at pciide0 channel 0 drive 0: <QEMU HARDDISK>
+    vga0 at pci0 dev 2 function 0 "QEMU Standard VGA" rev 0x02: console (80x25)
+    wsdisplay0 at vga0: console (std, vt100 emulation)
     em0 at pci0 dev 3 function 0 "Intel 82540EM" rev 0x03: irq 11, address 52:54:00:12:34:56
     virtio0 at pci0 dev 4 function 0 "Qumranet Virtio Storage" rev 0x00
     vioblk0 at virtio0
@@ -201,13 +203,14 @@ and `isa0`, and so on down.  The tree is printed as it is found:
     com0 at isa0 port 0x3f8/8 irq 4: ns16550a, 16 byte fifo
     pckbc0 at isa0 port 0x60/5 irq 1
     pckbd0 at pckbc0 (kbd slot)
-    vga0 at isa0 port 0x3b0/48 iomem 0xa0000/131072: console (80x25)
 
 `dev/pci/pcidevs.h` has the names of the vendors and products of QEMU's
 machines; what is not in it is printed with its numbers, and a device no
 driver takes gets `not configured`.  The console is set up before any of
 this (`serial_init`, `vga_init`, polled output), so the first messages
-appear; `com0` and `vga0` attach to it later.  The messages are OpenBSD's:
+appear; `com0` and `vga0` attach to it later.  `vga0` is the PCI display adapter
+(class display, subclass VGA); the text console it shows is the legacy VGA
+at its fixed ports and memory.  The messages are OpenBSD's:
 the banner, `real mem` and `avail mem`, `bootargs:` (what follows the
 kernel's name on the command line, if anything), the `xx0 at yy0` tree
 (`cpu0: apid 0 (boot processor)` and its brand string, MHz and

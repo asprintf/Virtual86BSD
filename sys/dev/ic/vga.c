@@ -30,13 +30,14 @@
 
 /* vga.c - 80x25 VGA text console with a small subset of the ANSI/VT100
    escape sequences (cursor movement, erasing, colours).  The console is set
-   up early (vga_init); vga0, the device, attaches when the machine is
-   configured. */
+   up early (vga_init); vga0, the device (the PCI adapter), attaches when the machine
+   is configured. */
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/device.h>
-#include <dev/isa/isavar.h>
+#include <dev/pci/pcivar.h>
+#include <dev/pci/pcidevs.h>
 #include <machine/cpu.h>
 
 #define COLS 80
@@ -236,23 +237,14 @@ void console_write(const char *s, size_t n) {
   vga_write(s + start, n - start);
 }
 
-/* is there a VGA?  Its CRTC cursor-location register holds what is written */
+/* a PCI display adapter of the VGA kind (the text console itself is the
+   fixed legacy VGA: registers 0x3b0-0x3df, memory 0xa0000-0xbffff, which
+   the adapter answers at; vga_init has set it up) */
 static int vga_match(struct device *parent, void *match, void *aux) {
-  struct isa_attach_args *ia = aux;
+  struct pci_dev *d = aux;
   (void)parent;
   (void)match;
-  outb(0x3d4, 15);
-  uint8_t old = inb(0x3d5);
-  outb(0x3d5, 0x5a);
-  bool ok = inb(0x3d5) == 0x5a;
-  outb(0x3d5, old);
-  if (!ok)
-    return 0;
-  ia->ia_iobase = 0x3b0;
-  ia->ia_iosize = 48;
-  ia->ia_maddr = 0xa0000;
-  ia->ia_msize = 131072;
-  return 1;
+  return PCI_CLASS(d->class) == PCI_CLASS_DISPLAY && PCI_SUBCLASS(d->class) == PCI_SUBCLASS_DISPLAY_VGA;
 }
 
 static void vga_attach(struct device *parent, struct device *self, void *aux) {
