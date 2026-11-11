@@ -27,7 +27,7 @@ A test that fails is not always a fault in the system it tests. For each suite, 
 |---|---|---|
 | os-test | **5666 / 5816** pass | glibc 2.39 on Linux: 5228 |
 | POSIX Shell Tests | **10,940** pass, **8** fail (31 skipped) | yash 2.55: 0 fail; dash 0.5.12: 1,271; bash 5.2 as `sh`: 1,634 |
-| Open POSIX Test Suite | **1810 / 1848** that compile pass | glibc on Linux: 1693 |
+| Open POSIX Test Suite | **1812 / 1848** that compile pass | glibc on Linux: 1693 |
 
 Every header test and every namespace test of os-test passes on V86BSD. glibc passes 3471 of the 3758 header tests and 130 of the 159 namespace tests.
 
@@ -143,14 +143,15 @@ The suite comes from LTP (git 43bf9cf): 1888 tests, of which 1848 compile on V86
 
 | | passed |
 |---|---|
-| **V86BSD, on its kernel** | **1810 / 1848** |
+| **V86BSD, on its kernel** | **1812 / 1848** |
 | glibc on Linux, the same tests | 1693 |
 
-38 of the tests that compile do not pass: 16 unsupported, 10 untested, 5 failed, 3 unresolved, 3 that crash with SIGSEGV and 1 that hangs. In the first run, where 36 did not pass, none was a fault in V86BSD, and 26 of them did not pass on glibc either; the details, test by test, are in `lib/libc/STATUS.md`, stage 17. The third run was not analysed test by test again, except for the three that crash, and the three that began to compile and do not pass. The crashing ones, `pthread_cancel/5-1`, `pthread_detach/4-2` and `pthread_join/6-2`, use a thread ID after the thread has ended and been reclaimed, which POSIX leaves undefined; V86BSD unmaps the thread's stack at once, where glibc keeps the old thread's memory. The three new ones are gaps of V86BSD's kernel, not yet fixed:
+36 of the tests that compile do not pass: 16 unsupported, 10 untested, 4 failed, 3 unresolved and 3 that crash with SIGSEGV. In the first run, where 36 did not pass, none was a fault in V86BSD, and 26 of them did not pass on glibc either; the details, test by test, are in `lib/libc/STATUS.md`, stage 17. The fourth run was not analysed test by test again, except for the three that crash and the three that began to compile and did not pass. The crashing ones, `pthread_cancel/5-1`, `pthread_detach/4-2` and `pthread_join/6-2`, use a thread ID after the thread has ended and been reclaimed, which POSIX leaves undefined; V86BSD unmaps the thread's stack at once, where glibc keeps the old thread's memory. Of the three that began to compile, two showed gaps of the kernel that are fixed now (with tests, `k_itimer` and `k_sigq`):
 
-* `pthread_create/11-1` hangs: `setitimer(ITIMER_VIRTUAL, ...)` is accepted but the timer never expires (only `ITIMER_REAL`, `alarm()`, is run by the clock tick), so the test's busy loop waits for a `SIGVTALRM` that never comes. `ITIMER_PROF` is the same.
-* `sigqueue/9-1`: `sysconf(_SC_SIGQUEUE_MAX)` reports the limit `RLIMIT_SIGPENDING` of 1024, but the kernel does not enforce it, so the 1025th `sigqueue()` does not fail with `EAGAIN`.
-* `sigwaitinfo/6-1`: the signal that `raise()` sends has `si_code` `SI_TKILL` and the test wants `SI_USER` (glibc gives `SI_USER`). POSIX gives `si_code` for `kill()` only.
+* `pthread_create/11-1` hung: `setitimer(ITIMER_VIRTUAL, ...)` was accepted but the timer never expired (only `ITIMER_REAL` was run by the clock tick), so the test's busy loop waited for a `SIGVTALRM` that never came. `ITIMER_VIRTUAL` and `ITIMER_PROF` now count the process's CPU time.
+* `sigqueue/9-1`: `sysconf(_SC_SIGQUEUE_MAX)` reported the limit `RLIMIT_SIGPENDING` of 1024, but the kernel did not enforce it. It does now: the 1025th `sigqueue()` fails with `EAGAIN`.
+
+The third is still open: `sigwaitinfo/6-1`. The signal that `raise()` sends has `si_code` `SI_TKILL` and the test wants `SI_USER` (glibc gives `SI_USER`). POSIX gives `si_code` for `kill()` only, and `SI_TKILL` is what Linux's `tkill` gives.
 
 In outline the others are:
 

@@ -198,7 +198,7 @@ offers.
 * The Open POSIX Test Suite (LTP, 1888 tests), built and run inside the
   system on its own kernel in QEMU (with KVM): of the 1848 that compile
   (the other 40 use non-POSIX interfaces or ones POSIX removed long
-  ago), 1810 pass; glibc on Linux passes 1693.  In the first run (QEMU's software CPU: 1741 of 1777) none of the
+  ago), 1812 pass; glibc on Linux passes 1693.  In the first run (QEMU's software CPU: 1741 of 1777) none of the
   36 that did not pass was a fault of V86BSD: 26 did not pass with glibc
   either (options not offered, indeterminate limits, "may fail" errors,
   defects of the tests); the others test undefined or
