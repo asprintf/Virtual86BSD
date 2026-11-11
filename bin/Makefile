@@ -45,8 +45,8 @@
 PREFIX = /usr/local
 BINDIR = /bin
 
-SUBDIR = cat chgrp chmod cp date dd df echo ed expr ln ls mkdir mv \
-	pax ps pwd rm rmdir sh sleep stty test
+SUBDIR = cat chgrp chmod cp date dd df echo ed expr hostname kill ln ls mkdir mv \
+	pax ps pwd rm rmdir sh sleep stty sync test
 
 all:
 	@for u in $(SUBDIR); do \

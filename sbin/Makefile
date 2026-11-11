@@ -45,7 +45,7 @@
 PREFIX = /usr/local
 BINDIR = /sbin
 
-SUBDIR = chown
+SUBDIR = chown sysctl
 
 all:
 	@for u in $(SUBDIR); do \
