@@ -433,6 +433,8 @@ int          usleep(useconds_t);           /* SUSv2, SUSv3 only */
 #endif
 #if __EXT_VISIBLE
 int          revoke(const char *);
+int          sethostname(const char *, size_t);
+char        *getpass(const char *);
 #endif
 
 extern char *optarg;

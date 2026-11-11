@@ -133,5 +133,8 @@ int        unlockpt(int);
 #if __XSI_VISIBLE
 void       setkey(const char *);
 #endif
+#if __EXT_VISIBLE
+int        getloadavg(double [], int);
+#endif
 __END_DECLS
 #endif

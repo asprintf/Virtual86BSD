@@ -47,6 +47,11 @@ int gethostname(char *name, size_t len)
 	return 0;
 }
 
+int sethostname(const char *name, size_t len)
+{
+	return (int)__sys2(SYS_sethostname, name, len);
+}
+
 long gethostid(void)
 {
 	/* /etc/hostid (4 bytes, native order) if present, else 0 */

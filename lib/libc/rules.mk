@@ -102,6 +102,7 @@ HDRS = \
 	../../include/sys/socket.h \
 	../../include/sys/stat.h \
 	../../include/sys/statvfs.h \
+	../../include/sys/sysctl.h \
 	../../include/sys/sysmacros.h \
 	../../include/sys/time.h \
 	../../include/sys/times.h \
@@ -284,18 +285,20 @@ OBJS = \
 	$(B)/obj/math/trunc.o \
 	$(B)/obj/misc/fmtmsg.o \
 	$(B)/obj/misc/getopt.o \
+	$(B)/obj/misc/getpass.o \
 	$(B)/obj/misc/gettimeofday.o \
 	$(B)/obj/misc/ioctl.o \
 	$(B)/obj/misc/itimer.o \
 	$(B)/obj/misc/misc.o \
 	$(B)/obj/misc/mman.o \
+	$(B)/obj/misc/mount.o \
 	$(B)/obj/misc/posix_devctl.o \
 	$(B)/obj/misc/reboot.o \
-	$(B)/obj/misc/mount.o \
 	$(B)/obj/misc/resource.o \
 	$(B)/obj/misc/revoke.o \
 	$(B)/obj/misc/select.o \
 	$(B)/obj/misc/setpgrp.o \
+	$(B)/obj/misc/sysctl.o \
 	$(B)/obj/misc/termios.o \
 	$(B)/obj/misc/time_ops.o \
 	$(B)/obj/misc/tty.o \
@@ -945,6 +948,10 @@ $(B)/obj/misc/getopt.o: misc/getopt.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/getopt.c
 
+$(B)/obj/misc/getpass.o: misc/getpass.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/getpass.c
+
 $(B)/obj/misc/gettimeofday.o: misc/gettimeofday.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/gettimeofday.c
@@ -965,6 +972,10 @@ $(B)/obj/misc/mman.o: misc/mman.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/mman.c
 
+$(B)/obj/misc/mount.o: misc/mount.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/mount.c
+
 $(B)/obj/misc/posix_devctl.o: misc/posix_devctl.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/posix_devctl.c
@@ -972,10 +983,6 @@ $(B)/obj/misc/posix_devctl.o: misc/posix_devctl.c $(HDRS)
 $(B)/obj/misc/reboot.o: misc/reboot.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/reboot.c
-$(B)/obj/misc/mount.o: misc/mount.c $(HDRS)
-	mkdir -p $(B)/obj/misc
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/mount.c
-
 
 $(B)/obj/misc/resource.o: misc/resource.c $(HDRS)
 	mkdir -p $(B)/obj/misc
@@ -992,6 +999,10 @@ $(B)/obj/misc/select.o: misc/select.c $(HDRS)
 $(B)/obj/misc/setpgrp.o: misc/setpgrp.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/setpgrp.c
+
+$(B)/obj/misc/sysctl.o: misc/sysctl.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/sysctl.c
 
 $(B)/obj/misc/termios.o: misc/termios.c $(HDRS)
 	mkdir -p $(B)/obj/misc
