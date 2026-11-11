@@ -468,6 +468,7 @@ do_distribution() {
 	say "distribution: /etc, the sources in /usr/src and the host's data into $dest"
 	hier
 	cp "$SRC"/etc/* "$dest/etc/" || fail "copying etc/"
+	chmod 600 "$dest/etc/master.passwd"	# (the hashes: git keeps no modes but the x bit)
 	mkdir -p "$dest/usr/src"
 	for d in README.md LICENSE Makefile bootstrap.sh chroot.sh mkdisk.sh boot.sh distrib etc share include lib bin sbin libexec usr.bin usr.sbin sys regress ports; do
 		cp -pR "$SRC/$d" "$dest/usr/src/" || fail "copying the sources"

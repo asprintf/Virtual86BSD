@@ -47,8 +47,8 @@ SUBDIR = ar asa at awk basename bc c17 cal cflow cksum cmp comm \
 	compress crontab csplit ctags cut cxref diff dirname du env \
 	expand false file find fold fuser gencat getconf gettext grep \
 	head iconv id ipcrm ipcs join lex link locale localedef logger \
-	logname lp m4 mailx make man mesg mkfifo more msgfmt newgrp nice \
-	nl nm nohup od paste patch pathchk pr printf readlink realpath \
+	login logname lp m4 mailx make man mesg mkfifo more msgfmt newgrp nice \
+	nl nm nohup od passwd paste patch pathchk pr printf readlink realpath \
 	renice sccs sed sort split strings strip tabs tail talk tee time \
 	timeout tl touch tput tr true tsort tty uname unexpand uniq \
 	unlink uucp uudecode uuencode uustat uux vi wc who write xargs \

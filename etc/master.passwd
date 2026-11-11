@@ -1,0 +1,9 @@
+# /etc/master.passwd - the users and their password hashes (mode 0600, root's):
+#   name:passwd:uid:gid:class:change:expire:gecos:home:shell
+# /etc/passwd is the same without the hashes.  An empty passwd is an account
+# that needs none; `*' (or `!') is one nobody can log in to.  Change a password
+# with passwd(1); a hash is crypt(3), `$6$salt$...' (SHA-512).
+#
+# root has no password at first: set one with `passwd'.
+root::0:0::0:0:root:/root:/bin/sh
+nobody:*:65534:65534::0:0:nobody:/nonexistent:/bin/sh
