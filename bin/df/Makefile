@@ -44,15 +44,20 @@ STDFLAGS =
 LDLIBS   =
 
 PROG     = df
-OBJS     = df.o
+OBJS     = df.o mnttab.o
 
 all: $(PROG)
 
 $(PROG): $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJS) $(LDLIBS)
 
+$(OBJS): ../../lib/libxcu/mnttab.h
+
 .c.o:
-	$(CC) $(STDFLAGS) $(CFLAGS) -c $<
+	$(CC) $(STDFLAGS) $(CFLAGS) -I../../lib/libxcu -c $<
+
+mnttab.o: ../../lib/libxcu/mnttab.c
+	$(CC) $(STDFLAGS) $(CFLAGS) -I../../lib/libxcu -c ../../lib/libxcu/mnttab.c
 
 test: all
 	cd ../../regress/bin/df && $(MAKE) test

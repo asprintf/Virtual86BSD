@@ -74,13 +74,11 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
+#include "mnttab.h"
 
 static bool o_k, o_P, o_t;
 static int status;
 
-struct mnt {
-    char *fsname, *dir;
-};
 static struct mnt *mnts;
 static size_t nmnt;
 
@@ -100,56 +98,13 @@ static char *xstrdup(const char *s)
     return memcpy(xmalloc(n), s, n);
 }
 
-/* undo the octal escapes of the mount table in place */
-static char *unescape(char *s)
-{
-    char *w = s;
-    for (char *r = s; *r; ) {
-        if (r[0] == '\\' && r[1] >= '0' && r[1] <= '3' && r[2] >= '0' && r[2] <= '7'
-            && r[3] >= '0' && r[3] <= '7') {
-            *w++ = (char)((r[1] - '0') * 64 + (r[2] - '0') * 8 + (r[3] - '0'));
-            r += 4;
-        } else {
-            *w++ = *r++;
-        }
-    }
-    *w = '\0';
-    return s;
-}
-
 static bool read_mounts(void)
 {
-    const char *names[] = { "/proc/self/mounts", "/etc/mtab", "/etc/mnttab" };
-    FILE *f = NULL;
-    for (size_t i = 0; i < sizeof names / sizeof *names && !f; i++)
-        f = fopen(names[i], "r");
-    if (!f) {
-        fprintf(stderr, "df: cannot read the mount table\n");
+    const char *const names[] = { "/proc/self/mounts", "/etc/mtab", "/etc/mnttab", NULL };
+    if (!mnt_read(names, &mnts, &nmnt)) {
+        fprintf(stderr, errno == ENOMEM ? "df: out of memory\n" : "df: cannot read the mount table\n");
         return false;
     }
-    char *line = NULL;
-    size_t cap = 0, mcap = 0;
-    while (getline(&line, &cap, f) > 0) {
-        char *save = NULL;
-        char *a = strtok_r(line, " \t\n", &save);
-        char *b = a ? strtok_r(NULL, " \t\n", &save) : NULL;
-        if (!a || !b || *a == '#')
-            continue;
-        if (nmnt == mcap) {
-            mcap = mcap ? 2 * mcap : 64;
-            struct mnt *n = realloc(mnts, mcap * sizeof *mnts);
-            if (!n) {
-                fprintf(stderr, "df: out of memory\n");
-                exit(1);
-            }
-            mnts = n;
-        }
-        mnts[nmnt].fsname = xstrdup(unescape(a));
-        mnts[nmnt].dir = xstrdup(unescape(b));
-        nmnt++;
-    }
-    free(line);
-    fclose(f);
     return true;
 }
 
