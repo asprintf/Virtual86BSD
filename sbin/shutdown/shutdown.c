@@ -44,7 +44,8 @@
  * come.  With a delay shutdown goes on in the background (it prints its pid, and lets
  * go of its terminal);
  * SIGINT or SIGTERM to it (or ^C if it was not sent there) cancels it, takes
- * /etc/nologin away and tells the users. */
+ * /etc/nologin away and tells the users.  Who asked, and for what, goes to
+ * syslogd (auth.notice when it is asked for, auth.crit when init is told). */
 #define _POSIX_C_SOURCE 202405L
 #define _XOPEN_SOURCE 800
 #define _DEFAULT_SOURCE
@@ -54,8 +55,10 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <pwd.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 #include <utmpx.h>
@@ -64,7 +67,19 @@
 
 static char message[512];
 static int sig_to_init = SIGTERM;
-static const char *what = "go down";
+static const char *what = "shutdown to single-user mode";
+
+/* the name of the user who runs this */
+static const char *whoami(void)
+{
+	static char buf[40];
+	struct passwd *pw = getpwuid(getuid());
+
+	if (pw)
+		return pw->pw_name;
+	snprintf(buf, sizeof buf, "uid %ld", (long)getuid());
+	return buf;
+}
 
 static void usage(void)
 {
@@ -186,6 +201,10 @@ int main(int argc, char *argv[])
 	}
 	now = time(NULL);
 	at = now + minutes * 60;
+	openlog("shutdown", LOG_CONS, LOG_AUTH);
+	if (minutes > 0)
+		syslog(LOG_NOTICE, "%s by %s in %ld minute%s%s%s", what, whoami(), minutes, minutes == 1 ? "" : "s",
+		    message[0] ? ": " : "", message);
 	write_nologin(at);
 	if (minutes > 0) {
 		pid_t pid = fork();
@@ -241,6 +260,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	announce(at, 0);
+	syslog(LOG_CRIT, "%s by %s%s%s", what, whoami(), message[0] ? ": " : "", message);
 	if (kill(1, sig_to_init) == -1) {
 		fprintf(stderr, "shutdown: cannot signal init: %s\n", strerror(errno));
 		unlink(PATH_NOLOGIN);

@@ -39,7 +39,7 @@
  * (halt only) powers the machine off.  -q is quick: init is not asked and
  * reboot(2) is called at once (the file systems are still written); -n does
  * not write them and so also calls reboot(2) at once, since init cannot be
- * told.  Root only. */
+ * told.  Root only.  syslogd is told (auth.crit) who stops the system. */
 #define _POSIX_C_SOURCE 202405L
 #define _XOPEN_SOURCE 800
 #define _DEFAULT_SOURCE
@@ -48,8 +48,10 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <pwd.h>
 #include <string.h>
 #include <sys/reboot.h>
+#include <syslog.h>
 #include <unistd.h>
 
 int main(int argc, char *argv[])
@@ -89,6 +91,12 @@ int main(int argc, char *argv[])
 	}
 	if (nflag)
 		howto |= RB_NOSYNC;
+	{
+		struct passwd *pw = getpwuid(getuid());
+		openlog(prog, LOG_CONS, LOG_AUTH);
+		syslog(LOG_CRIT, "%s by %s", isreboot ? "rebooted" : pflag ? "powered down" : "halted",
+		    pw ? pw->pw_name : "unknown");
+	}
 	if (qflag || nflag) {
 		if (!nflag)
 			sync();
