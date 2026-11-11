@@ -92,6 +92,7 @@ HDRS = \
 	../../include/sys/ioctl.h \
 	../../include/sys/ipc.h \
 	../../include/sys/mman.h \
+	../../include/sys/mount.h \
 	../../include/sys/msg.h \
 	../../include/sys/reboot.h \
 	../../include/sys/resource.h \
@@ -290,6 +291,7 @@ OBJS = \
 	$(B)/obj/misc/mman.o \
 	$(B)/obj/misc/posix_devctl.o \
 	$(B)/obj/misc/reboot.o \
+	$(B)/obj/misc/mount.o \
 	$(B)/obj/misc/resource.o \
 	$(B)/obj/misc/revoke.o \
 	$(B)/obj/misc/select.o \
@@ -970,6 +972,10 @@ $(B)/obj/misc/posix_devctl.o: misc/posix_devctl.c $(HDRS)
 $(B)/obj/misc/reboot.o: misc/reboot.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/reboot.c
+$(B)/obj/misc/mount.o: misc/mount.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/mount.c
+
 
 $(B)/obj/misc/resource.o: misc/resource.c $(HDRS)
 	mkdir -p $(B)/obj/misc

@@ -32,6 +32,9 @@
 #ifndef _SYS_MOUNT_H_
 #define _SYS_MOUNT_H_
 
+/* In the kernel (_KERNEL) the file system layer; for a program the flags of
+   mount(2) and the calls. */
+#ifdef _KERNEL
 #include <sys/systm.h>
 #include <sys/vnode.h>
 #include <sys/conf.h>
@@ -84,6 +87,9 @@ struct mount {
   int flags;
   struct list link;
 };
+#endif
+
+/* mount(2) flags; only MS_RDONLY and MS_REMOUNT do something so far */
 #define MS_RDONLY 1
 #define MS_NOSUID 2
 #define MS_NODEV 4
@@ -91,6 +97,22 @@ struct mount {
 #define MS_REMOUNT 32
 #define MS_BIND 4096
 
+#ifndef _KERNEL
+#ifdef __cplusplus
+extern "C" {
+#endif
+/* Mount the file system of type fstype on source (a block device, for the
+   types that have one) at target.  With MS_REMOUNT, change the flags of the
+   mount at target (read-only or read-write).  Root only. */
+int mount(const char *source, const char *target, const char *fstype, unsigned long flags, const void *data);
+int umount(const char *target);
+int umount2(const char *target, int flags);
+#ifdef __cplusplus
+}
+#endif
+#endif
+
+#ifdef _KERNEL
 
 extern struct list mounts;
 extern struct mount *root_mount;
@@ -110,5 +132,6 @@ struct inode *devtmpfs_add(const char *name, mode_t mode, dev_t rdev);
 void devtmpfs_remove(const char *name);
 void ofd_locks_release(struct file *f);
 struct inode *tmpfs_mknod_path(struct super *sb, const char *name, mode_t mode, dev_t rdev);
+#endif
 
 #endif
