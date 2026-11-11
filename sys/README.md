@@ -307,13 +307,16 @@ words become init's environment; init uses `CONSOLE` (default
 2. `kmain`: memory map, page allocator (the first GiB), direct map of all
    RAM, then the rest of the memory to the allocator; GDT/IDT,
    TSC calibration, scheduler, timer at 1000 Hz, devices, root mount.
-3. Process 1 mounts devtmpfs on `/dev` and proc on `/proc` (V86BSD has no
-   `mount` utility: mount is not POSIX), opens `/dev/console` as 0, 1, 2
+3. Process 1 mounts devtmpfs on `/dev` and proc on `/proc` (mount(8) and
+   umount(8) are programs now, and `/etc/rc` mounts the rest), opens `/dev/console` as 0, 1, 2
    and executes `init=`, `/sbin/init`, `/etc/init`, `/bin/init` or
    `/bin/sh`.
-4. `/sbin/init` (sbin/init/init.c) runs `/etc/rc` if present, then `sh` on
-   the console as a session leader, so it gets a controlling terminal
-   (as on Linux, `/dev/console` itself never becomes one).
+4. `/sbin/init` (sbin/init/init.c) runs `/etc/rc` if present, then a getty
+   (libexec/getty) on each line of `/etc/ttys` that is on, each as a session
+   leader with its terminal as controlling terminal (`/dev/console` itself never
+   becomes one); without `/etc/ttys`, `sh` on the console instead.  getty asks for
+   a name and runs login (usr.bin/login).  The kernel passes `-s` from its command
+   line to init for single-user mode.
 
 ## Design
 

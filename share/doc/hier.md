@@ -22,7 +22,7 @@ are real directories (not links into `/usr`).
     /usr/sbin/      daemons (crond, atd, uucico)
     /usr/lib/       the C library (libc.a; libc.so, which is also the dynamic
                     linker), c17's support library and profiles (c17/)
-    /usr/libexec/   helper programs run by other programs (none yet)
+    /usr/libexec/   helper programs run by other programs (getty)
     /usr/include/   the C library's headers
     /usr/share/     architecture-independent data: time zones, terminfo,
                     locale sources and charmaps (copied from the host by

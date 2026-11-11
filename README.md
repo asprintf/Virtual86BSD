@@ -13,8 +13,8 @@ into, or boot in QEMU with its own kernel.
 This is version 0.9.1 (November 2026; `osrelease` in `sys/conf/newvers.sh`), a preview: complete in
 what POSIX asks of the interfaces and utilities, but young as a kernel
 (see "Where things stand").  0.9.1 fixes what the external test suites
-showed after 0.9 (`share/doc/conformance.md`).  1.0 is to add mkext2, fsck and
-login inside the system.
+showed after 0.9 (`share/doc/conformance.md`).  1.0 is to add mkext2 and fsck
+inside the system (login, passwd, shutdown, mount and sysctl are there).
 
 Shall, the system this one comes from, was made by Joost Orchidee Winter with Claude, Anthropic's AI model,
 which wrote most of the code from the text of the standard (POSIX.1-2024,
@@ -160,9 +160,15 @@ makes the disk image); no root privileges:
     sh mkdisk.sh               # v86bsd.img: root/ as an ext2 disk (1 GiB)
     sh boot.sh                 # boots it; the console is this terminal
 
-The kernel starts `/sbin/init`, which runs `/etc/rc` if there is one and
-then the shell on the console.  `exit` from that shell shuts the system
-down (init writes everything back to the disk and powers off);
+The kernel starts `/sbin/init`, which runs `/etc/rc` (the host name from
+`/etc/myname`, `mount -uw /` and `mount -a` from `/etc/fstab`, `/etc/sysctl.conf`,
+clearing `/tmp`, the daemons that `/etc/rc.conf` turns on), then a `getty` on each
+line `/etc/ttys` switches on (the console, `tty00`), which asks for a login name
+and runs `login`.  root has no password until `passwd` gives it one.
+`shutdown -p now` (or `halt -p`, `reboot`) stops the system: init hangs up the
+sessions, runs `/etc/rc.shutdown`, ends every process and powers off after the
+disks are written.  (Without an `/etc/ttys`, init keeps its old behaviour: the
+shell on the console after `rc`, and `exit` shuts down.)
 `Ctrl-A x` leaves QEMU at once (then the disk is checked, and repaired
 where needed, with `e2fsck -p` the next time `boot.sh` starts it; it does
 that every time).  What you change inside stays in
