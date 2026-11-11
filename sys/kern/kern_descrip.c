@@ -38,6 +38,7 @@
 #include <machine/cpu.h>
 
 #define MAX_FD (1024 * 1024)
+int maxfiles = MAX_FD; /* kern.maxfiles: the most descriptors a process can have */
 
 struct waitq poll_wait = WAITQ_INIT(poll_wait);
 

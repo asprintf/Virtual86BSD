@@ -257,7 +257,8 @@
 #define	SYS_waitid	222
 #define	SYS_writev	223
 #define	SYS_revoke	224
+#define	SYS_sysctl	225
 
-#define	SYS_MAXSYSCALL	225
+#define	SYS_MAXSYSCALL	226
 
 #endif

@@ -71,6 +71,7 @@ struct elf_phdr {
 #define ET_DYN 3
 
 #define ARG_MAX (2UL << 20)
+int argmax = ARG_MAX; /* kern.argmax */
 #define STACK_TOP 0x7ffffffff000UL
 #define DYN_BASE 0x555555554000UL
 

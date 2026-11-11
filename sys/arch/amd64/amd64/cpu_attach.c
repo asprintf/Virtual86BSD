@@ -69,6 +69,7 @@ static void cpu_attach(struct device *parent, struct device *self, void *aux) {
   const char *s = brand;
   while (*s == ' ')
     s++;
+  snprintf(cpu_model, sizeof cpu_model, "%s", *s ? s : "unknown processor"); /* hw.model */
   uint64_t mhz100 = (tsc_frequency() + 5000) / 10000;
   printf("%s: %s, %lu.%02lu MHz, %02x-%02x-%02x\n", self->dv_xname, *s ? s : "unknown processor", mhz100 / 100,
          mhz100 % 100, family, model, step);

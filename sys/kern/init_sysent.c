@@ -264,4 +264,5 @@ const struct sysent sysent[SYS_MAXSYSCALL] = {
 	S(sys_waitid),	/* 222 = waitid */
 	S(sys_writev),	/* 223 = writev */
 	S(sys_revoke),	/* 224 = revoke */
+	S(sys_sysctl),	/* 225 = sysctl */
 };

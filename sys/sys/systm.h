@@ -58,6 +58,11 @@ uint64_t tsc_frequency(void); /* kern/kern_time.c */
 
 /* the system's identity: vers.c, made by conf/newvers.sh */
 extern const char ostype[], osrelease[], osversion[], version[];
+
+/* what sysctl(2) shows (kern/kern_sysctl.c and its owners) */
+extern char cpu_model[64]; /* the processor's brand string, set by cpu_attach */
+extern int maxproc, maxfiles, argmax; /* kern_proc.c, kern_descrip.c, kern_exec.c */
+void loadavg_init(void);
 NORETURN void panic(const char *fmt, ...);
 
 /* assertions, on with "option DIAGNOSTIC" (-DDIAGNOSTIC); KDASSERT is the

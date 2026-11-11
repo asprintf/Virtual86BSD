@@ -22,6 +22,7 @@ testprogs:
 	$(C17) -o k_revoke k_revoke.c
 	$(C17) -o k_itimer k_itimer.c
 	$(C17) -o k_sigq k_sigq.c
+	$(C17) -o k_sysctl k_sysctl.c
 	mkdir -p libc
 	cp $(LIBCTESTS)/collate.def libc/
 	for t in $(LIBCTESTS)/s_*.c; do \
@@ -30,6 +31,6 @@ testprogs:
 	done
 
 clean:
-	rm -f k_sigwait k_shm k_fpu k_clofork k_mmap k_inet k_net k_timer k_maxmap k_disk k_revoke k_itimer k_sigq libc/s_* libc/collate.def
+	rm -f k_sigwait k_shm k_fpu k_clofork k_mmap k_inet k_net k_timer k_maxmap k_disk k_revoke k_itimer k_sigq k_sysctl libc/s_* libc/collate.def
 
 .PHONY: testprogs clean

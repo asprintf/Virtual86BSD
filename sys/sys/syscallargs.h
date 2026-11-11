@@ -258,4 +258,5 @@ long sys_wait4(long pid, long ustatus, long options, long uru);
 long sys_waitid(long which, long id, long uinfo, long options, long uru);
 long sys_writev(long fd, long iov, long cnt);
 long sys_revoke(long path);
+long sys_sysctl(long name, long namelen, long old, long oldlenp, long new, long newlen);
 #endif

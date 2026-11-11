@@ -47,6 +47,7 @@ int kstack_order(void);
 void task_set_dead(struct task *t);
 
 #define PID_MAX 32768
+int maxproc = PID_MAX; /* kern.maxproc: the process ids there are */
 
 struct task *find_task(pid_t tid) {
   list_for_each(p, &all_tasks) {

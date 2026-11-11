@@ -291,6 +291,7 @@ void kmain(uint32_t magic, uint32_t mbi) {
   make_runnable(t);
   sti();
   kthread_create("flush", flush_thread, NULL);
+  loadavg_init();
   {
     char ip[64] = "dhcp", loss[16] = "";
     cmdline_get("ip", ip, sizeof(ip));
