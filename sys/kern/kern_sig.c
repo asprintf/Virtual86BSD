@@ -317,6 +317,20 @@ long sys_tgkill(long tgid, long tid, long sig) {
   return do_tkill(tgid, tid, sig);
 }
 
+/* the siginfos queued for a process: in its own queue and in its threads'
+ * (RLIMIT_SIGPENDING, sysconf(_SC_SIGQUEUE_MAX), limits them) */
+static uint64_t queued_count(struct proc *p) {
+  uint64_t n = 0;
+  uint64_t f = irq_save();
+  list_for_each(a, &p->pending.queue) n++;
+  list_for_each(q, &p->threads) {
+    struct task *t = list_entry(q, struct task, thread_link);
+    list_for_each(b, &t->pending.queue) n++;
+  }
+  irq_restore(f);
+  return n;
+}
+
 long sys_rt_sigqueueinfo(long pid, long sig, long uinfo) {
   struct siginfo si;
   if (copy_from_user(&si, (void *)uinfo, sizeof(si)))
@@ -331,6 +345,10 @@ long sys_rt_sigqueueinfo(long pid, long sig, long uinfo) {
     return -ESRCH;
   if (!may_signal(p, (int)sig))
     return -EPERM;
+  /* sigqueue(): EAGAIN when the signals already queued for the receiver
+   * reach the limit */
+  if (sig && si.code == SI_QUEUE && queued_count(p) >= cur_proc()->rlim[RLIMIT_SIGPENDING].cur)
+    return -EAGAIN;
   return sig ? send_signal_proc(p, &si) : 0;
 }
 
@@ -348,6 +366,8 @@ long sys_rt_tgsigqueueinfo(long tgid, long tid, long sig, long uinfo) {
   if (!may_signal(t->proc, (int)sig))
     return -EPERM;
   si.signo = (int)sig;
+  if (sig && si.code == SI_QUEUE && queued_count(t->proc) >= cur_proc()->rlim[RLIMIT_SIGPENDING].cur)
+    return -EAGAIN;
   return sig ? send_signal_task(t, &si) : 0;
 }
 
