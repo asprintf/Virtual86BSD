@@ -669,24 +669,47 @@ int do_mount(const char *dev, const char *dir, const char *type, unsigned long f
   return e;
 }
 
+/* something uses the mount: a process whose working or root directory is in
+   it, an open file (a mapped file is held open too) */
+static bool mount_in_use(const struct mount *m) {
+  list_for_each(p, &all_procs) {
+    struct proc *pr = list_entry(p, struct proc, all_link);
+    if (pr->cwd.mnt == m || pr->root.mnt == m)
+      return true;
+    for (int i = 0; i < pr->nfd; i++)
+      if (pr->fd[i] && pr->fd[i]->mnt == m)
+        return true;
+    if (pr->mm) {
+      list_for_each(q, &pr->mm->vmas) {
+        struct vma *v = list_entry(q, struct vma, link);
+        if (v->file && v->file->mnt == m)
+          return true;
+      }
+    }
+  }
+  return false;
+}
+
 static int do_umount(const char *dir) {
   struct path p;
   int e = namei_at(AT_FDCWD, dir, LOOKUP_FOLLOW, &p);
   if (e)
     return e;
   struct mount *m = p.mnt;
-  if (p.ino != m->root || m == root_mount) {
-    path_put(&p);
-    return m == root_mount ? -EBUSY : -EINVAL;
+  if (p.ino != m->root) {
+    path_put(&p); /* a directory that is no mount point */
+    return -EINVAL;
   }
   path_put(&p);
-  /* busy: something else mounted below, or inodes of it still in use */
+  if (m == root_mount)
+    return -EBUSY;
+  /* busy: something else mounted below, or a process using it */
   list_for_each(q, &mounts) {
     struct mount *o = list_entry(q, struct mount, link);
     if (o != m && o->parent == m)
       return -EBUSY;
   }
-  if (m->root->ref > 1)
+  if (mount_in_use(m))
     return -EBUSY;
   bool shared_sb = false;
   list_for_each(q, &mounts) {
