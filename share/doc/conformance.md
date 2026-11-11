@@ -6,13 +6,13 @@ V86BSD was checked with three test suites written by others:
 * **the POSIX Shell Tests**, yash's test suite: 10,979 cases of the shell language and its built-in utilities;
 * **the Open POSIX Test Suite**, from LTP: 1888 tests of the threads, real-time and signal interfaces.
 
-Each suite is compared here with other implementations: glibc on Linux for os-test and the Open POSIX Test Suite, and yash, dash and bash for the shell tests. The results are for V86BSD 0.9.1, from 5–6 November 2026.
+Each suite is compared here with other implementations: glibc on Linux for os-test and the Open POSIX Test Suite, and yash, dash and bash for the shell tests. The results are for V86BSD 0.9.1, from 5–6 November 2026. os-test and the Open POSIX Test Suite were run again on 11 November 2026, with the tree as it was after the move to an OpenBSD-style layout and with KVM; their tables and text below are those of the second run, and say where it differs from the first.
 
 None of the suites is part of this tree. The scripts that run them are:
 
-* `libc/tools/ost/` for os-test;
-* `utilities/sh/tests/posix_shell_tests.sh` for the POSIX Shell Tests;
-* `libc/tools/pts.sh` for the Open POSIX Test Suite.
+* `lib/libc/tools/ost/` for os-test (`vmrun.sh` does the whole run, with a progress bar);
+* `regress/bin/sh/tests/posix_shell_tests.sh` for the POSIX Shell Tests;
+* `lib/libc/tools/pts.sh` for the Open POSIX Test Suite (`lib/libc/tools/ptsrun.sh` does the whole run, with a progress bar).
 
 A test that fails is not always a fault in the system it tests. For each suite, every result below that is not a pass is accounted for. Each is put in one of four classes:
 
@@ -25,9 +25,9 @@ A test that fails is not always a fault in the system it tests. For each suite, 
 
 | suite | V86BSD | comparison |
 |---|---|---|
-| os-test | **5616 / 5816** pass | glibc 2.39 on Linux: 5228 |
+| os-test | **5626 / 5816** pass | glibc 2.39 on Linux: 5228 |
 | POSIX Shell Tests | **10,940** pass, **8** fail (31 skipped) | yash 2.55: 0 fail; dash 0.5.12: 1,271; bash 5.2 as `sh`: 1,634 |
-| Open POSIX Test Suite | **1741 / 1777** that compile pass | glibc on Linux: 1693 |
+| Open POSIX Test Suite | **1736 / 1771** that compile pass | glibc on Linux: 1693 |
 
 Every header test and every namespace test of os-test passes on V86BSD. glibc passes 3471 of the 3758 header tests and 130 of the 159 namespace tests.
 
@@ -36,7 +36,7 @@ Every header test and every namespace test of os-test passes on V86BSD. glibc pa
 **On V86BSD:**
 
 * The tests were built inside V86BSD by its own compiler, c17, against V86BSD's C library.
-* os-test and the Open POSIX Test Suite then ran on V86BSD's own kernel in QEMU, with the CPU emulated in software (no KVM).
+* os-test and the Open POSIX Test Suite then ran on V86BSD's own kernel in QEMU. The first run used the CPU emulated in software (no KVM); the second used KVM (about 3 minutes for os-test's build and run, 14 for the Open POSIX Test Suite).
 * os-test's header and namespace suites only compile, so they were done in a chroot.
 * The POSIX Shell Tests need yash for their runner, so they ran on the Linux host. The shell under test was V86BSD's `sh`, linked statically with V86BSD's C library.
 
@@ -49,15 +49,15 @@ Every header test and every namespace test of os-test passes on V86BSD. glibc pa
 Some results are affected by the environment:
 
 * The sandbox's restricted networking may have changed some of glibc's UDP results.
-* Under QEMU's software CPU, the x87 floating-point instructions give slightly different results than real hardware. 11 os-test tests fail because of this. The same tests pass on a real processor in a chroot, so they should pass under KVM.
+* Under QEMU's software CPU, the x87 floating-point instructions give slightly different results than real hardware. 11 os-test tests failed because of this in the first run. Under KVM 10 of them pass (see the basic suite below).
 
 ## os-test
 
-The tests come from a snapshot of os-test taken on 5 November 2026: 5816 tests in 14 suites. The judgements are those of os-test's own report generator, `misc/html`. A test os-test has no expected outcome for counts as not passed.
+The tests come from os-test as of 5 November 2026 (git 8e790a4, 19 October): 5816 tests in 14 suites. The judgements are those of os-test's own report generator, `misc/html`. A test os-test has no expected outcome for counts as not passed.
 
 | suite | V86BSD | glibc / Linux |
 |---|---|---|
-| basic (a test of every function) | 1151 / 1187 | 1077 / 1187 |
+| basic (a test of every function) | 1161 / 1187 | 1077 / 1187 |
 | fnmatch | 61 / 67 | 49 / 67 |
 | include (headers) | **3758 / 3758** | 3471 / 3758 |
 | io | 55 / 55 | 53 / 55 |
@@ -71,11 +71,11 @@ The tests come from a snapshot of os-test taken on 5 November 2026: 5816 tests i
 | signal | 28 / 32 | 29 / 32 |
 | stdio | 25 / 25 | 25 / 25 |
 | udp | 59 / 207 | 95 / 207 |
-| **total** | **5616 / 5816** | **5228 / 5816** |
+| **total** | **5626 / 5816** | **5228 / 5816** |
 
-V86BSD's first run passed 5501 tests. The fixes made after it are listed in `libc/STATUS.md`, stage 18; with them 0.9 passed 5610. They include errors in the floating-point exceptions and `errno` settings of the math functions, header namespace leaks, and some pseudoterminal and process-group behaviour in the kernel. 0.9.1 makes `fnmatch()` follow the 2024 text in two places (see below). The fnmatch suite was run again with 0.9.1's library, on the host rather than in QEMU, and passes 6 more tests; the table counts them.
+The first run of 0.9.1 (under QEMU's software CPU) passed 5616; the second, under KVM, 5626. V86BSD's very first run passed 5501 tests. The fixes made after it are listed in `libc/STATUS.md`, stage 18; with them 0.9 passed 5610. They include errors in the floating-point exceptions and `errno` settings of the math functions, header namespace leaks, and some pseudoterminal and process-group behaviour in the kernel. 0.9.1 makes `fnmatch()` follow the 2024 text in two places (see below). The fnmatch suite was run again with 0.9.1's library, on the host rather than in QEMU, and passes 6 more tests; the table counts them.
 
-### The 200 that do not pass on V86BSD
+### The 190 that do not pass on V86BSD
 
 **85 do not compile** (accounted for, not faults in V86BSD):
 
@@ -85,13 +85,10 @@ V86BSD's first run passed 5501 tests. The fixes made after it are listed in `lib
 
 **69 have no expected outcome yet.** These are open questions in os-test itself, mostly about UDP (one is the UDP reconnect test described below).
 
-**basic, 36:**
+**basic, 26** (36 under QEMU's software CPU):
 
-* 11 are QEMU's software x87:
-  * `sinl`, `cosl` and `tanl` of large arguments, and five complex functions, are off by a few units in the last place;
-  * the `remquo` family reports the wrong quotient bits, because QEMU emulates the `fprem1` instruction wrongly.
-  * All 11 pass on a real processor.
-* 18 are off by one unit in the last place of a long double result. POSIX does not require correct rounding, and glibc misses the same results.
+* 11 were QEMU's software x87: `sinl`, `cosl` and `tanl` of large arguments, five complex functions, and the `remquo` family (QEMU emulates the `fprem1` instruction wrongly). Under KVM 10 pass. The eleventh, `cosl(90.01)`, is off by one unit in the last place on the real processor, and is counted with the next group.
+* 19 are off by one unit in the last place of a long double result (15 complex functions, `atanhl`, `cosl`, `log10l`, `tgammal`, and `cpow`). POSIX does not require correct rounding, and glibc misses the same results (checked for the 18 of the first run). They fail the same way every time under KVM.
 * 3 (`fma`, `fmaf`, `fmal`) are a defect in the test. Its case 24 expects `fma(0, inf, 10.1)` to leave `errno` alone. POSIX says a domain error *shall* occur, which means `errno` is `EDOM`. V86BSD does what POSIX says; glibc never sets `errno` in `fma`.
 * 2 are `strfmon` and `strfmon_l`. V86BSD pads a positive amount to the width of the negative one, as glibc does; os-test reads POSIX's alignment rule differently.
 * 1 is `sockatmark`, which needs TCP urgent data. V86BSD's kernel does not support it: this is a limitation of V86BSD.
@@ -144,14 +141,14 @@ One more case, `wait.tst:100`, passes or fails depending on timing: its expected
 
 ## The Open POSIX Test Suite
 
-The suite comes from LTP (git 43bf9cf): 1888 tests, of which 1777 compile on V86BSD. The other 111 use interfaces that were removed from POSIX or are not part of it.
+The suite comes from LTP (git 43bf9cf): 1888 tests, of which 1771 compile on V86BSD. The other 117 use interfaces that were removed from POSIX or are not part of it. (The first run counted 111. The headers did not change between the runs, apart from the licence text and `revoke()`, and why six more tests failed to compile is not known.)
 
 | | passed |
 |---|---|
-| **V86BSD, on its kernel** | **1741 / 1777** |
+| **V86BSD, on its kernel** | **1736 / 1771** |
 | glibc on Linux, the same tests | 1693 |
 
-None of the 36 that do not pass is a fault in V86BSD. 26 of them do not pass on glibc either. The details, test by test, are in `libc/STATUS.md`, stage 17. In outline:
+35 of the tests that compile do not pass: 16 unsupported, 10 untested, 3 failed, 3 unresolved and 3 that crash with SIGSEGV. In the first run, where 36 did not pass, none was a fault in V86BSD, and 26 of them did not pass on glibc either; the details, test by test, are in `lib/libc/STATUS.md`, stage 17. The second run was not analysed test by test again, except for the three that crash: `pthread_cancel/5-1`, `pthread_detach/4-2` and `pthread_join/6-2` use a thread ID after the thread has ended and been reclaimed, which POSIX leaves undefined; V86BSD unmaps the thread's stack at once, where glibc keeps the old thread's memory. In outline the others are:
 
 * features that are optional or whose limits are indeterminate (process contention scope, `AIO_MAX`, `SEM_NSEMS_MAX`);
 * behaviour that is undefined, or a "may fail";
@@ -160,6 +157,6 @@ None of the 36 that do not pass is a fault in V86BSD. 26 of them do not pass on 
 
 ## Reproducing the results
 
-* **os-test:** `libc/tools/ost/README.md`. Build with `sh ost.sh build` inside V86BSD (a chroot is enough), run with `sh ost.sh run` on V86BSD's kernel, then make the report on the host with `sh libc/tools/ost/report.sh v86bsd.img root/root/os-test`.
-* **POSIX Shell Tests:** `sh utilities/sh/tests/posix_shell_tests.sh SUITE SHELL` on a host with yash and `script(1)`.
-* **Open POSIX Test Suite:** `sh libc/tools/pts.sh SRC OUT c17 [TIMEOUT [K/M]]` inside V86BSD.
+* **os-test:** `sh lib/libc/tools/ost/vmrun.sh OBJDIR OSTEST WORKDIR` builds the system image from `make buildworld buildkernel OBJDIR=...`, runs os-test in V86BSD with a progress bar and makes the report. By hand: `lib/libc/tools/ost/README.md`.
+* **POSIX Shell Tests:** `sh regress/bin/sh/tests/posix_shell_tests.sh SUITE SHELL` on a host with yash and `script(1)`.
+* **Open POSIX Test Suite:** `sh lib/libc/tools/ptsrun.sh OBJDIR PTS WORKDIR` (PTS is LTP's `testcases/open_posix_testsuite`) runs it in V86BSD with a progress bar and sums up the results; by hand, `sh lib/libc/tools/pts.sh SRC OUT c17 [TIMEOUT [K/M]]` inside V86BSD.

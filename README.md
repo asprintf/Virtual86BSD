@@ -196,22 +196,25 @@ offers.
   `lib/libc/README.md`); `LIBC_LINK=dynamic` and `static-pie` run them
   linked those ways.
 * The Open POSIX Test Suite (LTP, 1888 tests), built and run inside the
-  system on its own kernel in QEMU: of the 1777 that compile (the other
-  111 use interfaces POSIX.1-2024 removed, such as `gettimeofday`, or
-  non-POSIX ones), 1741 pass; glibc on Linux passes 1693 of them.  None
-  of the other 36 is a fault of V86BSD: 26 do not pass with glibc either
-  (options not offered, indeterminate limits, "may fail" errors, defects
-  of the tests); the others test undefined or implementation-defined
-  behaviour, are defects of the tests, or (one) need more time than QEMU's
-  emulation gives them (`lib/libc/STATUS.md`, stage 17).
+  system on its own kernel in QEMU (with KVM): of the 1771 that compile
+  (the other 117 use interfaces POSIX.1-2024 removed, such as
+  `gettimeofday`, or non-POSIX ones), 1736 pass; glibc on Linux passes
+  1693.  In the first run (QEMU's software CPU: 1741 of 1777) none of the
+  36 that did not pass was a fault of V86BSD: 26 did not pass with glibc
+  either (options not offered, indeterminate limits, "may fail" errors,
+  defects of the tests); the others test undefined or
+  implementation-defined behaviour, are defects of the tests, or (one)
+  need more time than QEMU's emulation gives them
+  (`lib/libc/STATUS.md`, stage 17).  `share/doc/conformance.md` says what
+  the second run changed.
 * os-test (Sortix's, 5816 tests in 14 suites: headers, namespace, every
   function at a basic level, fnmatch, regex, limits, I/O, processes,
   signals, pseudoterminals, stdio, UDP), built inside the system and run
-  on its own kernel in QEMU with `lib/libc/tools/ost/`: 5616 pass (glibc on
+  on its own kernel in QEMU with `lib/libc/tools/ost/`: 5626 pass (glibc on
   Linux 5228), all of the header and namespace tests among them.  Of the
-  other 200, 85 do not compile (83 call `usleep` or `gettimeofday`), 69
+  other 190, 85 do not compile (83 call `usleep` or `gettimeofday`), 69
   have no known outcome yet (UDP's open questions), and the rest are
-  QEMU's software x87, last-ulp long double results, test defects,
+  last-ulp long double results, test defects,
   os-test's "nonstandard" tests and a few readings of the standard where
   V86BSD does as glibc (`lib/libc/STATUS.md`, stage 18).
 * The POSIX Shell Tests (yash's test suite, 10,979 cases) against V86BSD's
