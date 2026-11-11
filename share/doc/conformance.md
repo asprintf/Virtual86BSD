@@ -88,7 +88,7 @@ The first run of 0.9.1 (under QEMU's software CPU) passed 5616; the second, unde
 **basic, 26** (36 under QEMU's software CPU):
 
 * 11 were QEMU's software x87: `sinl`, `cosl` and `tanl` of large arguments, five complex functions, and the `remquo` family (QEMU emulates the `fprem1` instruction wrongly). Under KVM 10 pass. The eleventh, `cosl(90.01)`, is off by one unit in the last place on the real processor, and is counted with the next group.
-* 19 are off by one unit in the last place of a long double result (15 complex functions, `atanhl`, `cosl`, `log10l`, `tgammal`, and `cpow`). POSIX does not require correct rounding, and glibc misses the same results (checked for the 18 of the first run). They fail the same way every time under KVM.
+* 19 are off by one unit in the last place of a long double result (15 complex functions, among them `cpow`, and `atanhl`, `cosl`, `log10l`, `tgammal`). POSIX does not require correct rounding, and glibc misses the same results (checked for the 18 of the first run). They fail the same way every time under KVM.
 * 3 (`fma`, `fmaf`, `fmal`) are a defect in the test. Its case 24 expects `fma(0, inf, 10.1)` to leave `errno` alone. POSIX says a domain error *shall* occur, which means `errno` is `EDOM`. V86BSD does what POSIX says; glibc never sets `errno` in `fma`.
 * 2 are `strfmon` and `strfmon_l`. V86BSD pads a positive amount to the width of the negative one, as glibc does; os-test reads POSIX's alignment rule differently.
 * 1 is `sockatmark`, which needs TCP urgent data. V86BSD's kernel does not support it: this is a limitation of V86BSD.
@@ -141,7 +141,7 @@ One more case, `wait.tst:100`, passes or fails depending on timing: its expected
 
 ## The Open POSIX Test Suite
 
-The suite comes from LTP (git 43bf9cf): 1888 tests, of which 1771 compile on V86BSD. The other 117 use interfaces that were removed from POSIX or are not part of it. (The first run counted 111. The headers did not change between the runs, apart from the licence text and `revoke()`, and why six more tests failed to compile is not known.)
+The suite comes from LTP (git 43bf9cf): 1888 tests, of which 1771 compile on V86BSD. The other 117 use interfaces that were removed from POSIX or are not part of it. (The first run counted 111. The six more are `definitions/signal_h/22-30` to `22-35`, the `POLL_*` codes of `SIGPOLL`: 0.9.1 hid them unless everything is requested, and the first run was made with 0.9.)
 
 | | passed |
 |---|---|
