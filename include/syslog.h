@@ -32,6 +32,11 @@
 #define _SYSLOG_H
 #include <bits/features.h>
 
+#if __EXT_VISIBLE
+#define __NEED___isoc_va_list
+#include <bits/alltypes.h>
+#endif
+
 #define LOG_PID    0x01
 #define LOG_CONS   0x02
 #define LOG_ODELAY 0x04
@@ -50,6 +55,11 @@
 #define LOG_NEWS   (7 << 3)
 #define LOG_UUCP   (8 << 3)
 #define LOG_CRON   (9 << 3)
+#if __EXT_VISIBLE
+#define LOG_SYSLOG   (5 << 3)
+#define LOG_AUTHPRIV (10 << 3)
+#define LOG_FTP      (11 << 3)
+#endif
 #define LOG_LOCAL0 (16 << 3)
 #define LOG_LOCAL1 (17 << 3)
 #define LOG_LOCAL2 (18 << 3)
@@ -71,11 +81,23 @@
 #define LOG_MASK(p) (1 << (p))
 #define LOG_UPTO(p) ((1 << ((p) + 1)) - 1)
 
+#if __EXT_VISIBLE
+#define LOG_NFACILITIES 24
+#define LOG_FACMASK     0x03f8
+#define LOG_PRIMASK     0x0007
+#define LOG_PRI(p)      ((p) & LOG_PRIMASK)
+#define LOG_FAC(p)      (((p) & LOG_FACMASK) >> 3)
+#define LOG_MAKEPRI(f, p) ((f) | (p))
+#endif
+
 __BEGIN_DECLS
 void closelog(void);
 void openlog(const char *, int, int);
 int setlogmask(int);
 void syslog(int, const char *, ...);
+#if __EXT_VISIBLE
+void vsyslog(int, const char *, __isoc_va_list);
+#endif
 __END_DECLS
 
 #endif

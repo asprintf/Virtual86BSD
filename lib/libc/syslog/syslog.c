@@ -105,7 +105,7 @@ int setlogmask(int m)
 	return old;
 }
 
-static void vlog(int pri, const char *fmt, va_list ap)
+void vsyslog(int pri, const char *fmt, va_list ap)
 {
 	char fmt2[512], msg[1024], hdr[128], line[1200];
 	const char *t = tag;
@@ -156,14 +156,16 @@ static void vlog(int pri, const char *fmt, va_list ap)
 	LOCK(&lock);
 	if (fd < 0)
 		opensock();
-	if (fd < 0 || send(fd, line, (size_t)n, MSG_NOSIGNAL) < 0) {
-		/* the socket may have been reconnected (syslogd restarted) */
-		if (fd >= 0) {
+	if (fd < 0 || send(fd, line, (size_t)n, MSG_NOSIGNAL | MSG_DONTWAIT) < 0) {
+		/* never wait for a syslogd that does not keep up: the message is
+		   lost (the console has it with LOG_CONS); else the socket may
+		   have been reconnected (syslogd restarted) */
+		if (fd >= 0 && errno != EAGAIN) {
 			close(fd);
 			fd = -1;
 			opensock();
 		}
-		if ((fd < 0 || send(fd, line, (size_t)n, MSG_NOSIGNAL) < 0) && (opts & LOG_CONS)) {
+		if ((fd < 0 || send(fd, line, (size_t)n, MSG_NOSIGNAL | MSG_DONTWAIT) < 0) && (opts & LOG_CONS)) {
 			int c = open("/dev/console", O_WRONLY | O_NOCTTY | O_CLOEXEC);
 			if (c >= 0) {
 				dprintf(c, "%s\r\n", line + strcspn(line, ">") + 1);
@@ -181,6 +183,6 @@ void syslog(int pri, const char *fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
-	vlog(pri, fmt, ap);
+	vsyslog(pri, fmt, ap);
 	va_end(ap);
 }
