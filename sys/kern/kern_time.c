@@ -425,6 +425,15 @@ void timer_signal_taken(struct proc *p, struct siginfo *si) {
   }
 }
 
+/* the clock an interval timer counts on: 0 ITIMER_REAL, the monotonic
+ * clock; 1 ITIMER_VIRTUAL, the process's user CPU time; 2 ITIMER_PROF, its
+ * user and system CPU time (ticks, as the scheduler counts them) */
+static uint64_t itimer_clock(struct proc *p, int which) {
+  if (which == 0)
+    return monotonic_ns();
+  return (which == 1 ? p->utime : p->utime + p->stime) * (1000000000UL / HZ);
+}
+
 void itimer_tick(void) {
   uint64_t now = monotonic_ns();
   /* alarm / ITIMER_REAL of every process */
@@ -438,6 +447,22 @@ void itimer_tick(void) {
       } else
         it->expires = 0;
       signal_simple(p, SIGALRM);
+    }
+    /* ITIMER_VIRTUAL (SIGVTALRM) and ITIMER_PROF (SIGPROF): when the CPU
+     * time the process has used reaches the timer */
+    for (int w = 1; w <= 2; w++) {
+      struct itimer *ct = &p->itimer[w];
+      if (p->state != P_ALIVE || !ct->expires)
+        continue;
+      uint64_t cpu = itimer_clock(p, w);
+      if (cpu < ct->expires)
+        continue;
+      if (ct->interval) {
+        while (ct->expires <= cpu)
+          ct->expires += ct->interval;
+      } else
+        ct->expires = 0;
+      signal_simple(p, w == 1 ? SIGVTALRM : SIGPROF);
     }
   }
   list_for_each_safe(a, n, &armed) {
@@ -476,8 +501,9 @@ struct kitimerval {
   int64_t isec, iusec, vsec, vusec;
 };
 
-static void itv_get(struct itimer *it, struct kitimerval *v) {
-  uint64_t now = monotonic_ns();
+static void itv_get(struct proc *p, int which, struct kitimerval *v) {
+  struct itimer *it = &p->itimer[which];
+  uint64_t now = itimer_clock(p, which);
   uint64_t r = it->expires > now ? it->expires - now : (it->expires ? 1000 : 0);
   v->isec = (int64_t)(it->interval / 1000000000UL);
   v->iusec = (int64_t)(it->interval % 1000000000UL / 1000);
@@ -489,7 +515,7 @@ long sys_getitimer(long which, long uv) {
   if (which < 0 || which > 2)
     return -EINVAL;
   struct kitimerval v;
-  itv_get(&cur_proc()->itimer[which], &v);
+  itv_get(cur_proc(), (int)which, &v);
   return copy_to_user((void *)uv, &v, sizeof(v)) ? -EFAULT : 0;
 }
 
@@ -500,14 +526,14 @@ long sys_setitimer(long which, long unew, long uold) {
   struct kitimerval v, o;
   if (unew && copy_from_user(&v, (void *)unew, sizeof(v)))
     return -EFAULT;
-  itv_get(it, &o);
+  itv_get(cur_proc(), (int)which, &o);
   if (unew) {
     if (v.iusec < 0 || v.iusec >= 1000000 || v.vusec < 0 || v.vusec >= 1000000)
       return -EINVAL;
     uint64_t f = irq_save();
     it->interval = (uint64_t)v.isec * 1000000000UL + (uint64_t)v.iusec * 1000;
     uint64_t val = sat_add(ts_to_ns(v.vsec, 0), (uint64_t)v.vusec * 1000);
-    it->expires = val ? sat_add(monotonic_ns(), val) : 0;
+    it->expires = val ? sat_add(itimer_clock(cur_proc(), (int)which), val) : 0;
     irq_restore(f);
   }
   if (uold && copy_to_user((void *)uold, &o, sizeof(o)))

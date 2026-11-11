@@ -144,7 +144,9 @@ struct cred {
 enum { P_ALIVE, P_ZOMBIE, P_DEAD };
 
 struct itimer {
-  uint64_t expires;  /* monotonic ns, 0 = off */
+  uint64_t expires;  /* ITIMER_REAL: monotonic ns; ITIMER_VIRTUAL and ITIMER_PROF:
+                        the process's user, or user and system, CPU time in ns;
+                        0 = off */
   uint64_t interval;
 };
 
