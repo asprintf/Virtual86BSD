@@ -50,6 +50,9 @@
 #            set (the default on V86BSD), udp.h is changed to take
 #            NO_GETIFADDRS as one of them, once, and it is defined for the
 #            udp suite
+#   PROGRESS every N tests (default 25) a line "ost: PHASE DONE/TOTAL
+#            SUITE/TEST" says how far the phase is (tests already done by
+#            an earlier run count); vmrun.sh turns these into a bar
 # For a diagnostic run only, OST_SHIM=1 compiles with shim.h, which gives
 # the tests the usleep() and gettimeofday() that POSIX removed.
 tools=$(cd "$(dirname "$0")" && pwd)
@@ -70,18 +73,37 @@ phase=$1; shift
 
 tests() { find . -name '*.c' | sed 's,^\./,,; s,\.c$,,' | sort; }
 
+# count_tests PHASE SUITE...: total, the tests the phase goes through
+count_tests() {
+	p=$1; shift
+	total=0 done_n=0
+	for s do
+		[ "$p" = run ] && case $s in include|namespace) continue ;; esac
+		total=$((total + $(cd "$s" 2>/dev/null && tests | wc -l)))
+	done
+}
+
+# progress SUITE TEST: one more test, and every PROGRESS tests a line
+progress() {
+	done_n=$((done_n + 1))
+	[ $((done_n % ${PROGRESS:-25})) -eq 0 ] || return 0
+	echo "ost: $phase $done_n/$total $1/$2"
+}
+
 build_suite() {
 	s=$1 out=$top/out/$os/$1
 	cd "$top/$s" || return
 	case $s in
 	include)
 		for t in $(tests); do
+			progress "$s" "$t"
 			[ -f "$out/$t.out" ] && continue
 			../misc/try-compile.sh "$CC $CFLAGS" "$t" "$LDFLAGS" "$EXTRA" "$OS" "$out"
 		done ;;
 	namespace)
 		[ -x ../misc/namespace ] || $CC ../misc/namespace.c -o ../misc/namespace $LDFLAGS || return
 		for t in $(tests); do
+			progress "$s" "$t"
 			[ -f "$out/$t.out" ] && continue
 			for k in i dM; do
 				f=E; [ $k = dM ] && f="E -dM"
@@ -106,6 +128,7 @@ build_suite() {
 				  mv udp.h.new udp.h; } || return
 		fi
 		for t in $(tests); do
+			progress "$s" "$t"
 			[ -x "$t" ] && continue
 			../misc/compile.sh "$CC $CFLAGS $f" "$t" "$LDFLAGS" "$EXTRA" "$OS" "$out"
 		done
@@ -122,6 +145,7 @@ run_suite() {
 	case $s in include|namespace) return ;; esac
 	cd "$top/$s" || return
 	for t in $(tests); do
+		progress "$s" "$t"
 		[ -f "$out/$t.out" ] && continue
 		[ -x "$t" ] || continue
 		mkdir -p "$(dirname "$out/$t.out")"
@@ -145,11 +169,15 @@ case $phase in
 build)
 	mkdir -p "out/$os"
 	[ -f "out/$os/uname.out" ] || misc/uname.sh > "out/$os/uname.out"
-	for s do echo "build $s"; build_suite "$s"; cd "$top"; done ;;
+	count_tests build "$@"
+	for s do echo "build $s"; build_suite "$s"; cd "$top"; done
+	echo "ost: build done, $done_n tests" ;;
 run)
 	# the system the tests ran on (build may have been in a chroot)
 	mkdir -p "out/$os" && misc/uname.sh > "out/$os/uname.out"
+	count_tests run "$@"
 	for s do echo "run $s"; run_suite "$s"; cd "$top"; done
+	echo "ost: run done, $done_n tests"
 	rm -f "out/$os/.current" ;;
 *) echo "usage: sh ost.sh build|run [suite...]" >&2; exit 2 ;;
 esac

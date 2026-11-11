@@ -13,22 +13,30 @@ these files run it with POSIX sh and c17:
   `-Werror` as "a warning fails"
 * `shim.h` — for a diagnostic run only: `usleep()` and `gettimeofday()`,
   which POSIX removed and V86BSD does not have, for the tests that call them
+* `vmrun.sh` — on the host: the whole run in a VM, with a progress bar
 * `report.sh` — on the host: takes the results out of V86BSD's disk image
   and makes os-test's report (`html/index.html`, `os-test.json`)
 
-The whole run, with os-test unpacked on the host into the tree the image
+`vmrun.sh` does all of it below for a built tree and an os-test checkout:
+`sh vmrun.sh OBJDIR OSTEST WORKDIR` makes the root and the image, boots
+V86BSD (with KVM where there is some), builds and runs the tests with a
+progress bar (`ost.sh` prints "ost: PHASE DONE/TOTAL SUITE/TEST" every
+`PROGRESS` tests, 25 by default) and runs `report.sh`.  The same command
+again continues a run that was cut short.
+
+By hand: the whole run, with os-test unpacked on the host into the tree the image
 is made from (`root/root/os-test`, which is `/root/os-test` in V86BSD):
 
 1. Build.  Inside V86BSD:
 
         cd /root/os-test
-        sh /usr/src/libc/tools/ost/ost.sh build
+        sh /usr/src/lib/libc/tools/ost/ost.sh build
 
    or, much faster without KVM, in a chroot of `root` before the image is
    made (there `uname` is the host's, so name the system):
 
         cd /root/os-test
-        OS=V86BSD NO_GETIFADDRS=1 sh /usr/src/libc/tools/ost/ost.sh build
+        OS=V86BSD NO_GETIFADDRS=1 sh /usr/src/lib/libc/tools/ost/ost.sh build
 
    The include and namespace suites only compile; build is all they need.
 
@@ -36,11 +44,11 @@ is made from (`root/root/os-test`, which is `/root/os-test` in V86BSD):
    the udp suite needs a LAN), then shut V86BSD down:
 
         cd /root/os-test
-        sh /usr/src/libc/tools/ost/ost.sh run
+        sh /usr/src/lib/libc/tools/ost/ost.sh run
 
 3. The report, on the host:
 
-        sh libc/tools/ost/report.sh v86bsd.img root/root/os-test
+        sh lib/libc/tools/ost/report.sh v86bsd.img root/root/os-test
 
    It runs `e2fsck -p` on the image, copies `/root/os-test/out/v86bsd` to
    `root/root/os-test/out/v86bsd`, builds `misc/html` there if needed and

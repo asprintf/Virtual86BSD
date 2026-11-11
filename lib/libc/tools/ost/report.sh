@@ -46,13 +46,19 @@ if [ ! -f "$img" ] || [ ! -f "$ost/misc/html.c" ]; then
 	exit 2
 fi
 
+# an image with a partition table (boot.sh, mkdisk.sh since the disklabel
+# came) holds the file system at 1 MiB; a bare ext2 image starts at 0
+fs=$img
+[ "$(dd if="$img" bs=1 skip=510 count=2 2>/dev/null | od -An -tx1 | tr -d ' \n')" = 55aa ] &&
+	fs="$img?offset=1048576"
+
 # the image must be clean before debugfs reads it (1: errors corrected)
-e2fsck -p "$img" > /dev/null || [ $? -eq 1 ] || {
+e2fsck -p "$fs" > /dev/null || [ $? -eq 1 ] || {
 	echo "report.sh: e2fsck failed on $img" >&2; exit 1; }
 
 tmp=${TMPDIR:-/tmp}/ost-report.$$
 mkdir "$tmp" || exit 1
-debugfs -c -R "rdump $dir/out/v86bsd $tmp" "$img" > /dev/null 2>&1
+debugfs -c -R "rdump $dir/out/v86bsd $tmp" "$fs" > /dev/null 2>&1
 if [ ! -d "$tmp/v86bsd" ]; then
 	echo "report.sh: no $dir/out/v86bsd in $img" >&2
 	rm -rf "$tmp"
