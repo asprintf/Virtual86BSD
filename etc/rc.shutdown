@@ -1,0 +1,8 @@
+# /etc/rc.shutdown - run by init(8) before the system stops (halt, reboot,
+# power off), after the login sessions have been hung up.
+#
+# The daemons are not stopped one by one: when this ends, init sends TERM to
+# every process and KILL to what is left, and reboot(2) writes the file
+# systems.  Put here what has to happen before that.
+
+exit 0

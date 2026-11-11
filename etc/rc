@@ -1,0 +1,74 @@
+# /etc/rc - system startup, run by init(8) at boot and after single-user mode.
+#
+# Output and errors go to the console, which is the controlling terminal.
+# init treats a non-zero exit status as a failed boot and starts a shell on
+# the console (single-user mode); when that shell ends, this runs again.
+# Local changes belong in /etc/rc.conf.local and /etc/rc.local.
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin
+export PATH
+umask 022
+
+# The text of a file without comments and blank lines.
+stripcom() {
+	[ -s "$1" ] || return 0
+	sed -e 's/#.*//' -e 's/^[ 	]*//' -e 's/[ 	]*$//' -e '/^$/d' "$1"
+}
+
+# The name of this host is in /etc/myname (the kernel starts as "v86bsd").
+if [ -s /etc/myname ]; then
+	hostname "$(stripcom /etc/myname | head -n 1)"
+fi
+
+# Which daemons start, and with what flags: rc.conf, then rc.conf.local.
+[ -f /etc/rc.conf ] && . /etc/rc.conf
+[ -f /etc/rc.conf.local ] && . /etc/rc.conf.local
+
+# The kernel mounted / (as it was told: read-only or not), /dev and /proc.
+# Make / writable, then mount what /etc/fstab lists.
+if ! mount -uw /; then
+	echo 'cannot make / writable'
+	exit 1
+fi
+mount -a || echo 'warning: some file systems in /etc/fstab did not mount'
+
+# Kernel state: /etc/sysctl.conf.
+[ -s /etc/sysctl.conf ] && sysctl -f /etc/sysctl.conf
+
+# Prune /tmp before anyone can log in.
+if [ "${clear_tmp-YES}" != NO ]; then
+	echo 'clearing /tmp'
+	(cd /tmp && find . ! -name . -prune -exec rm -rf -- {} \;)
+fi
+
+# Left-over files: logins stay shut out until shutdown says otherwise, the
+# run-time files of the last boot are gone, and utmp starts empty.
+rm -f /etc/nologin
+(cd /var/run && find . ! -name . -prune -exec rm -rf -- {} \;)
+: > /var/run/utmp
+chmod 644 /var/run/utmp
+
+# Daemons: NAME_flags in rc.conf is NO (off) or the flags to start it with,
+# an empty value being no flags.
+started=
+for d in 'cron /usr/sbin/crond' 'atd /usr/sbin/atd'; do
+	name=${d%% *}
+	prog=${d#* }
+	eval "flags=\${${name}_flags-NO}"
+	[ "$flags" = NO ] && continue
+	if [ -x "$prog" ]; then
+		$prog $flags
+		started="$started $name"
+	else
+		started="$started $name(absent)"
+	fi
+done
+[ -n "$started" ] && echo "starting daemons:$started."
+
+# Anything of this machine's own.
+if [ -f /etc/rc.local ]; then
+	echo 'starting local daemons:'
+	. /etc/rc.local
+fi
+
+exit 0

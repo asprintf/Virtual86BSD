@@ -48,8 +48,9 @@
 #                         the utilities' (regress/run_tests.sh), and
 #                         regress-sys, the kernel's k_* tests and the C
 #                         library's s_* tests (regress/sys/kern/run.sh;
-#                         K_NET="41000 41001" adds k_net); meant for inside
-#                         V86BSD
+#                         K_NET="41000 41001" adds k_net), and regress-etc,
+#                         /etc/rc run against prepared files (regress/etc);
+#                         meant for inside V86BSD
 #   make clean            what was built in the tree by make in bin, sbin ...
 #   make cleandir         clean, and $(OBJDIR) removed
 #
@@ -119,6 +120,7 @@ regress:
 	@st=0; \
 	$(MAKE) regress-utils || st=1; \
 	$(MAKE) regress-sys || st=1; \
+	$(MAKE) regress-etc || st=1; \
 	exit $$st
 
 regress-utils:
@@ -126,6 +128,9 @@ regress-utils:
 
 regress-sys:
 	sh regress/sys/kern/run.sh
+
+regress-etc:
+	sh regress/etc/test_rc.sh
 
 clean:
 	@for d in bin sbin libexec usr.bin usr.sbin lib/libc sbin/init; do \
@@ -136,4 +141,4 @@ cleandir: clean
 	rm -rf '$(OBJDIR)'
 
 .PHONY: all buildworld buildkernel installworld distribution installkernel \
-	newroot image release boot regress regress-utils regress-sys clean cleandir
+	newroot image release boot regress regress-utils regress-sys regress-etc clean cleandir

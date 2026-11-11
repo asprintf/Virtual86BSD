@@ -1,0 +1,8 @@
+# /etc/ttys - the lines init(8) runs a getty on: the line (a device in /dev),
+# the command (the line is added to it), the TERM the terminal is, on or off,
+# and secure (root may log in there).  SIGHUP to init rereads this file.
+#
+# tty00, cua00 and ttyC0 are one terminal, the console (the serial port and the
+# screen): run one getty on it.
+tty00	"/usr/libexec/getty std.115200"	vt220	on secure
+ttyC0	"/usr/libexec/getty std.9600"	vt220	off secure
