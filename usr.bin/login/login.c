@@ -51,6 +51,11 @@
  * shell is run with the name `-sh', in the home directory (or /, with a
  * note, if there is none).
  *
+ * What happens is told to syslogd (facility auth): every failed attempt
+ * (notice, with the name that was given and the terminal), ten failures in a
+ * row (crit), a root login (notice) and a root login that was refused (crit).
+ * Passwords are never logged.
+ *
  * -f: the user is already known (root only; used by su and the like): no
  * password.  Not there: wtmp and lastlog (no records of past logins),
  * login classes, accounting. */
@@ -69,6 +74,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/time.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 #include <utmpx.h>
@@ -173,9 +179,21 @@ static void bad_name(void)
 	puts("Login incorrect");
 }
 
+/* the name as the log shows it: not longer than a name can be */
+static void logfail(const char *tty, const char *name)
+{
+	syslog(LOG_NOTICE, "LOGIN FAILURE ON %s, %.*s", tty, NAME_MAX_LEN, name);
+}
+
+static int give_up(const char *tty)
+{
+	syslog(LOG_CRIT, "REPEATED LOGIN FAILURES ON %s", tty);
+	return 1;
+}
+
 int main(int argc, char *argv[])
 {
-	int ch, fflag = 0, pflag = 0, tries = 0, exists;
+	int ch, fflag = 0, pflag = 0, tries = 0, exists, refused = 0;
 	char *name = NULL, *tty, *ttyshort, home[PATH_MAX], shell[PATH_MAX];
 	struct spw pw;
 	struct utmpx ut;
@@ -216,6 +234,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 	ttyshort = strncmp(tty, "/dev/", 5) ? tty : tty + 5;
+	openlog("login", LOG_ODELAY, LOG_AUTH);
 
 	for (;;) {
 		char *pass;
@@ -230,9 +249,10 @@ int main(int argc, char *argv[])
 		}
 		if (name[0] == '-' || strlen(name) > NAME_MAX_LEN || strchr(name, ':') || strchr(name, '/')) {
 			bad_name();
+			logfail(ttyshort, name);
 			name = NULL;
 			if (++tries >= MAXTRIES)
-				return 1;
+				return give_up(ttyshort);
 			continue;
 		}
 		exists = spw_lookup(PATH_MASTER_PASSWD, name, &pw) == 1;
@@ -248,15 +268,26 @@ int main(int argc, char *argv[])
 		}
 		if (ok && pw.uid == 0 && !secure_line(ttyshort)) {
 			fprintf(stdout, "login: root login refused on %s\n", ttyshort);
+			syslog(LOG_CRIT, "ROOT LOGIN REFUSED ON %s", ttyshort);
 			ok = 0;
+			refused = 1;
 		}
 		if (ok)
 			break;
 		bad_name();
+		if (!refused)
+			logfail(ttyshort, name);
+		refused = 0;
 		fflag = 0; /* -f is for the name it was given */
 		name = NULL;
 		if (++tries >= MAXTRIES)
-			return 1;
+			return give_up(ttyshort);
+	}
+	if (pw.uid == 0) {
+		if (strcmp(name, "root"))
+			syslog(LOG_NOTICE, "ROOT LOGIN (%s) ON %s", name, ttyshort);
+		else
+			syslog(LOG_NOTICE, "ROOT LOGIN ON %s", ttyshort);
 	}
 	alarm(0);
 

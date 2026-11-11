@@ -174,4 +174,41 @@ t "not a terminal" "login: not a terminal" 1 sh -c '"$1" tuser 2>&1 < /dev/null'
 t "too many arguments" "usage: login [-fp] [--] [name]" 1 sh -c '"$1" a b 2>&1 < /dev/null' sh "$L"
 t "a bad option: usage, status 1" "" 1 "$L" -x
 ok "the passwords of the file are not changed by logins" sh -c 'case $(grep "^tuser:" /etc/master.passwd | cut -d: -f2) in "$1") exit 0;; esac; exit 1' sh "$HASH"
+
+# what login tells syslogd (facility auth): with a syslogd of the test's own on
+# /dev/log, when there is none there
+SD=${SYSLOGD:-/usr/sbin/syslogd}
+if [ -x "$SD" ] && [ ! -e /dev/log ]; then
+    printf 'auth.debug\t%s/authlog\n' "$T" > "$T/slconf"
+    "$SD" -f "$T/slconf" -k /dev/null -P "$T/spid"
+    logged() {   # a pattern that must be in the log (10 seconds at most)
+        i=0
+        while [ $i -lt 10 ]; do
+            grep -E -- "$1" "$T/authlog" > /dev/null 2>&1 && return 0
+            sleep 1; i=$((i+1))
+        done
+        return 1
+    }
+    o=$("$D" -T 40 "e:Password:" "s:not-the-password\n" "e:Login incorrect" "e:login: " "d:" "w:" -- "$T/wrap" plain "$L" tuser)
+    ok "a failed login is logged with the terminal and the name" logged ' login: LOGIN FAILURE ON [a-z0-9/]+, tuser$'
+    o=$("$D" -T 40 "e:Password:" "s:not-the-password\n" "e:Login incorrect" "e:login: " "d:" "w:" -- "$T/wrap" plain "$L" nosuchuser)
+    ok "so is one of a user that does not exist" logged ' login: LOGIN FAILURE ON [a-z0-9/]+, nosuchuser$'
+    ok "the password is not in the log" sh -c '! grep not-the-password "$1/authlog" > /dev/null' sh "$T"
+    o=$("$D" -T 40 "e:Password:" "s:secret\n" "s:exit\n" "w:" -- "$T/wrap" secure "$L" root)
+    ok "a root login is logged" logged ' login: ROOT LOGIN ON [a-z0-9/]+$'
+    o=$("$D" -T 40 "e:Password:" "s:secret\n" "e:Login incorrect" "e:login: " "d:" "w:" -- "$T/wrap" plain "$L" root)
+    ok "a root login on a line that is not secure is logged as refused" logged ' login: ROOT LOGIN REFUSED ON [a-z0-9/]+$'
+    ok "...and not as a failed login of root" sh -c '! grep "LOGIN FAILURE ON [a-z0-9/]*, root" "$1/authlog" > /dev/null' sh "$T"
+    o=$("$D" -T 40 "e:Password:" "s:secret\n" "s:exit\n" "w:" -- "$T/wrap" plain "$L" tuser)
+    ok "a good login of a user is not a failure" sh -c '[ "$(grep -c "LOGIN FAILURE ON [a-z0-9/]*, tuser" "$1/authlog")" = 1 ]' sh "$T"
+    set --
+    i=0
+    while [ $i -lt 10 ]; do set -- "$@" "e:Password:" "s:bad\n" "e:Login incorrect"; i=$((i+1)); [ $i -lt 10 ] && set -- "$@" "e:login: " "s:tuser\n"; done
+    o=$("$D" -T 60 "$@" "w:" -- "$T/wrap" plain "$L" tuser)
+    ok "ten failures are logged as repeated" logged ' login: REPEATED LOGIN FAILURES ON [a-z0-9/]+$'
+    # (a line that repeats the one before is not written again: "last message repeated N times")
+    t "all eleven failures are in the log, as lines or as repeats" "11" 0 sh -c 'awk "/LOGIN FAILURE ON [a-z0-9\\/]+, tuser\$/ { n++ } /last message repeated/ { n += \$(NF - 1) } END { print n }" "$1/authlog"' sh "$T"
+    kill "$(cat "$T/spid")"
+    i=0; while [ -e /dev/log ] && [ $i -lt 10 ]; do sleep 1; i=$((i+1)); done
+fi
 done_tests login
