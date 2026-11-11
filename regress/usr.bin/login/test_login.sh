@@ -64,7 +64,8 @@ exec "$@"
 WRAP
 chmod 755 "$T/wrap"
 users() {
-    { cat "$T/save/master.passwd"
+    { grep -v '^root:' "$T/save/master.passwd"
+      echo "root:$HASH:0:0::0:0:root:/root:/bin/sh"
       echo "tuser:$HASH:2001:2001::0:0:Test User:$T/home/tuser:$T/tsh"
       echo "tnopw::2002:2002::0:0:No Password:$T/home/tuser:$T/tsh"
       echo "tlock:*:2003:2003::0:0:Locked:$T/home/tuser:$T/tsh"
@@ -146,16 +147,18 @@ ok "...and gives no shell" hasnt "$o" "SHELL RAN"
 ok "...with status 0" has "$o" "[exit 0]"
 o=$("$D" -T 40 "w:" -- "$T/wrap" plain "$L" tnopw)
 ok "nologin applies to every user that is not root" hasnt "$o" "SHELL RAN"
-o=$("$D" -T 40 "s:echo ROOT=\$(id -u)\n" "s:exit\n" "w:" -- "$T/wrap" secure "$L" root)
+o=$("$D" -T 40 "e:Password:" "s:secret\n" "s:echo ROOT=\$(id -u)\n" "s:exit\n" "w:" -- "$T/wrap" secure "$L" root)
 ok "root gets in in spite of /etc/nologin (on a secure line)" has "$o" "ROOT=0"
 rm -f /etc/nologin
 # root and the secure lines
-o=$("$D" -T 40 "e:Login incorrect" "e:login: " "d:" "w:" -- "$T/wrap" plain "$L" root)
-ok "root is refused on a line that is not secure" has "$o" "login: root login refused on "
+o=$("$D" -T 40 "e:Password:" "s:secret\n" "e:Login incorrect" "e:login: " "d:" "w:" -- "$T/wrap" plain "$L" root)
+ok "root is refused on a line that is not secure (the right password)" has "$o" "login: root login refused on "
 ok "...and gets Login incorrect" has "$o" "Login incorrect"
-o=$("$D" -T 40 "s:echo ROOT=\$(id -u)\n" "s:exit\n" "w:" -- "$T/wrap" secure "$L" root)
-ok "root gets in on a secure line (an empty password: none asked)" has "$o" "ROOT=0"
-ok "...with no password prompt" hasnt "$o" "Password:"
+o=$("$D" -T 40 "e:Password:" "s:secret\n" "s:echo ROOT=\$(id -u)\n" "s:exit\n" "w:" -- "$T/wrap" secure "$L" root)
+ok "root gets in on a secure line with its password" has "$o" "ROOT=0"
+o=$("$D" -T 40 "e:Password:" "s:wrong\n" "e:Login incorrect" "e:login: " "d:" "w:" -- "$T/wrap" secure "$L" root)
+ok "root with a wrong password: Login incorrect" has "$o" "Login incorrect"
+ok "...and no shell" hasnt "$o" "ROOT=0"
 
 # -f, the motd and .hushlogin, and the usage
 o=$("$D" -T 40 "w:" -- "$T/wrap" plain "$L" -f tuser)
