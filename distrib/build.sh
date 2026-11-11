@@ -173,7 +173,8 @@ hostmk() { "$MAKE" CC="$cc" "$@"; }
 # copy SRCDIR DEST: a fresh copy of the sources (without objects and
 # archives built there by some other compiler)
 copy() {
-	mkdir -p "$(dirname "$2")" && cp -pR "$SRC/$1" "$2" || fail "copying $1"
+	# -L: include/sys/*.h are links to sys/sys, and the copy has no sys/sys beside it
+	mkdir -p "$(dirname "$2")" && cp -pRL "$SRC/$1" "$2" || fail "copying $1"
 	find "$2" \( -name "*.o" -o -name "*.a" \) -type f -exec rm -f {} + || fail "cleaning $1"
 }
 
@@ -227,8 +228,8 @@ do_newroot() {
 # built but installed from the build directory LIBC, and the utilities are
 # stripped: those of bin/ and sbin/ linked statically, the rest dynamically.
 # abi_headers INCLUDEDIR ABI: what the kernel's sys/ gives the C library's
-# include/: reboot.h always (it is a symlink to sys/sys in the tree, a
-# file here), syscall.h, V86BSD's own numbers, only for the native ABI
+# include/: reboot.h always (a link to sys/sys in the tree, a file here),
+# syscall.h, V86BSD's own numbers, only for the native ABI
 abi_headers() {
 	rm -f "$1/sys/reboot.h" "$1/sys/syscall.h"
 	cp "$SRC/sys/sys/reboot.h" "$1/sys/reboot.h" || fail "reboot.h"

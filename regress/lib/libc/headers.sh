@@ -15,7 +15,7 @@ case $cc in
 	wflags="-Wall -Wextra -pedantic -Werror"; strict=1;;
 esac
 case $cc in *c17*) IFS0=" ";; *) IFS0="|";; esac
-for h in $(cd "$inc" && find . -name '*.h' ! -path './bits/*' | sed 's|^\./||' | sort); do
+for h in $(cd "$inc" && find -L . -name '*.h' ! -path './bits/*' | sed 's|^\./||' | sort); do
 	oldifs=$IFS; IFS=$IFS0; set -f
 	for mode in $modes; do
 		IFS=$oldifs

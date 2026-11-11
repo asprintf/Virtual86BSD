@@ -105,7 +105,7 @@ check: all
 PREFIX   = /usr/local
 install: all
 	mkdir -p $(DESTDIR)$(PREFIX)/include $(DESTDIR)$(PREFIX)/lib
-	cp -R $(INCLUDE)/. $(DESTDIR)$(PREFIX)/include
+	cp -RL $(INCLUDE)/. $(DESTDIR)$(PREFIX)/include
 	@# each file is copied beside its place and renamed into it: copying
 	@# over the libc.so that running programs map would change it under
 	@# them (they crash, and so does the copy: in a running V86BSD)
