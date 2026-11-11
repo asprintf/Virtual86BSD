@@ -83,6 +83,7 @@
 #include <sys/reboot.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 #include <utmpx.h>
@@ -124,10 +125,14 @@ static enum state after_single = RUNCOM; /* where the console shell leads */
 static int single_poweroff;               /* after it: power off */
 static char console_path[64] = "/dev/tty00";
 
+/* what init complains about goes to the console (its stderr) and to
+   syslogd (daemon.err; a message sent before syslogd runs is lost, the
+   console has it) */
 static void say(const char *s) {
   (void)!write(2, "init: ", 6);
   (void)!write(2, s, strlen(s));
   (void)!write(2, "\n", 1);
+  syslog(LOG_ERR, "%s", s);
 }
 
 static void say2(const char *s, const char *t) {
@@ -640,6 +645,8 @@ static enum state death(void) {
   int st;
   int howto = (int)down_howto;
   shutdown_sessions();
+  syslog(LOG_NOTICE, "going down: %s",
+         howto & RB_POWERDOWN ? "power off" : howto & RB_HALT ? "halt" : "reboot");
   if (safe_file(PATH_RCSHUTDOWN) == 1) {
     pid_t pid = run_script(PATH_RCSHUTDOWN);
     if (pid > 0 && !wait_for(pid, &st, 0, SCRIPT_WAIT)) {
@@ -681,6 +688,7 @@ int main(int argc, char **argv) {
       say2("unknown argument", argv[i]);
   }
   setup_signals();
+  openlog("init", LOG_ODELAY, LOG_DAEMON);
   setenv("PATH", STD_PATH, 1);
   setenv("HOME", "/root", 1);
   setenv("SHELL", "/bin/sh", 1);
