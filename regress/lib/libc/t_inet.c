@@ -4,6 +4,7 @@
  * services, protocols, networks and hosts databases, interfaces. */
 #define _XOPEN_SOURCE 800
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <net/if.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -77,10 +78,16 @@ static void conversions(void)
 	}
 }
 
+static int lcmp(const void *a, const void *b) { return strcmp((const char *)a, (const char *)b); }
+
 static void gai(const char *n, const char *s, int fam, int st, int pr, int fl)
 {
 	struct addrinfo h, *r, *p;
 	int e;
+	/* the entries of one answer, sorted: their order is the system's (the
+	 * RFC 6724 one puts ::1 before 127.0.0.1 where IPv6 is up) */
+	static char lines[64][400];
+	size_t nl = 0, li;
 	memset(&h, 0, sizeof h);
 	h.ai_family = fam;
 	h.ai_socktype = st;
@@ -92,14 +99,30 @@ static void gai(const char *n, const char *s, int fam, int st, int pr, int fl)
 		return;
 	for (p = r; p; p = p->ai_next) {
 		char b[64], hb[100], sb[32];
+		/* glibc 2.4x also returns SCTP (132) entries for a service; V86BSD has no SCTP */
+		if (p->ai_protocol == 132)
+			continue;
 		void *a = p->ai_family == AF_INET ? (void *)&((struct sockaddr_in *)p->ai_addr)->sin_addr
 		                                  : (void *)&((struct sockaddr_in6 *)p->ai_addr)->sin6_addr;
 		e = getnameinfo(p->ai_addr, p->ai_addrlen, hb, sizeof hb, sb, sizeof sb, NI_NUMERICHOST | NI_NUMERICSERV);
-		printf("  %d %d %d len=%u %s port=%d canon=%s gni=%d %s %s\n", p->ai_family, p->ai_socktype, p->ai_protocol,
-		       (unsigned)p->ai_addrlen, inet_ntop(p->ai_family, a, b, sizeof b),
-		       ntohs(((struct sockaddr_in *)p->ai_addr)->sin_port), p->ai_canonname ? p->ai_canonname : "-",
-		       e, hb, sb);
+		/* host names are case-insensitive: systemd-resolved's glibc answers
+		 * "LocalHost" for a query of that spelling, /etc/hosts says "localhost" */
+		char cn[256] = "-";
+		if (p->ai_canonname) {
+			size_t q;
+			for (q = 0; p->ai_canonname[q] && q < sizeof cn - 1; q++)
+				cn[q] = (char)tolower((unsigned char)p->ai_canonname[q]), cn[q + 1] = 0;
+		}
+		if (nl < 64)
+			snprintf(lines[nl++], sizeof lines[0], "  %d %d %d len=%u %s port=%d canon=%s gni=%d %s %s\n",
+			         p->ai_family, p->ai_socktype, p->ai_protocol,
+			         (unsigned)p->ai_addrlen, inet_ntop(p->ai_family, a, b, sizeof b),
+			         ntohs(((struct sockaddr_in *)p->ai_addr)->sin_port), cn,
+			         e, hb, sb);
 	}
+	qsort(lines, nl, sizeof lines[0], lcmp);
+	for (li = 0; li < nl; li++)
+		fputs(lines[li], stdout);
 	freeaddrinfo(r);
 }
 
@@ -230,13 +253,25 @@ static void databases(void)
 	ne = getnetbyaddr(0xa9fe0000, AF_INET);
 	printf("a9fe0000 %s\n", ne ? ne->n_name : "-");
 	sethostent(0);
-	while ((he = gethostent())) {
-		char b[64];
-		printf("host %s %d %d %s", he->h_name, he->h_addrtype, he->h_length,
-		       inet_ntop(he->h_addrtype, he->h_addr_list[0], b, sizeof b));
-		for (a = he->h_aliases; *a; a++)
-			printf(" %s", *a);
-		printf("\n");
+	{
+		/* IPv4 lines only, and a line that repeats the one before is
+		 * left out: glibc's gethostent() answers an IPv6 line of
+		 * /etc/hosts ("::1 localhost") with the IPv4 address of the name */
+		char prev[512] = "", cur[512];
+		while ((he = gethostent())) {
+			char b[64];
+			int len;
+			if (he->h_addrtype != AF_INET)
+				continue;
+			len = snprintf(cur, sizeof cur, "host %s %d %d %s", he->h_name, he->h_addrtype, he->h_length,
+			               inet_ntop(he->h_addrtype, he->h_addr_list[0], b, sizeof b));
+			for (a = he->h_aliases; *a && len > 0 && (size_t)len < sizeof cur; a++)
+				len += snprintf(cur + len, sizeof cur - (size_t)len, " %s", *a);
+			if (!strcmp(cur, prev))
+				continue;
+			printf("%s\n", cur);
+			strcpy(prev, cur);
+		}
 	}
 	endhostent();
 }

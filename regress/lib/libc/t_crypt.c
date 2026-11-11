@@ -5,15 +5,24 @@
  * raise to 1000, as the specification of the SHA schemes says.)
  * REFLIBS: -lcrypt */
 #define _XOPEN_SOURCE 800
+#include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include "out.h"
 
 char *crypt(const char *, const char *);
 
+/* The BSDi extended DES salts ("_...") are left out where the reference
+ * libcrypt has none (libxcrypt without the old hashes): run.sh sets
+ * T_CRYPT_EXTDES to 0 then. */
+static int extdes = 1;
+
 static void t(const char *key, const char *salt)
 {
-	char *r = crypt(key, salt);
+	char *r;
+	if (salt[0] == '_' && !extdes)
+		return;
+	r = crypt(key, salt);
 	os(salt); oc(' ');
 	os(!r || *r == '*' ? "fail" : r);
 	onl();
@@ -39,6 +48,9 @@ int main(void)
 	static const char b64[] = "./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 	unsigned i, j;
 	char k[64], s[24];
+	const char *e = getenv("T_CRYPT_EXTDES");
+	if (e && *e == '0')
+		extdes = 0;
 	for (i = 0; i < sizeof keys / sizeof *keys; i++) {
 		os(keys[i]); onl();
 		for (j = 0; j < sizeof salts / sizeof *salts; j++)

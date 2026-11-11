@@ -64,7 +64,8 @@ int main(void)
 	}
 	oi(ffs(0)); oi(ffs(1)); oi(ffs(0x80000000)); oi(ffsl(1L << 40)); oi(ffsll(-1LL)); onl();
 	/* the messages: as glibc's (strsignal of the real-time signals differs: SIGRTMIN) */
-	for (it = 0; it < 136; it++) { os(strerror(it)); onl(); }
+	/* (0-133: this library's errnos; newer glibc has messages beyond) */
+	for (it = 0; it < 134; it++) { os(strerror(it)); onl(); }
 	for (it = 0; it < 32; it++) { os(strsignal(it)); onl(); }
 	os(strsignal(65)); onl(); os(strsignal(-3)); onl();
 	oflush();

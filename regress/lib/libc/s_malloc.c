@@ -71,7 +71,10 @@ int main(void)
 		a = aligned_alloc(al, n); CHECK(a && ((uintptr_t)a & (al - 1)) == 0); free(a);
 	}
 	{ void *a; CHECK(posix_memalign(&a, 3, 10) == EINVAL); CHECK(posix_memalign(&a, 4, 10) == EINVAL);
-	  errno = 0; CHECK(aligned_alloc(3, 10) == 0 && errno == EINVAL); }
+	  /* through a pointer: gcc knows aligned_alloc as a builtin and, at -O2,
+	   * does not call the library with an alignment that is not a power of 2 */
+	  void *(*volatile aa)(size_t, size_t) = aligned_alloc;
+	  errno = 0; CHECK(aa(3, 10) == 0 && errno == EINVAL); }
 	free(0);
 	CHECK(realloc(0, 10) != 0);
 	os("malloc ok\n"); oflush();

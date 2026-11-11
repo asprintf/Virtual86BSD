@@ -156,6 +156,12 @@ static void out(const char *name, const char *args, struct res r, double tol, do
 	 * as pow(0, y < 0) has; glibc sets errno only for a finite y */
 	if (special && !strncmp(name, "pow", 3) && r.err == ERANGE && ref.err == 0 && u == 0)
 		bad = 0;   /* (the same value: an infinity) */
+	/* deliberate: asinh and atanh of a subnormal x: "a range error may
+	 * occur" (POSIX.1-2024), so errno ERANGE is optional; newer glibc sets
+	 * it, this library returns x and leaves errno alone */
+	if (special && (!strncmp(name, "asinh", 5) || !strncmp(name, "atanh", 5)) &&
+	    r.err == 0 && ref.err == ERANGE && u == 0)
+		bad = 0;
 	record(name, u > 1e29 ? 1e9 : u);
 	if (bad) {
 		show(&r, a); show(&ref, b);

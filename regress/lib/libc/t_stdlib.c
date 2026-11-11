@@ -4,6 +4,12 @@
 #include <limits.h>
 #include "out.h"
 
+#ifdef __GLIBC__
+/* qsort_r() is POSIX.1-2024; glibc declares it only for _GNU_SOURCE, which
+ * would also turn on C23's "0b101" in strtol() */
+void qsort_r(void *, size_t, size_t, int (*)(const void *, const void *, void *), void *);
+#endif
+
 static const char *inputs[] = {
 	"0", "-0", "+0", "1", "-1", "  42", "\t\n\v\f\r 42x", "0x", "0x1g", "0X1F", "-0x10", "010", "08", "0b101",
 	"2147483647", "2147483648", "-2147483648", "-2147483649",

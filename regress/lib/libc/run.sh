@@ -6,12 +6,17 @@
 #          results, this one's reads and compares them ("-c")
 #   s_*.c  self-checking: against this library only; they print FAIL lines
 # LIBC_LIB, as for tools/libc-cc, selects another build of the library.
+# TESTS="t_crypt s_malloc" runs only those.
 cd "$(dirname "$0")" || exit 1
 ccname=${1:-gcc}
 refcc=${REFCC:-gcc}
 out=out/$ccname${LIBC_LINK:+-$LIBC_LINK}
 mkdir -p "$out"
 cc="../../../lib/libc/tools/libc-cc $ccname"
+# The language is C17 (gcc 15's default is C23, whose strtol() takes "0b101", and
+# whose headers redirect strtol, scanf ... to other functions): the reference
+# is built as gnu17; with c17 as the compiler under test there is no choice.
+case $ccname in c17*) std= ;; *) std=-std=gnu17 ;; esac
 fail=0 n=0
 # locales for t_locale.c, made with the localedef found (glibc's or that
 # of the POSIX utilities: both write glibc's format), if there is one
@@ -54,11 +59,21 @@ if [ "$LIBC_LINK" = dynamic ]; then
 	TEST_DL_DIR=$PWD/$out/dl
 	export TEST_DL_DIR
 fi
+# t_crypt: does the reference libcrypt do BSDi extended DES ("_" salts)?  Some
+# (libxcrypt without the old hashes) do not, and then those are left out.
+printf '#include <unistd.h>\nint main(void) { return crypt("a", "_J9..rasm") == 0; }\n' > "$out/extdes.c"
+if $refcc -w -o "$out/extdes" "$out/extdes.c" -lcrypt 2>/dev/null && "$out/extdes"; then
+	T_CRYPT_EXTDES=1
+else
+	T_CRYPT_EXTDES=0
+fi
+export T_CRYPT_EXTDES
 for t in t_*.c; do
+	case " ${TESTS:-${t%.c}} " in *" ${t%.c} "*) ;; *) continue ;; esac
 	b=${t%.c}; n=$((n + 1))
 	# extra libraries of the reference build (and empty ones in ours)
 	libs=$(sed -n 's/^ \* REFLIBS: \(.*\) \*\/$/\1/p' "$t")
-	if ! $refcc -O2 -w -o "$out/$b.ref" "$t" $libs || ! $cc -O2 -w -o "$out/$b.lib" "$t" $libs; then
+	if ! $refcc -std=gnu17 -O2 -w -o "$out/$b.ref" "$t" $libs || ! $cc $std -O2 -w -o "$out/$b.lib" "$t" $libs; then
 		echo "$b: build failed"; fail=$((fail + 1)); continue
 	fi
 	"$out/$b.ref" > "$out/$b.ref.txt" 2>&1
@@ -67,8 +82,9 @@ for t in t_*.c; do
 	else echo "$b: FAILED (outputs differ: $out/$b.ref.txt $out/$b.lib.txt)"; fail=$((fail + 1)); fi
 done
 for t in u_*.c; do
+	case " ${TESTS:-${t%.c}} " in *" ${t%.c} "*) ;; *) continue ;; esac
 	b=${t%.c}; n=$((n + 1))
-	if ! $refcc -O2 -w -o "$out/$b.ref" "$t" -lm || ! $cc -O2 -w -o "$out/$b.lib" "$t" -lm; then
+	if ! $refcc -std=gnu17 -O2 -w -o "$out/$b.ref" "$t" -lm || ! $cc $std -O2 -w -o "$out/$b.lib" "$t" -lm; then
 		echo "$b: build failed"; fail=$((fail + 1)); continue
 	fi
 	"$out/$b.ref" > "$out/$b.ref.txt" 2>&1
@@ -76,8 +92,9 @@ for t in u_*.c; do
 	else echo "$b: FAILED (see $out/$b.txt)"; grep FAIL "$out/$b.txt" | head -5; fail=$((fail + 1)); fi
 done
 for t in s_*.c; do
+	case " ${TESTS:-${t%.c}} " in *" ${t%.c} "*) ;; *) continue ;; esac
 	b=${t%.c}; n=$((n + 1))
-	if ! $cc -O2 -w -o "$out/$b.lib" "$t"; then
+	if ! $cc $std -O2 -w -o "$out/$b.lib" "$t"; then
 		echo "$b: build failed"; fail=$((fail + 1)); continue
 	fi
 	"$out/$b.lib" > "$out/$b.txt" 2>&1; st=$?
