@@ -62,6 +62,9 @@
 #   KERNCONF=name    the kernel configuration (default GENERIC)
 #   BUILDER=u@h      the name in the kernel's banner (default: that of this
 #                    machine); to compare two builds, give both the same
+#   ROOTPW=word      root's password in the new root (default: root, as in
+#                    etc/master.passwd; needs openssl on the host; it must
+#                    not contain a single quote)
 #   HOSTCC=cc        the host's compiler for stage 0 (default: c17, c99 or cc)
 #   BUILDFLAGS=-n    all programs statically linked
 #
@@ -81,7 +84,7 @@ BOOTFLAGS =
 # (BUILDER, DESTDIR, HOSTCC, KERNCONF and BUILDFLAGS are not set here: what
 # is not given is empty, and the script has its own defaults.  They are given
 # to the script, not left to the environment.)
-BUILD = BUILDER='$(BUILDER)' CC='$(HOSTCC)' MAKE='$(MAKE)' \
+BUILD = BUILDER='$(BUILDER)' ROOTPW='$(ROOTPW)' CC='$(HOSTCC)' MAKE='$(MAKE)' \
 	sh distrib/build.sh -o '$(OBJDIR)' -d '$(DESTDIR)' -c '$(KERNCONF)' $(BUILDFLAGS)
 
 all: buildworld buildkernel

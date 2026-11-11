@@ -57,7 +57,8 @@
 #
 # In the environment: CC (the host's compiler: without it c17, c99 or cc, the
 # first there is), MAKE, and BUILDER=user@host, the name in the kernel's banner
-# (without it that of this machine; to compare two builds, give both the same).
+# (without it that of this machine; to compare two builds, give both the same),
+# and ROOTPW, root's password for `distribution' (without it the tree's: root).
 #
 # What is needed: a POSIX system with a C compiler, make and ar, on x86-64
 # Linux (or V86BSD itself).  On Ubuntu: build-essential.  Nothing is installed
@@ -469,6 +470,16 @@ do_distribution() {
 	hier
 	cp "$SRC"/etc/* "$dest/etc/" || fail "copying etc/"
 	chmod 600 "$dest/etc/master.passwd"	# (the hashes: git keeps no modes but the x bit)
+	# ROOTPW=word: root's password is that (the tree's is `root'), with a
+	# salt of its own; the word goes to openssl by its input, not its arguments
+	if [ -n "$ROOTPW" ]; then
+		command -v openssl >/dev/null 2>&1 || fail "ROOTPW needs openssl on the host (openssl passwd -6)"
+		h=$(printf '%s\n' "$ROOTPW" | openssl passwd -6 -stdin) && [ -n "$h" ] || fail "hashing ROOTPW"
+		pw=$dest/etc/master.passwd
+		( umask 077; H=$h awk 'BEGIN { FS = OFS = ":" } $1 == "root" { $2 = ENVIRON["H"] } { print }' "$pw" > "$pw.new" ) &&
+			mv "$pw.new" "$pw" && chmod 600 "$pw" || fail "setting root's password"
+		unset h
+	fi
 	mkdir -p "$dest/usr/src"
 	for d in README.md LICENSE Makefile bootstrap.sh chroot.sh mkdisk.sh boot.sh distrib etc share include lib bin sbin libexec usr.bin usr.sbin sys regress ports; do
 		cp -pR "$SRC/$d" "$dest/usr/src/" || fail "copying the sources"
