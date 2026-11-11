@@ -66,6 +66,11 @@
  * The utmp entry of a session whose process ended is marked DEAD_PROCESS
  * (login writes the USER_PROCESS entry).  There is no wtmp.
  *
+ * A getty that ends less than GETTY_SPACING seconds after it started is
+ * followed by one that sleeps GETTY_SLEEP seconds first (a getty or login
+ * that cannot run must not loop), unless a user had logged in on the line:
+ * then the session was real, however short, and the next getty is at once.
+ *
  * POSIX C, plus reboot(2) (<sys/reboot.h>).
  */
 #define _XOPEN_SOURCE 800
@@ -101,7 +106,7 @@ struct session {
   char getty[160];   /* the getty command (the tty name is added) */
   char type[32];     /* the terminal type, or "" */
   pid_t pid;         /* 0: no process */
-  time_t started;    /* monotonic seconds of the last start, 0: never */
+  time_t started;    /* monotonic seconds of the last start, 0: never (or a login was done) */
   int shutdown;      /* do not restart; remove when the process ended */
   int present;       /* still in /etc/ttys (while it is read) */
 };
@@ -202,12 +207,16 @@ static int valid_name(const char *s) {
 
 /* ---- sessions ---- */
 
-static void clear_utmp(pid_t pid) {
+/* mark the record of the session's process dead; 1 if it was a user's (a
+   login had been done) */
+static int clear_utmp(pid_t pid) {
   struct utmpx *u;
+  int user = 0;
   setutxent();
   while ((u = getutxent()) != NULL) {
     if ((u->ut_type == USER_PROCESS || u->ut_type == LOGIN_PROCESS) && u->ut_pid == pid) {
       struct utmpx d = *u;
+      user = u->ut_type == USER_PROCESS;
       d.ut_type = DEAD_PROCESS;
       memset(d.ut_user, 0, sizeof d.ut_user);
       memset(d.ut_host, 0, sizeof d.ut_host);
@@ -218,6 +227,7 @@ static void clear_utmp(pid_t pid) {
     }
   }
   endutxent();
+  return user;
 }
 
 static void remove_session(int i) {
@@ -229,7 +239,10 @@ static void collect_session(pid_t pid) {
   for (int i = 0; i < nsess; i++) {
     if (sess[i].pid != pid)
       continue;
-    clear_utmp(pid);
+    /* a line that had a login is not one that fails to start: its next
+       getty is not held back, however soon the user logged out */
+    if (clear_utmp(pid))
+      sess[i].started = 0;
     sess[i].pid = 0;
     if (sess[i].shutdown)
       remove_session(i);
