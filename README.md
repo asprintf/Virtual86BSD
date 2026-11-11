@@ -164,7 +164,8 @@ The kernel starts `/sbin/init`, which runs `/etc/rc` (the host name from
 `/etc/myname`, `mount -uw /` and `mount -a` from `/etc/fstab`, `/etc/sysctl.conf`,
 clearing `/tmp`, the daemons that `/etc/rc.conf` turns on), then a `getty` on each
 line `/etc/ttys` switches on (the console, `tty00`), which asks for a login name
-and runs `login`.  root has no password until `passwd` gives it one.
+and runs `login`.  root's password is `root` until `passwd` changes it (`make release
+ROOTPW=word` builds a root with another).
 `shutdown -p now` (or `halt -p`, `reboot`) stops the system: init hangs up the
 sessions, runs `/etc/rc.shutdown`, ends every process and powers off after the
 disks are written.  (Without an `/etc/ttys`, init keeps its old behaviour: the
