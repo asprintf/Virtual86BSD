@@ -29,7 +29,7 @@
  */
 
 /* mem.c - the character device table; /dev/null, zero, full, random,
-   urandom, kmsg; raw block devices; the nodes of devtmpfs. */
+   urandom, kmsg, klog; raw block devices; the nodes of devtmpfs. */
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/file.h>
@@ -146,11 +146,51 @@ static ssize_t kmsg_write(struct file *f, const char *buf, size_t n, off_t *pos)
   return (ssize_t)n;
 }
 
+/* /dev/klog: the kernel's messages for syslogd(8), each taken once; a
+   read waits for a message (poll too), O_NONBLOCK does not.  What is
+   copied is only taken after it reached the reader. */
+#define KLOG_CHUNK 4096
+static ssize_t klog_read(struct file *f, char *buf, size_t n, off_t *pos) {
+  (void)pos;
+  if (n == 0)
+    return 0;
+  uint64_t fl = irq_save();
+  while (!klog_avail()) {
+    if (f->flags & O_NONBLOCK) {
+      irq_restore(fl);
+      return -EAGAIN;
+    }
+    if (sleep_on(&klog_wq, 0, true) == -EINTR) {
+      irq_restore(fl);
+      return -ERESTARTSYS;
+    }
+  }
+  irq_restore(fl);
+  char *tmp = kmalloc(KLOG_CHUNK);
+  if (!tmp)
+    return -ENOMEM;
+  size_t k = klog_peek(tmp, MIN(n, (size_t)KLOG_CHUNK));
+  ssize_t r = copy_to_user(buf, tmp, k) ? -EFAULT : (ssize_t)k;
+  kfree(tmp);
+  if (r > 0)
+    klog_consume((size_t)r);
+  return r;
+}
+static unsigned klog_poll(struct file *f) {
+  (void)f;
+  return klog_avail() ? POLLIN | POLLRDNORM : 0;
+}
+static void klog_release(struct file *f) {
+  (void)f;
+  klog_close();
+}
+
 static const struct file_ops null_fops = {.read = null_read, .write = null_write, .seekable = true};
 static const struct file_ops zero_fops = {.read = zero_read, .write = null_write, .seekable = true};
 static const struct file_ops full_fops = {.read = zero_read, .write = full_write, .seekable = true};
 static const struct file_ops random_fops = {.read = random_read, .write = null_write};
 static const struct file_ops kmsg_fops = {.read = kmsg_read, .write = kmsg_write};
+static const struct file_ops klog_fops = {.read = klog_read, .poll = klog_poll, .release = klog_release};
 
 static int mem_open(struct inode *ino, struct file *f) {
   switch (MINOR(ino->rdev)) {
@@ -160,6 +200,10 @@ static int mem_open(struct inode *ino, struct file *f) {
   case 8:
   case 9: f->fops = &random_fops; return 0;
   case 11: f->fops = &kmsg_fops; return 0;
+  case 13:
+    klog_open();
+    f->fops = &klog_fops;
+    return 0;
   }
   return -ENXIO;
 }
@@ -260,6 +304,7 @@ int devtmpfs_populate(struct super *sb) {
       {"null", S_IFCHR | 0666, 1, 3},     {"zero", S_IFCHR | 0666, 1, 5},
       {"full", S_IFCHR | 0666, 1, 7},     {"random", S_IFCHR | 0666, 1, 8},
       {"urandom", S_IFCHR | 0666, 1, 9},  {"kmsg", S_IFCHR | 0644, 1, 11},
+      {"klog", S_IFCHR | 0600, 1, 13},
       {"tty", S_IFCHR | 0666, 5, 0},      {"console", S_IFCHR | 0600, 5, 1},
       {"ptmx", S_IFCHR | 0666, 5, 2},     {"tty0", S_IFCHR | 0620, 4, 0},
       {"ttyC0", S_IFCHR | 0620, 4, 1},    {"tty00", S_IFCHR | 0660, 4, 64},

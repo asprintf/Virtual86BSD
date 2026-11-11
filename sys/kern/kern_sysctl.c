@@ -48,6 +48,7 @@
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/sysctl.h>
+#include <sys/conf.h>
 #include <uvm/uvm.h>
 #include <machine/cpu.h>
 
@@ -193,6 +194,19 @@ static long kern_sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp
     list_for_each(p, &all_procs) n++;
     irq_restore(f);
     return rd_int(oldp, oldlenp, newp, n);
+  }
+  case KERN_MSGBUFSIZE:
+    return rd_int(oldp, oldlenp, newp, MSGBUFSIZE);
+  case KERN_MSGBUF: {
+    /* the text of the kernel's log buffer (dmesg(8)), not OpenBSD's struct msgbuf */
+    if (newp)
+      return -EPERM;
+    char *tmp = kmalloc(MSGBUFSIZE);
+    if (!tmp)
+      return -ENOMEM;
+    long r = rd_bytes(oldp, oldlenp, newp, tmp, msgbuf_read(tmp, MSGBUFSIZE));
+    kfree(tmp);
+    return r;
   }
   case KERN_NTHREADS: {
     int n = 0;

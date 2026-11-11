@@ -45,6 +45,20 @@ void vga_init(void);
 void vga_write(const char *s, size_t n);
 size_t log_read(char *dst, size_t n);
 
+/* the log buffer (subr_prf.c): kernel messages since boot, the last
+   MSGBUFSIZE bytes of them.  msgbuf_read copies them from the start of
+   a line; the klog_* functions are /dev/klog's reader, which takes each
+   message once (the first reader gets what was printed since boot). */
+#define MSGBUFSIZE 65536
+struct waitq;
+size_t msgbuf_read(char *dst, size_t n);
+extern struct waitq klog_wq;
+void klog_open(void);
+void klog_close(void);
+bool klog_avail(void);
+size_t klog_peek(char *dst, size_t n);
+void klog_consume(size_t n);
+
 /* Linux device numbers */
 #define MKDEV(ma, mi) (((uint64_t)(ma) << 8) | ((mi) & 0xff) | ((uint64_t)((mi) & ~0xff) << 12))
 #define MAJOR(d) ((unsigned)(((d) >> 8) & 0xfff))
