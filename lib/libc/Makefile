@@ -96,6 +96,7 @@ check: all
 	tools/genmk.sh | cmp -s - rules.mk || { echo "rules.mk is out of date: run tools/genmk.sh > rules.mk"; exit 1; }
 	sh tools/check-namespace.sh $(B)/lib/libc.a
 	sh ../../regress/lib/libc/headers.sh $(CCNAME)
+	sh ../../regress/lib/libc/legacy.sh $(CCNAME)
 	sh ../../regress/lib/libc/run.sh $(CCNAME)
 
 # the headers, and libc.a, the start files and the empty libraries (and

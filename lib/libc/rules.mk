@@ -283,7 +283,9 @@ OBJS = \
 	$(B)/obj/math/trunc.o \
 	$(B)/obj/misc/fmtmsg.o \
 	$(B)/obj/misc/getopt.o \
+	$(B)/obj/misc/gettimeofday.o \
 	$(B)/obj/misc/ioctl.o \
+	$(B)/obj/misc/itimer.o \
 	$(B)/obj/misc/misc.o \
 	$(B)/obj/misc/mman.o \
 	$(B)/obj/misc/posix_devctl.o \
@@ -291,11 +293,13 @@ OBJS = \
 	$(B)/obj/misc/resource.o \
 	$(B)/obj/misc/revoke.o \
 	$(B)/obj/misc/select.o \
+	$(B)/obj/misc/setpgrp.o \
 	$(B)/obj/misc/termios.o \
 	$(B)/obj/misc/time_ops.o \
 	$(B)/obj/misc/tty.o \
 	$(B)/obj/misc/typed_mem.o \
 	$(B)/obj/misc/uname.o \
+	$(B)/obj/misc/usleep.o \
 	$(B)/obj/monetary/strfmon.o \
 	$(B)/obj/mqueue/mqueue.o \
 	$(B)/obj/multibyte/__mb.o \
@@ -342,9 +346,15 @@ OBJS = \
 	$(B)/obj/signal/raise.o \
 	$(B)/obj/signal/sig2str.o \
 	$(B)/obj/signal/sigaction.o \
+	$(B)/obj/signal/sighold.o \
+	$(B)/obj/signal/sigignore.o \
+	$(B)/obj/signal/siginterrupt.o \
 	$(B)/obj/signal/signal.o \
 	$(B)/obj/signal/sigops.o \
+	$(B)/obj/signal/sigpause.o \
+	$(B)/obj/signal/sigrelse.o \
 	$(B)/obj/signal/sigset.o \
+	$(B)/obj/signal/sigsetdisp.o \
 	$(B)/obj/spawn/actions.o \
 	$(B)/obj/spawn/attr.o \
 	$(B)/obj/spawn/spawn.o \
@@ -933,9 +943,17 @@ $(B)/obj/misc/getopt.o: misc/getopt.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/getopt.c
 
+$(B)/obj/misc/gettimeofday.o: misc/gettimeofday.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/gettimeofday.c
+
 $(B)/obj/misc/ioctl.o: misc/ioctl.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/ioctl.c
+
+$(B)/obj/misc/itimer.o: misc/itimer.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/itimer.c
 
 $(B)/obj/misc/misc.o: misc/misc.c $(HDRS)
 	mkdir -p $(B)/obj/misc
@@ -965,6 +983,10 @@ $(B)/obj/misc/select.o: misc/select.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/select.c
 
+$(B)/obj/misc/setpgrp.o: misc/setpgrp.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/setpgrp.c
+
 $(B)/obj/misc/termios.o: misc/termios.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/termios.c
@@ -984,6 +1006,10 @@ $(B)/obj/misc/typed_mem.o: misc/typed_mem.c $(HDRS)
 $(B)/obj/misc/uname.o: misc/uname.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/uname.c
+
+$(B)/obj/misc/usleep.o: misc/usleep.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/usleep.c
 
 $(B)/obj/monetary/strfmon.o: monetary/strfmon.c $(HDRS)
 	mkdir -p $(B)/obj/monetary
@@ -1169,6 +1195,18 @@ $(B)/obj/signal/sigaction.o: signal/sigaction.c $(HDRS)
 	mkdir -p $(B)/obj/signal
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/sigaction.c
 
+$(B)/obj/signal/sighold.o: signal/sighold.c $(HDRS)
+	mkdir -p $(B)/obj/signal
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/sighold.c
+
+$(B)/obj/signal/sigignore.o: signal/sigignore.c $(HDRS)
+	mkdir -p $(B)/obj/signal
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/sigignore.c
+
+$(B)/obj/signal/siginterrupt.o: signal/siginterrupt.c $(HDRS)
+	mkdir -p $(B)/obj/signal
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/siginterrupt.c
+
 $(B)/obj/signal/signal.o: signal/signal.c $(HDRS)
 	mkdir -p $(B)/obj/signal
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/signal.c
@@ -1177,9 +1215,21 @@ $(B)/obj/signal/sigops.o: signal/sigops.c $(HDRS)
 	mkdir -p $(B)/obj/signal
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/sigops.c
 
+$(B)/obj/signal/sigpause.o: signal/sigpause.c $(HDRS)
+	mkdir -p $(B)/obj/signal
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/sigpause.c
+
+$(B)/obj/signal/sigrelse.o: signal/sigrelse.c $(HDRS)
+	mkdir -p $(B)/obj/signal
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/sigrelse.c
+
 $(B)/obj/signal/sigset.o: signal/sigset.c $(HDRS)
 	mkdir -p $(B)/obj/signal
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/sigset.c
+
+$(B)/obj/signal/sigsetdisp.o: signal/sigsetdisp.c $(HDRS)
+	mkdir -p $(B)/obj/signal
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/sigsetdisp.c
 
 $(B)/obj/spawn/actions.o: spawn/actions.c $(HDRS)
 	mkdir -p $(B)/obj/spawn
