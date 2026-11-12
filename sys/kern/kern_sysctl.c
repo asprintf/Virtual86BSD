@@ -49,6 +49,8 @@
 #include <sys/proc.h>
 #include <sys/sysctl.h>
 #include <sys/conf.h>
+#include <sys/socket.h>
+#include <net/if_var.h>
 #include <uvm/uvm.h>
 #include <machine/cpu.h>
 
@@ -298,9 +300,20 @@ static long vm_sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp, 
   }
 }
 
-/* sysctl(name, namelen, oldp, oldlenp, newp, newlen).  net.* is reserved
-   and answers nothing yet (the kernel's IP has no knobs to show); machdep,
-   debug, ddb and vfs are reserved too. */
+/* net.route: the routing table, as BSD's route(8) and netstat(1) ask for it
+   (net, AF_ROUTE, 0, AF_INET or 0, NET_RT_DUMP, 0), but an array of struct
+   rtinfo.  The rest of net.* answers nothing yet (the kernel's IP has no
+   knobs to show). */
+static long net_sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp, void *newp) {
+  if (namelen != 5 || name[0] != AF_ROUTE || name[1] != 0 || (name[2] != 0 && name[2] != AF_INET) ||
+      name[3] != NET_RT_DUMP)
+    return -EOPNOTSUPP;
+  char tmp[RTMAX * sizeof(struct rtinfo)];
+  return rd_bytes(oldp, oldlenp, newp, tmp, (size_t)rt_dump(tmp, sizeof tmp));
+}
+
+/* sysctl(name, namelen, oldp, oldlenp, newp, newlen).  machdep, debug, ddb
+   and vfs are reserved. */
 long sys_sysctl(long uname, long namelen, long oldp, long oldlenp, long newp, long newlen) {
   int name[CTL_MAXNAME];
   size_t oldlen = 0;
@@ -324,6 +337,9 @@ long sys_sysctl(long uname, long namelen, long oldp, long oldlenp, long newp, lo
     break;
   case CTL_VM:
     err = vm_sysctl(name + 1, (unsigned)namelen - 1, (void *)oldp, &oldlen, (void *)newp, (size_t)newlen);
+    break;
+  case CTL_NET:
+    err = net_sysctl(name + 1, (unsigned)namelen - 1, (void *)oldp, &oldlen, (void *)newp);
     break;
   default:
     return -EOPNOTSUPP;
