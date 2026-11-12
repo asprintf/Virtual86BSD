@@ -96,7 +96,8 @@ void set_kernel_stack(uint64_t top) {
 }
 
 /* 8259 PICs, remapped to vectors 32..47 */
-static void (*irq_fn[16])(void);
+#define IRQ_SHARE 4 /* handlers on one line: PCI cards share (level-triggered) lines */
+static void (*irq_fn[16][IRQ_SHARE])(void);
 
 static void pic_init(void) {
   outb(0x20, 0x11);
@@ -111,8 +112,15 @@ static void pic_init(void) {
   outb(0xa1, 0xff);
 }
 
+/* fn is called on every interrupt of the line, with the others sharing it:
+   it looks at its own device and does nothing when that was not the one */
 void irq_register(int irq, void (*fn)(void)) {
-  irq_fn[irq] = fn;
+  int i = 0;
+  while (i < IRQ_SHARE && irq_fn[irq][i] && irq_fn[irq][i] != fn)
+    i++;
+  if (i == IRQ_SHARE)
+    panic("irq_register: too many devices on irq %d", irq);
+  irq_fn[irq][i] = fn;
   if (irq < 8)
     outb(0x21, inb(0x21) & ~(1 << irq));
   else
@@ -184,8 +192,8 @@ void trap_handler(struct regs *r) {
     pic_eoi(irq);
     if (irq == 0)
       account_tick((r->cs & 3) == 3);
-    if (irq_fn[irq])
-      irq_fn[irq]();
+    for (int i = 0; i < IRQ_SHARE && irq_fn[irq][i]; i++)
+      irq_fn[irq][i]();
     irq_nesting--;
     return;
   }
