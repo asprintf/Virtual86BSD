@@ -33,7 +33,8 @@
 /*
  * Adapted for V86BSD from OpenBSD sbin/fsck_ffs/pass5.c (revision 1.52).
  * Changes: integer types from <stdint.h>; the kernel's lock, ucred, quota and inode
- *   headers are not needed; otherwise as OpenBSD.
+ *   headers are not needed; cg_frsum is cast for ffs_fragacct (unsigned against signed
+ *   pointers, which c17 reports); otherwise as OpenBSD.
  */
 
 #include <sys/param.h>	/* MAXBSIZE roundup setbit */
@@ -284,7 +285,7 @@ pass5(void)
 			} else if (frags > 0) {
 				newcg->cg_cs.cs_nffree += frags;
 				blk = blkmap(fs, cg_blksfree(newcg), i);
-				ffs_fragacct(fs, blk, newcg->cg_frsum, 1);
+				ffs_fragacct(fs, blk, (int32_t *)newcg->cg_frsum, 1);
 			}
 		}
 		if (fs->fs_contigsumsize > 0) {
