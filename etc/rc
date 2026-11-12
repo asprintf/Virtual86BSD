@@ -25,6 +25,28 @@ fi
 [ -f /etc/rc.conf.local ] && . /etc/rc.conf.local
 
 # The kernel mounted / (as it was told: read-only or not), /dev and /proc.
+# Check the file systems of /etc/fstab first, / among them (it is still
+# read-only if it is an FFS: fsck_ffs asks for a reboot when it had to change
+# it).  A failed check leaves rc, and init starts the single-user shell: fix
+# it there with fsck, and leave the shell to go on.
+if [ -x /sbin/fsck ]; then
+	fsck -p
+	case $? in
+	0) ;;
+	4)
+		echo 'The root file system was changed: rebooting.'
+		reboot
+		echo 'reboot failed'
+		exit 1 ;;
+	8)
+		echo 'Automatic file system check failed: run fsck manually.'
+		exit 1 ;;
+	*)
+		echo 'fsck failed in an unknown way: run fsck manually.'
+		exit 1 ;;
+	esac
+fi
+
 # Make / writable, then mount what /etc/fstab lists.
 if ! mount -uw /; then
 	echo 'cannot make / writable'

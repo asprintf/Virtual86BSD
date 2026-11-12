@@ -1,4 +1,5 @@
 # /etc/fstab - the file systems mount(8) -a mounts at boot: special, directory,
-# type, options, dump frequency, fsck pass.  The kernel itself mounts / (and
-# /dev and /proc); mount -uw / makes it writable.
-/dev/disk0s1 / ext2 rw 1 1
+# type, options, dump frequency, fsck pass (0: fsck leaves it alone, as it must
+# a type it has no fsck_TYPE for).  The kernel itself mounts / (and /dev and
+# /proc); mount -uw / makes it writable.
+/dev/disk0s1 / ext2 rw 1 0

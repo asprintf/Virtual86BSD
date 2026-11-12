@@ -41,7 +41,7 @@ trap cleanup EXIT
 # what a boot starts from
 setup() {
     printf '# the name of this host\n\nrctest.example   # a comment\n' > /etc/myname
-    printf '# fstab\ntmpfs %s/m tmpfs rw 0 0\n/dev/disk0s1 / ext2 rw 1 1\n' "$TD" > /etc/fstab
+    printf '# fstab\ntmpfs %s/m tmpfs rw 0 0\n/dev/disk0s1 / ext2 rw 1 0\n' "$TD" > /etc/fstab
     printf '# sysctl.conf\nkern.domainname=rc.example\n' > /etc/sysctl.conf
     rm -f /etc/rc.conf.local /etc/rc.local
     echo "no logins" > /etc/nologin
@@ -79,6 +79,31 @@ ok "and syslogd's own start" sh -c 'grep " syslogd: start$" /var/log/messages > 
 # stop what it started
 stopd() { for p in $(ps -A -o pid= -o comm= | awk '$2 == "crond" || $2 == "atd" || $2 == "syslogd" { print $1 }'); do kill $p 2>/dev/null; done; sleep 1; }
 stopd
+
+# fsck: rc runs `fsck -p' first (the real one ran above, on the fstab with
+# only passes of 0), and what it says decides: 4 the root was changed
+# (reboot), 8 and the rest a failed check; both leave rc before /tmp is cleared
+mkdir "$TD/fake"
+printf '#!/bin/sh\necho "$@" >> %s/fsck.args\nexit $(cat %s/fsck.status)\n' "$TD" "$TD" > "$TD/fake/fsck"
+printf '#!/bin/sh\necho reboot >> %s/reboot.log\n' "$TD" > "$TD/fake/reboot"
+chmod +x "$TD/fake/fsck" "$TD/fake/reboot"
+# (rc sets PATH itself: the copy of rc has the fake programs first in it)
+sed "s|^PATH=|PATH=$TD/fake:|" "$RC" > "$TD/rc.fake"
+runfake() { echo "$1" > "$TD/fsck.status"; rm -f "$TD/fsck.args" "$TD/reboot.log"; setup; out=$(sh "$TD/rc.fake" 2>&1); st=$?; }
+runfake 8
+t "fsck 8: rc fails" "1" 0 echo $st
+ok "  and says to run fsck" sh -c 'echo "$1" | grep "^Automatic file system check failed: run fsck manually\.$" > /dev/null' sh "$out"
+t "  fsck was run with -p" "-p" 0 cat "$TD/fsck.args"
+ok "  nothing went on: /tmp is not cleared" sh -c '! echo "$1" | grep "clearing" > /dev/null' sh "$out"
+ok "  and it did not reboot" sh -c '[ ! -e "$1/reboot.log" ]' sh "$TD"
+runfake 4
+t "fsck 4: rc fails (after the reboot)" "1" 0 echo $st
+ok "  it said the root was changed" sh -c 'echo "$1" | grep "^The root file system was changed: rebooting\.$" > /dev/null' sh "$out"
+t "  and rebooted" "reboot" 0 cat "$TD/reboot.log"
+runfake 2
+t "fsck 2: rc fails" "1" 0 echo $st
+ok "  an unknown failure" sh -c 'echo "$1" | grep "^fsck failed in an unknown way: run fsck manually\.$" > /dev/null' sh "$out"
+rm -f "$TD/fsck.status"
 
 # again: the mount is there already (nothing is mounted twice), rc.conf.local
 # changes the daemons and keeps /tmp, rc.local runs
