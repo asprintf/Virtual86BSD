@@ -84,6 +84,7 @@ uint64_t irq_save(void);
 void irq_restore(uint64_t flags);
 void fxsave(void *area), fxrstor(void *area), fninit_sse(void);
 void cpuid4(uint32_t leaf, uint32_t sub, uint32_t out[4]);
+int rdrand64(uint64_t *out, int seed); /* 1: out is the processor's random number (seed: RDSEED, else RDRAND) */
 
 void switch_stack(uint64_t *save_sp, uint64_t new_sp);
 extern uint64_t kstack_top;

@@ -183,6 +183,30 @@ cpuid4:	pushq %rbx
 	popq %rbx
 	ret
 
+# rdrand64(uint64_t *out): 1 if the processor gave a random number (RDRAND
+# or RDSEED: kind 0 or 1; the caller checked CPUID), else 0; retried a few times
+	.globl rdrand64
+rdrand64:
+	movl $10, %ecx
+	testl %esi, %esi
+	jnz 2f
+1:	.byte 0x48, 0x0f, 0xc7, 0xf0	# rdrand %rax
+	jc 3f
+	decl %ecx
+	jnz 1b
+	xorl %eax, %eax
+	ret
+2:	.byte 0x48, 0x0f, 0xc7, 0xf8	# rdseed %rax
+	jc 3f
+	pause
+	decl %ecx
+	jnz 2b
+	xorl %eax, %eax
+	ret
+3:	movq %rax, (%rdi)
+	movl $1, %eax
+	ret
+
 # mb(): a full memory barrier (and, being a call, a barrier to the
 # compiler); cpu_pause(): the spin-wait hint
 	.globl mb, cpu_pause

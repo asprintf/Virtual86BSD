@@ -52,34 +52,95 @@ int chrdev_open(struct inode *ino, struct file *f) {
   return chrdevs[ma]->open(ino, f);
 }
 
-/* ---- random numbers: xorshift mixed with timer and input entropy ---- */
+/* ---- random numbers ----
+   ChaCha20 (RFC 8439's block function) with fast key erasure: of each block,
+   the first half is the next key and the second half is what is handed out.
+   The key starts from the processor's RDSEED or RDRAND when it has them (and
+   they are mixed in again at every call), and random_mix() adds the timer
+   and the events of the keyboard and the network, so that the numbers
+   (TCP's sequence numbers, ports, salts) cannot be guessed from earlier ones. */
 
-static uint64_t rs[2] = {0x9e3779b97f4a7c15UL, 0xbf58476d1ce4e5b9UL};
+static uint32_t rkey[8] = {0x243f6a88, 0x85a308d3, 0x13198a2e, 0x03707344, 0xa4093822, 0x299f31d0, 0x082efa98, 0xec4e6c89};
+static uint64_t rctr;
+static unsigned rmix;
+static int rseeded, rhave; /* rhave: 1 RDRAND, 2 RDSEED too */
 
 void random_mix(uint64_t v) {
-  rs[0] ^= v + 0x9e3779b97f4a7c15UL + (rs[0] << 6) + (rs[0] >> 2);
-  rs[1] ^= rdtsc64();
+  uint64_t h = (v ^ rdtsc64()) * 0x9e3779b97f4a7c15UL;
+  rkey[rmix & 7] ^= (uint32_t)(h >> 32);
+  rkey[(rmix + 1) & 7] ^= (uint32_t)h;
+  rmix += 2;
 }
 
-static uint64_t rnd64(void) {
-  uint64_t s1 = rs[0];
-  const uint64_t s0 = rs[1];
-  rs[0] = s0;
-  s1 ^= s1 << 23;
-  rs[1] = s1 ^ s0 ^ (s1 >> 17) ^ (s0 >> 26);
-  return rs[1] + s0;
+static void random_cpu(void) {
+  uint64_t v;
+  if (rhave >= 2 && rdrand64(&v, 1))
+    random_mix(v), rkey[0] ^= (uint32_t)v;
+  if (rhave >= 1 && rdrand64(&v, 0))
+    random_mix(v), rkey[1] ^= (uint32_t)(v >> 32);
+}
+
+static inline uint32_t rotl32(uint32_t v, int n) { return v << n | v >> (32 - n); }
+
+static void qr(uint32_t *x, int a, int b, int c, int d) {
+  x[a] += x[b], x[d] = rotl32(x[d] ^ x[a], 16);
+  x[c] += x[d], x[b] = rotl32(x[b] ^ x[c], 12);
+  x[a] += x[b], x[d] = rotl32(x[d] ^ x[a], 8);
+  x[c] += x[d], x[b] = rotl32(x[b] ^ x[c], 7);
+}
+
+static void chacha20_block(const uint32_t key[8], uint64_t ctr, uint8_t out[64]) {
+  uint32_t in[16] = {0x61707865, 0x3320646e, 0x79622d32, 0x6b206574}, x[16];
+  for (int i = 0; i < 8; i++)
+    in[4 + i] = key[i];
+  in[12] = (uint32_t)ctr, in[13] = (uint32_t)(ctr >> 32);
+  for (int i = 0; i < 16; i++)
+    x[i] = in[i];
+  for (int r = 0; r < 10; r++) {
+    qr(x, 0, 4, 8, 12), qr(x, 1, 5, 9, 13), qr(x, 2, 6, 10, 14), qr(x, 3, 7, 11, 15);
+    qr(x, 0, 5, 10, 15), qr(x, 1, 6, 11, 12), qr(x, 2, 7, 8, 13), qr(x, 3, 4, 9, 14);
+  }
+  for (int i = 0; i < 16; i++) {
+    uint32_t w = x[i] + in[i];
+    out[4 * i] = (uint8_t)w, out[4 * i + 1] = (uint8_t)(w >> 8), out[4 * i + 2] = (uint8_t)(w >> 16),
+    out[4 * i + 3] = (uint8_t)(w >> 24);
+  }
+}
+
+static void random_seed(void) {
+  uint32_t r[4];
+  rseeded = 1;
+  cpuid4(0, 0, r);
+  uint32_t max = r[0];
+  cpuid4(1, 0, r);
+  if (r[2] & (1U << 30))
+    rhave = 1;
+  if (max >= 7) {
+    cpuid4(7, 0, r);
+    if (rhave && (r[1] & (1U << 18)))
+      rhave = 2;
+  }
+  for (int i = 0; i < 4; i++)
+    random_cpu();
 }
 
 void get_random_bytes(void *buf, size_t n) {
-  uint8_t *p = buf;
+  uint8_t *p = buf, b[64];
+  if (!rseeded)
+    random_seed();
   random_mix(rdtsc64());
+  random_cpu();
   while (n) {
-    uint64_t v = rnd64();
-    size_t c = MIN(n, 8UL);
-    memcpy(p, &v, c);
+    chacha20_block(rkey, rctr++, b);
+    for (int i = 0; i < 8; i++) /* (the next key) */
+      rkey[i] = (uint32_t)b[4 * i] | (uint32_t)b[4 * i + 1] << 8 | (uint32_t)b[4 * i + 2] << 16 | (uint32_t)b[4 * i + 3] << 24;
+    size_t c = MIN(n, 32UL);
+    memcpy(p, b + 32, c);
     p += c;
     n -= c;
   }
+  for (volatile uint8_t *z = b; z < b + sizeof(b); z++)
+    *z = 0;
 }
 
 long sys_getrandom(long ubuf, long n, long flags) {
