@@ -457,6 +457,62 @@ words become init's environment; init uses `CONSOLE` (default
   (the ISR register acknowledges them), transmit interrupts off.  PCI
   interrupt lines can be shared (`irq_register` keeps up to four handlers
   on a line).
+* **Network hardening** (what the wire may do to the system).
+  *Random numbers* (`arch/amd64/amd64/mem.c`): `get_random_bytes` is
+  ChaCha20 with fast key erasure (RFC 8439's block function; checked
+  against its test vector), keyed from RDSEED/RDRAND when the processor has
+  them and fed by the timer, the keyboard and the arrival of frames; it
+  feeds `getrandom(2)`, `/dev/urandom`, the TCP sequence numbers and the
+  ports.  *Ethernet and ARP*: frames shorter than a header, or from a
+  group address, are dropped; an ARP from a group hardware address or
+  from an address that is not a host's is ignored; one that claims one of our
+  own addresses is not learned, and is reported ("duplicate IP address
+  ... sent from ethernet address ..."); a reply only changes an entry that
+  exists, and an entry that a request made, not yet used, is the first to be
+  replaced when the table is full.  *IP*: a source that is 0, a group, all
+  ones, a class E, loopback, a broadcast address of an interface or one of
+  our own addresses is dropped; so is a packet with a source route or with
+  an option that is not well formed (RFC 7126); the identification is a
+  counter per destination that starts at random and grows by 1 to 4;
+  reassembly (8 datagrams, 30 s) holds a datagram up to 65535 bytes in a
+  buffer that is large enough (it used to be written 40 bytes past the end
+  by a last fragment at the end of the largest datagram), drops a
+  datagram whose fragments overlap with different bytes or end in two
+  places, and makes room for a new datagram by dropping the oldest.
+  *ICMP*: an echo request to a broadcast address is not answered
+  (`net.inet.icmp.bmcastecho`, 0); errors are limited to 100 a second
+  (`net.inet.icmp.errppslimit`, -1 for no limit); an "unreachable" is
+  believed only when it is about a packet from one of our addresses, and
+  by TCP only when it names a sequence number that is in flight (RFC 5927).
+  *DHCP*: an address a host cannot have is not taken.  *Ports*: the
+  ephemeral ports are chosen at random (the next free one in turn only
+  when 64 random tries all met a port in use).  *TCP* (`netinet/tcp.c`):
+  initial sequence numbers are a SipHash-2-4 of the four addresses and ports
+  under a random key plus a 4 microsecond clock (RFC 6528); a RST is
+  accepted only at the next sequence number, and a RST or SYN elsewhere in
+  the window, an ACK for what was not sent and one more than a window old
+  get a challenge ACK, at most 100 a second (RFC 5961); the window of a
+  segment counts only if the segment is newer than the last that set it
+  (`snd_wl1`/`snd_wl2`); an MSS under 216 is taken as 216 (an MSS of 0 used
+  to make the transmit loop spin for ever); a SYN with FIN or RST, and
+  port 0, are ignored; the send buffer is allocated when the connection is
+  established; a listener with 16 handshakes in progress answers further
+  SYNs with SYN cookies (the sequence number of the SYN-ACK holds a clock,
+  the MSS as an index into 6 sizes and 24 bits of SipHash of the connection;
+  the ACK that returns it makes the connection) so that a flood of
+  forged SYNs cannot fill it; an ACK that finds the accept queue full is
+  ignored, not reset; waiting segments are limited to 32 per connection
+  and counted with their overhead; the RSTs that answer segments to
+  closed ports are limited (`net.inet.tcp.rstppslimit`, 100 a second);
+  the connection of a closed socket gives up after 8 retransmissions, a
+  zero window included, and one in FIN_WAIT_2 after 60 s; `connect()` to a
+  group or broadcast address fails, and replaces a TIME_WAIT connection of
+  the same four.  Not done: window scaling and timestamps (so no PAWS),
+  ICMP redirects and source quench are ignored altogether, no strict
+  reverse-path filter.  `regress/sys/netinet/run_hard.sh` tests it all with
+  a second network card whose other end is `nethard.c` on the host, a
+  program that sends the forged frames, fragments, floods and resets and
+  checks what the guest does.
 * **Typed memory** (`kern/kern_tym.c`). Pools reserved at boot; mappings
   are shared memory objects over the pool's pages (with a release hook
   that returns allocated pages and unpins mapped ones); allocation by
