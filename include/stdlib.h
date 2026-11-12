@@ -34,6 +34,9 @@
 #include <bits/null.h>
 #define __NEED_size_t
 #define __NEED_wchar_t
+#if __EXT_VISIBLE
+#define __NEED_uint32_t
+#endif
 #include <bits/alltypes.h>
 #if __POSIX_VISIBLE
 #include <bits/waitstatus.h>
@@ -135,6 +138,12 @@ void       setkey(const char *);
 #endif
 #if __EXT_VISIBLE
 int        getloadavg(double [], int);
+uint32_t   arc4random(void);
+void       arc4random_buf(void *, size_t);
+uint32_t   arc4random_uniform(uint32_t);
+const char *getprogname(void);
+void       setprogname(const char *);
+long long  strtonum(const char *, long long, long long, const char **);
 #endif
 __END_DECLS
 #endif

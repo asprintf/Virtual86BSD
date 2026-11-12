@@ -46,11 +46,13 @@ HDRS = \
 	../../include/dirent.h \
 	../../include/dlfcn.h \
 	../../include/endian.h \
+	../../include/err.h \
 	../../include/errno.h \
 	../../include/fcntl.h \
 	../../include/fenv.h \
 	../../include/fmtmsg.h \
 	../../include/fnmatch.h \
+	../../include/fstab.h \
 	../../include/ftw.h \
 	../../include/glob.h \
 	../../include/grp.h \
@@ -75,6 +77,7 @@ HDRS = \
 	../../include/netinet/in.h \
 	../../include/netinet/tcp.h \
 	../../include/nl_types.h \
+	../../include/paths.h \
 	../../include/poll.h \
 	../../include/pthread.h \
 	../../include/pwd.h \
@@ -98,6 +101,7 @@ HDRS = \
 	../../include/sys/mman.h \
 	../../include/sys/mount.h \
 	../../include/sys/msg.h \
+	../../include/sys/param.h \
 	../../include/sys/reboot.h \
 	../../include/sys/resource.h \
 	../../include/sys/select.h \
@@ -123,6 +127,10 @@ HDRS = \
 	../../include/threads.h \
 	../../include/time.h \
 	../../include/uchar.h \
+	../../include/ufs/ffs/ffs_extern.h \
+	../../include/ufs/ffs/fs.h \
+	../../include/ufs/ufs/dinode.h \
+	../../include/ufs/ufs/dir.h \
 	../../include/unistd.h \
 	../../include/utmpx.h \
 	../../include/wchar.h \
@@ -288,7 +296,9 @@ OBJS = \
 	$(B)/obj/math/tan.o \
 	$(B)/obj/math/tgamma.o \
 	$(B)/obj/math/trunc.o \
+	$(B)/obj/misc/err.o \
 	$(B)/obj/misc/fmtmsg.o \
+	$(B)/obj/misc/fstab.o \
 	$(B)/obj/misc/getopt.o \
 	$(B)/obj/misc/getpass.o \
 	$(B)/obj/misc/gettimeofday.o \
@@ -298,6 +308,7 @@ OBJS = \
 	$(B)/obj/misc/mman.o \
 	$(B)/obj/misc/mount.o \
 	$(B)/obj/misc/posix_devctl.o \
+	$(B)/obj/misc/progname.o \
 	$(B)/obj/misc/reboot.o \
 	$(B)/obj/misc/resource.o \
 	$(B)/obj/misc/revoke.o \
@@ -408,6 +419,7 @@ OBJS = \
 	$(B)/obj/stdio/wide.o \
 	$(B)/obj/stdlib/a64l.o \
 	$(B)/obj/stdlib/abs.o \
+	$(B)/obj/stdlib/arc4random.o \
 	$(B)/obj/stdlib/bsearch.o \
 	$(B)/obj/stdlib/getenv.o \
 	$(B)/obj/stdlib/getsubopt.o \
@@ -423,6 +435,7 @@ OBJS = \
 	$(B)/obj/stdlib/secure_getenv.o \
 	$(B)/obj/stdlib/strtod.o \
 	$(B)/obj/stdlib/strtol.o \
+	$(B)/obj/stdlib/strtonum.o \
 	$(B)/obj/stdlib/system.o \
 	$(B)/obj/string/__strdup_internal.o \
 	$(B)/obj/string/__strtok_r.o \
@@ -946,9 +959,17 @@ $(B)/obj/math/trunc.o: math/trunc.c $(HDRS)
 	mkdir -p $(B)/obj/math
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ math/trunc.c
 
+$(B)/obj/misc/err.o: misc/err.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/err.c
+
 $(B)/obj/misc/fmtmsg.o: misc/fmtmsg.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/fmtmsg.c
+
+$(B)/obj/misc/fstab.o: misc/fstab.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/fstab.c
 
 $(B)/obj/misc/getopt.o: misc/getopt.c $(HDRS)
 	mkdir -p $(B)/obj/misc
@@ -985,6 +1006,10 @@ $(B)/obj/misc/mount.o: misc/mount.c $(HDRS)
 $(B)/obj/misc/posix_devctl.o: misc/posix_devctl.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/posix_devctl.c
+
+$(B)/obj/misc/progname.o: misc/progname.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/progname.c
 
 $(B)/obj/misc/reboot.o: misc/reboot.c $(HDRS)
 	mkdir -p $(B)/obj/misc
@@ -1426,6 +1451,10 @@ $(B)/obj/stdlib/abs.o: stdlib/abs.c $(HDRS)
 	mkdir -p $(B)/obj/stdlib
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdlib/abs.c
 
+$(B)/obj/stdlib/arc4random.o: stdlib/arc4random.c $(HDRS)
+	mkdir -p $(B)/obj/stdlib
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdlib/arc4random.c
+
 $(B)/obj/stdlib/bsearch.o: stdlib/bsearch.c $(HDRS)
 	mkdir -p $(B)/obj/stdlib
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdlib/bsearch.c
@@ -1485,6 +1514,10 @@ $(B)/obj/stdlib/strtod.o: stdlib/strtod.c $(HDRS)
 $(B)/obj/stdlib/strtol.o: stdlib/strtol.c $(HDRS)
 	mkdir -p $(B)/obj/stdlib
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdlib/strtol.c
+
+$(B)/obj/stdlib/strtonum.o: stdlib/strtonum.c $(HDRS)
+	mkdir -p $(B)/obj/stdlib
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdlib/strtonum.c
 
 $(B)/obj/stdlib/system.o: stdlib/system.c $(HDRS)
 	mkdir -p $(B)/obj/stdlib
