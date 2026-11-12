@@ -1,8 +1,8 @@
-/* k_mmap: MAP_SHARED mappings of files on ext2 (the page cache).  POSIX:
+/* k_mmap: MAP_SHARED mappings of files on a disk file system (the page cache).  POSIX:
    a store through a shared mapping is seen by every other mapping and by
    read(), a write() by the mappings; msync writes it to the file (and sets
    st_mtime); whole pages beyond the end of the file are SIGBUS; a private
-   mapping's stores stay its own.  Run in a directory on ext2; with "-k"
+   mapping's stores stay its own.  Run in a directory on one; with "-k"
    the file stays (to check it from outside afterwards). */
 #include <fcntl.h>
 #include <setjmp.h>

@@ -13,8 +13,8 @@ into, or boot in QEMU with its own kernel.
 This is version 0.9.1 (November 2026; `osrelease` in `sys/conf/newvers.sh`), a preview: complete in
 what POSIX asks of the interfaces and utilities, but young as a kernel
 (see "Where things stand").  0.9.1 fixes what the external test suites
-showed after 0.9 (`share/doc/conformance.md`).  1.0 is to add mkext2 and fsck
-inside the system (login, passwd, shutdown, mount and sysctl are there).
+showed after 0.9 (`share/doc/conformance.md`).  1.0 is the BSD file system: the root is FFS2 now (`newfs`, `fsck`, `makefs` are there; ext2 stays for
+reading other disks) with `tunefs` and a reload of a root that `fsck` changed still to come.
 
 Shall, the system this one comes from, was made by Joost Orchidee Winter with Claude, Anthropic's AI model,
 which wrote most of the code from the text of the standard (POSIX.1-2024,
@@ -154,10 +154,10 @@ ports/get.sh all` puts the sources in `root/usr/src`; inside, `sh
 
 `bootstrap.sh` also builds V86BSD's kernel, `root/bsd`.
 To run the system on it, the host needs QEMU (`qemu-system-x86_64`; on
-Ubuntu the package `qemu-system-x86`) and e2fsprogs (`mke2fs`, which
-makes the disk image); no root privileges:
+Ubuntu the package `qemu-system-x86`) (the disk image is made by `makefs`, which
+the build makes); no root privileges:
 
-    sh mkdisk.sh               # v86bsd.img: root/ as an ext2 disk (1 GiB)
+    sh mkdisk.sh               # v86bsd.img: root/ as an FFS2 disk (1 GiB)
     sh boot.sh                 # boots it; the console is this terminal
 
 The kernel starts `/sbin/init`, which runs `/etc/rc` (the host name from
@@ -180,9 +180,9 @@ parameter line per line, `inet 10.1.0.2/24`) when `/etc/netstart` runs at boot.
 sessions, runs `/etc/rc.shutdown`, ends every process and powers off after the
 disks are written.  (Without an `/etc/ttys`, init keeps its old behaviour: the
 shell on the console after `rc`, and `exit` shuts down.)
-`Ctrl-A x` leaves QEMU at once (then the disk is checked, and repaired
-where needed, with `e2fsck -p` the next time `boot.sh` starts it; it does
-that every time).  What you change inside stays in
+`Ctrl-A x` leaves QEMU at once (then the next boot finds the disk not clean: the
+root is mounted read-only, `/etc/rc` runs `fsck -p`, and if that had to change the
+root it reboots once).  What you change inside stays in
 `v86bsd.img` for the next boot; `sh mkdisk.sh` makes it afresh from
 `root/` (`-s size` in MiB; operands name another root and image; for
 another root, give `boot.sh` its kernel with `-k root/bsd`).

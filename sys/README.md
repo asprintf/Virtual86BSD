@@ -3,7 +3,7 @@
 A small x86-64 kernel that runs V86BSD's programs, and Linux programs, as
 Linux would: the same system call numbers, structures, ELF loading, initial
 stack, signal frames and `/proc` files.  It boots in QEMU in text mode,
-mounts an ext2 root file system and starts `/sbin/init`.
+mounts the root file system (FFS2; `rootfstype=ext2` for an ext2 disk) and starts `/sbin/init`.
 
 First version (November 2026): one processor; networking over an Intel
 e1000 card (QEMU's default) and the loopback interface: IPv4 with ARP,
@@ -13,7 +13,7 @@ assembly.
 
 ## Status
 
-Inside QEMU, on an ext2 disk made from a bootstrapped V86BSD root:
+Inside QEMU, on a disk made from a bootstrapped V86BSD root:
 
 * The interactive shell on the serial console, with a controlling terminal
   and job control (Ctrl-C, Ctrl-Z, `jobs`, `fg`, `bg`); `vi`, `more`,
@@ -152,7 +152,8 @@ and the `machine` link.
                        (struct emul), linux_misc (uname, personality, reboot)
     uvm/               physical pages (buddy allocator with reference
                        counts), address spaces and page faults, mmap & co.
-    ufs/ext2fs/       ext2 (tmpfs/ and miscfs/procfs/ are tmpfs/devtmpfs
+    ufs/ffs/          FFS2 (the root), ufs/ext2fs/ ext2 (to read other
+                       disks; tmpfs/ and miscfs/procfs/ are tmpfs/devtmpfs
                        and procfs)
     net/               if.c (the interfaces: lo0, em0, vio0, their
                        addresses and flags), route.c (the routing table)
@@ -168,8 +169,8 @@ and the `machine` link.
 
 `sbin/init` is init (POSIX C, built with V86BSD's c17 and C library),
 `regress/sys/kern` the test programs (k_*.c, and the C library's tests, put
-on the disk image in /root/ktest) and `distrib/mkdisk-ext2.sh` makes the
-ext2 image of a V86BSD root.
+on the disk image in /root/ktest) and `distrib/mkdisk-ffs.sh` makes the
+FFS2 image of a V86BSD root (`mkdisk-ext2.sh` an ext2 one).
 
 ## Configuration and autoconfiguration
 
@@ -218,7 +219,7 @@ kernel's name on the command line, if anything), the `xx0 at yy0` tree
 (`cpu0: apid 0 (boot processor)` and its brand string, MHz and
 family-model-stepping; `pchb0` and `pcib0` as the PCI bridges, `isa0 at pcib0`
 once the PCI bus is walked; `wskbd0` and `wsdisplay0` only say what the
-console is), `tym0:` and `root on disk0s1 (ext2)`.  The kernel's own `printf`
+console is), `tym0:` and `root on disk0s1 (ffs, read-only)`.  The kernel's own `printf`
 is what prints them.  A panic is `panic: ...` and `The operating system has
 halted.`; a trap in the kernel is `kernel: ... trap, code=...`; a reboot says
 `syncing disks... done` and then `rebooting...`, `powering off...` or the
@@ -251,19 +252,20 @@ halt line.
 * The root is `root=` on the command line, else the `root on` of the
   configuration (GENERIC: `disk0s1`); if that is not there, the first
   disk (an image with no partition table: `root on disk0`).
-  `mkdisk.sh` makes an image with an MBR and one partition of type 0x83 from
-  sector 2048 (1 MiB), the ext2 file system: `e2fsck 'image?offset=1048576'`
-  checks it, and `dd skip=2048` takes it out.
+  `mkdisk.sh` makes an image with an MBR and one partition (type 0xa6, 0x83
+  for ext2) from sector 2048 (1 MiB), the file system: `dd skip=2048` takes it
+  out (`fsck_ffs` checks that file); the system checks its own root at boot.
 
 ## Building and running
 
 The kernel is part of V86BSD (`sys/` in its sources): `bootstrap.sh`
 builds it with the c17 of its stage 2, together with `/sbin/init`, into
 `root/bsd` and `root/sbin/init`.  To boot that root,
-the host needs QEMU (`qemu-system-x86_64`) and e2fsprogs (`mke2fs -d`);
+the host needs QEMU (`qemu-system-x86_64`); `makefs` of the build makes the image
+(`mkdisk.sh -t ext2` wants e2fsprogs' `mke2fs -d`);
 in the top directory:
 
-    sh mkdisk.sh                  # v86bsd.img: the root as ext2 (1 GiB)
+    sh mkdisk.sh                  # v86bsd.img: the root as FFS2 (1 GiB)
     sh boot.sh                    # QEMU; the console is this terminal
 
 (The head of `boot.sh` lists its options.)  Inside the system everything
@@ -297,7 +299,7 @@ section `.boot`, which c17 (and `kernel.ld` for ld) puts first, and
 
 Kernel command line (`-append`): `root=/dev/disk0s1` (default: the
 `root on` of the configuration, GENERIC: disk0s1),
-`rootfstype=ext2`, `ro`, `init=/path`; `ip=dhcp` (default when there is a
+`rootfstype=ext2` (default ffs), `ro`, `rw` (an FFS root is read-only until rc has checked it), `init=/path`; `ip=dhcp` (default when there is a
 card; it configures the first one), `ip=off` or `ip=ADDR/PREFIX[,GATEWAY[,DNS]]`; `tym=NAME:SIZE,...`
 (typed memory pools, `off` for none); `netloss=N` (testing: lose every
 Nth frame each way).  As on Linux, other `name=value`
@@ -332,7 +334,7 @@ words become init's environment; init uses `CONSOLE` (default
   file pages are read at the first touch.  Anonymous shared memory, SysV
   segments, tmpfs files and the page cache share one "shared memory
   object" type.
-* **Page cache** (`kern/vfs_pcache.c`). A `MAP_SHARED` mapping of an ext2 file
+* **Page cache** (`kern/vfs_pcache.c`). A `MAP_SHARED` mapping of an FFS or ext2 file
   maps the file's cached pages, so every process mapping it shares them,
   and `read`/`write` use a cached page where there is one, so they agree
   with the mappings at once.  Pages a shared mapping has mapped are
@@ -375,10 +377,15 @@ words become init's environment; init uses `CONSOLE` (default
   lets other tasks run between buffers; the blocks of a deleted or
   shortened file are not written any more).  The cache grows up to half of the memory
   while a sixteenth stays free, and gives memory back when the page
-  allocator runs out (`Buffers` in `/proc/meminfo`).  ext2's state is
-  "not clean" while mounted and "clean" again after a proper shutdown, so
-  `e2fsck -p` (which `boot.sh` runs) checks a disk after QEMU was
-  stopped.  Disks: virtio (`disk0` at `vioblk0`, QEMU's `if=virtio`, what `boot.sh`
+  allocator runs out (`Buffers` in `/proc/meminfo`).  The state of ext2 and
+  of FFS is "not clean" while mounted and "clean" again after a proper
+  shutdown: an ext2 disk is checked by `e2fsck -p` (which `boot.sh` runs), an
+  FFS one mounts read-only when it is not clean and `fsck -p` of `/etc/rc`
+  repairs it (and reboots, for a root it changed).  FFS2 (`ufs/ffs/`, from
+  OpenBSD's algorithms) has fragment-sized buffers throughout, writes
+  inodes, directories and indirect blocks through and the rest later, and
+  never panics on a damaged disk: it says so, fails the call and goes
+  read-only.  Disks: virtio (`disk0` at `vioblk0`, QEMU's `if=virtio`, what `boot.sh`
   uses: one request per block, waited for by watching the used ring in
   memory) and ATA by PIO (`disk0` at `pciide0`, the PC's IDE disk: polled with
   interrupts on, so the clock and the terminals keep going while the

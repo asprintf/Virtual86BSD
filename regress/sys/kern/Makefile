@@ -1,5 +1,5 @@
 # Makefile - the kernel's test programs (POSIX make), for the system's
-# /root/ktest (distrib/mkdisk-ext2.sh copies them in): k_* here, and the C
+# /root/ktest (distrib/mkdisk-ffs.sh copies them in): k_* here, and the C
 # library's self-checking tests in libc/.  Linked statically with c17.
 #
 #   make testprogs
