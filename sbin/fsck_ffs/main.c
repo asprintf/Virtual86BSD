@@ -33,7 +33,9 @@
 /*
  * Adapted for V86BSD from OpenBSD sbin/fsck_ffs/main.c (revision 1.55).
  * Changes: integer types from <stdint.h>; no mount reload of a modified root (the
- *   kernel has none: REBOOT NOW, exit status 4); otherwise as OpenBSD.
+ *   kernel has none: REBOOT NOW, exit status 4); the exit status is checkfilesys()'s
+ *   (8 for a file system that cannot be checked, 4 for the reboot, 1 when a problem
+ *   was left, as with -n), where OpenBSD's main() drops it; otherwise as OpenBSD.
  */
 
 #include <sys/time.h>
@@ -187,7 +189,7 @@ main(int argc, char *argv[])
 		(void)signal(SIGQUIT, catchquit);
 	catchinfo(0);
 
-	(void)checkfilesys(blockcheck(*argv), 0, 0L, 0);
+	ret = checkfilesys(blockcheck(*argv), 0, 0L, 0);
 
 	if (returntosingle)
 		ret = 2;
@@ -216,7 +218,7 @@ checkfilesys(char *filesys, char *mntpt, long auxdata, int child)
 	daddr_t n_ffree, n_bfree;
 	struct dups *dp;
 	struct zlncnt *zlnp;
-	int cylno;
+	int cylno, setupres;
 
 	if (preen && child)
 		(void)signal(SIGQUIT, voidquit);
@@ -224,7 +226,8 @@ checkfilesys(char *filesys, char *mntpt, long auxdata, int child)
 	if (debug && preen)
 		pwarn("starting\n");
 
-	switch (setup(filesys, 0)) {
+	setupres = setup(filesys, 0);
+	switch (setupres) {
 	case 0:
 		if (preen)
 			pfatal("CAN'T CHECK FILE SYSTEM.");
@@ -238,7 +241,8 @@ checkfilesys(char *filesys, char *mntpt, long auxdata, int child)
 			(void)close(fswritefd);
 			fswritefd = -1;
 		}
-		return (0);
+		/* -1: clean, nothing to check; 0: not checkable, exit 8 */
+		return (setupres == 0 ? 8 : 0);
 	}
 	info_filesys = filesys;
 
@@ -366,7 +370,7 @@ checkfilesys(char *filesys, char *mntpt, long auxdata, int child)
 	free(asblk.b_un.b_buf);
 
 	if (!fsmodified)
-		return (0);
+		return (resolved ? 0 : 1);
 	if (!preen)
 		printf("\n***** FILE SYSTEM WAS MODIFIED *****\n");
 	if (rerun || !resolved)
@@ -381,5 +385,5 @@ checkfilesys(char *filesys, char *mntpt, long auxdata, int child)
 		sync();
 		return (4);
 	}
-	return (0);
+	return (resolved ? 0 : 1);
 }
