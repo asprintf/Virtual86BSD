@@ -50,6 +50,7 @@ struct sock {
   struct list backlog;   /* listening: connected socks not yet accepted */
   struct list blink;
   int nbacklog, maxbacklog;
+  int nsyn;              /* listening TCP: handshakes in progress (connections in SYN_RECEIVED) */
   struct sock *listener; /* in a backlog: whose */
   char addr[SUN_PATH + 2];
   int addrlen;           /* 0: unbound */

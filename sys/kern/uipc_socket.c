@@ -51,6 +51,7 @@
 #include <sys/systm.h>
 #include <sys/file.h>
 #include <sys/sockio.h>
+#include <sys/conf.h>
 #include <uvm/uvm.h>
 #include <net/if_var.h>
 #include <sys/socketvar.h>
@@ -548,8 +549,14 @@ static int in_bind(struct sock *s, struct inaddr *a) {
     return -EACCES;
   if (!a->port) {
     for (int n = 0; n < 28232 && !a->port; n++) {
-      a->port = next_ephemeral;
-      next_ephemeral = next_ephemeral >= 60999 ? 32768 : next_ephemeral + 1;
+      if (n < 64) { /* at random (the next port is not guessable); when many are taken, in turn */
+        uint32_t r;
+        get_random_bytes(&r, sizeof r);
+        a->port = (uint16_t)(32768 + r % 28232);
+      } else {
+        a->port = next_ephemeral;
+        next_ephemeral = next_ephemeral >= 60999 ? 32768 : next_ephemeral + 1;
+      }
       bool r = s->reuse;
       s->reuse = false;
       if (in_conflict(s, a))
