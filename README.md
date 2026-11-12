@@ -170,6 +170,9 @@ ROOTPW=word` builds a root with another).
 `syslogd` writes the system's log (`/var/log/messages`, the failed logins and root logins in
 `/var/log/authlog`; `/etc/syslog.conf`), `dmesg` shows the kernel's messages, and `rcctl`
 turns daemons on and off (`rcctl enable atd`, `rcctl restart syslogd`, `rcctl ls on`).
+`ifconfig` shows and sets the interfaces (`ifconfig vio0 10.0.2.20/24`, `ifconfig em0 alias
+10.1.0.1/16`, `ifconfig em0 mtu 1400 down`) and `route` the routing table (`route show`,
+`route add default 10.0.2.2`, `route add -net 10.1.0.0/16 10.0.2.9`, `route flush`).
 `shutdown -p now` (or `halt -p`, `reboot`) stops the system: init hangs up the
 sessions, runs `/etc/rc.shutdown`, ends every process and powers off after the
 disks are written.  (Without an `/etc/ttys`, init keeps its old behaviour: the

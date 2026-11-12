@@ -228,8 +228,8 @@ halt line.
 
 * The network card is `em0` (Intel e1000) or `vio0` (virtio-net, QEMU's
   `-nic model=virtio-net-pci`, `boot.sh -v`), and `lo0` the loopback: in
-  `SIOCGIFNAME` and friends, `/proc/net/dev` and the DHCP line.  A second
-  card is em1 or vio1.
+  `SIOCGIFNAME` and friends, `getifaddrs()`, `/proc/net/dev` and the DHCP
+  line.  A second card is em1 or vio1.
 * The serial console, COM1, is `/dev/tty00` (dial-in) and `/dev/cua00`
   (call-out): the same device, major 4 minor 64.  The VGA console is
   `/dev/ttyC0` (major 4 minor 1).  `/dev/pts` and `ptmx` stay.
@@ -398,7 +398,7 @@ words become init's environment; init uses `CONSOLE` (default
   a disconnect (`AF_UNSPEC`).  Raw sockets (root): a packet to a
   loopback address reaches the raw sockets of its protocol (IPv4 with its
   header); the kernel answers ICMP and ICMPv6 echo requests.  Other
-  destinations: `ENETUNREACH`.  `SIOCGIF*` and `/proc/net/dev` show `lo`.
+  destinations: `ENETUNREACH`.  `SIOCGIF*` and `/proc/net/dev` show `lo0`.
 * **Network.** `dev/pci/pci.c` finds the card, `dev/pci/if_em.c` drives
   an Intel 8254x (registers memory-mapped through `ioremap`; 64 receive
   and 64 transmit descriptors).  The card's interrupt only wakes the
@@ -428,8 +428,28 @@ words become init's environment; init uses `CONSOLE` (default
   used.  DHCP and `ip=` put the address, the default route and the name
   servers there; the first Ethernet interface goes up at boot and is the
   one DHCP configures.  A packet from the wire whose source or destination
-  is 127.x is dropped.  `if_ioctl` (`SIOCGIF*`, Linux's numbers and
-  `struct ifreq`) reads this.
+  is 127.x is dropped.  `ifioctl` (`net/if.c`) and `rtioctl` (`net/route.c`)
+  are the socket ioctls of `<sys/sockio.h>`, with the BSDs' names, Linux's
+  numbers (a Linux program works under the compat layer: it also sees
+  Linux's `IFF_` values) and Linux's 40-byte `struct ifreq`: `SIOCGIFCONF`
+  (an entry per address), `SIOC[GS]IFFLAGS` (only `IFF_UP`, `IFF_DEBUG` and
+  `IFF_LINK0-2` change; promiscuous and ARP flags are `EOPNOTSUPP`),
+  `SIOC[GS]IFADDR` (the first address; setting it keeps its mask, a first
+  one gets that of its class), `SIOC[GS]IFNETMASK`, `SIOC[GS]IFBRDADDR` (always
+  `addr | ~mask`: only that is accepted), `SIOC[GS]IFMTU` (68 up to the card's
+  own), `SIOC[GS]IFMETRIC` (of the connected routes), `SIOCGIFINDEX`,
+  `SIOCGIFHWADDR`, and the two of ours in the range Linux leaves to protocols:
+  `SIOCAIFADDR` (`struct ifaliasreq`: an alias with its mask) and `SIOCDIFADDR`.
+  The getters of the mask and the broadcast address answer for the address
+  in `ifr_addr` if the interface has it, else for the first.  The setters are
+  root's (`EPERM`).  `SIOCADDRT`/`SIOCDELRT` take Linux's `struct rtentry`
+  (`<net/route.h>`; the interface by `rt_dev`, else it is the gateway's), and
+  `sysctl net.route` (`CTL_NET, AF_ROUTE, 0, AF_INET, NET_RT_DUMP, 0`) returns the
+  table as an array of `struct rtinfo`: not BSD's routing socket messages (a
+  `struct sockaddr` has no `sa_len` and there is no `PF_ROUTE` socket), so BSD's
+  own `route.c` and `ifconfig.c` do not compile; `sbin/ifconfig`, `sbin/route`
+  and libc's `getifaddrs()` (`AF_INET` entries and an `AF_LINK` one per
+  interface, `struct sockaddr_dl` without `sdl_len`) are written for these.
   **vio0** (`dev/pv/if_vio.c`) is written from the Virtio 1.2
   specification (5.1) on the legacy PCI interface of `virtio.c`: features
   MAC and STATUS only, a 10-byte header and one descriptor per packet, 64
