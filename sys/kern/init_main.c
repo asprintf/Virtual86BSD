@@ -147,7 +147,10 @@ static void mount_root_fs(void) {
   if (b) {
     name = b->name;
     e = mount_root(type, b);
-    if (!e && cmdline_flag("ro"))
+    /* an FFS root stays read-only until /etc/rc has run fsck and then
+       `mount -uw /'; `rw' on the command line says otherwise */
+    bool ro = cmdline_flag("ro") || (!cmdline_flag("rw") && !strcmp(type, "ffs"));
+    if (!e && ro)
       root_mount->sb->rdonly = true, root_mount->flags |= MS_RDONLY;
   }
   if (e) {
