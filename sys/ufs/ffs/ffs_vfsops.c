@@ -204,6 +204,8 @@ set_rdev(struct inode *ip)
 	ip->rdev = MKDEV((v >> 8) & 0xff, (v & 0xff) | ((v & 0xffff0000U) >> 8));
 }
 
+static void ffs_fill_inode(struct inode *, const struct ufs2_dinode *);
+
 static int
 ffs_read_inode(struct inode *ip)
 {
@@ -226,6 +228,17 @@ ffs_read_inode(struct inode *ip)
 		return -ESTALE;
 	}
 	ip->priv = fi;
+	ffs_fill_inode(ip, d);
+	if (S_ISCHR(ip->mode) || S_ISBLK(ip->mode))
+		set_rdev(ip);
+	ffs_set_ops(ip);
+	return 0;
+}
+
+/* the fields of the VFS inode that the on-disk inode d has */
+static void
+ffs_fill_inode(struct inode *ip, const struct ufs2_dinode *d)
+{
 	ip->mode = d->di_mode;
 	ip->nlink = (uint16_t)d->di_nlink;
 	ip->uid = d->di_uid;
@@ -238,10 +251,6 @@ ffs_read_inode(struct inode *ip)
 	ip->mtime.nsec = d->di_mtimensec;
 	ip->ctime.sec = d->di_ctime;
 	ip->ctime.nsec = d->di_ctimensec;
-	if (S_ISCHR(ip->mode) || S_ISBLK(ip->mode))
-		set_rdev(ip);
-	ffs_set_ops(ip);
-	return 0;
 }
 
 /*
@@ -567,6 +576,79 @@ bad:
 	return ERR_PTR(-EIO);
 }
 
+/* an inode the cache holds, read again (ffs_reload) */
+static void
+ffs_reread_inode(struct inode *ip, void *arg)
+{
+	struct ffsmount *um = arg;
+	struct fs *fs = um->um_fs;
+	struct ffs_ino *fi = ip->priv;
+	struct ufs2_dinode d;
+
+	if (fi == NULL || ip->ino < ROOTINO || ip->ino >= (ino_t)fs->fs_ncg * fs->fs_ipg)
+		return;
+	ffs_rw(um, ino_to_fsba(fs, (uint32_t)ip->ino),
+	    (uint64_t)ino_to_fsbo(fs, (uint32_t)ip->ino) * sizeof(d), &d,
+	    sizeof(d), false, false);
+	if (d.di_mode == 0 && d.di_nlink == 0) {
+		printf("ffs: %s: inode %lu is gone after fsck\n", um->um_bdev->name,
+		    (unsigned long)ip->ino);
+		return;
+	}
+	fi->i_din = d;
+	ffs_fill_inode(ip, &d);
+}
+
+/*
+ * fsck_ffs changed the disk of a file system that is mounted read-only (the
+ * root, which it cannot unmount): read the super block, the summary and the
+ * inodes that are in use again, and what the cache holds of the disk is
+ * read again when it is next wanted.  (OpenBSD's ffs_reload().)  If fsck
+ * left the file system clean it can be made writable now.
+ */
+static int
+ffs_reload(struct super *sb)
+{
+	struct ffsmount *um = VFSTOFFS(sb);
+	struct fs *fs = um->um_fs, *nfs;
+	uint8_t *raw;
+	struct fs save;
+
+	raw = kmalloc(SBSIZE);
+	if (raw == NULL)
+		return -ENOMEM;
+	if (um->um_bdev->read(um->um_bdev, SBLOCK_UFS2 / 512, SBSIZE / 512, raw)) {
+		kfree(raw);
+		return -EIO;
+	}
+	nfs = (struct fs *)raw;
+	if (!ffs_validate(nfs, um->um_bdev->sectors) || nfs->fs_sbsize != fs->fs_sbsize ||
+	    nfs->fs_size != fs->fs_size || nfs->fs_ncg != fs->fs_ncg ||
+	    nfs->fs_bsize != fs->fs_bsize || nfs->fs_fsize != fs->fs_fsize ||
+	    nfs->fs_ipg != fs->fs_ipg) {
+		printf("ffs: %s: cannot reload: the super block is not that of the mounted file system\n",
+		    um->um_bdev->name);
+		kfree(raw);
+		return -EINVAL;
+	}
+	binval(um->um_bdev);
+	save.fs_csp = fs->fs_csp;
+	save.fs_contigdirs = fs->fs_contigdirs;
+	memcpy(fs, raw, fs->fs_sbsize);
+	fs->fs_csp = save.fs_csp;
+	fs->fs_contigdirs = save.fs_contigdirs;
+	fs->fs_maxcluster = NULL;
+	fs->fs_active = NULL;
+	kfree(raw);
+	ffs_rw(um, fs->fs_csaddr, 0, fs->fs_csp, fs->fs_cssize, false, false);
+	fs->fs_fmod = 0;
+	fs->fs_ronly = 0;
+	um->um_damaged = false;
+	um->um_unclean = fs->fs_clean == 0 || fs->fs_contigsumsize > 0;
+	inode_foreach(sb, ffs_reread_inode, um);
+	return 0;
+}
+
 static const struct super_ops ffs_sops = {
 	.read_inode = ffs_read_inode,
 	.write_inode = ffs_write_inode,
@@ -576,6 +658,7 @@ static const struct super_ops ffs_sops = {
 	.sync = ffs_sync,
 	.umount = ffs_umount,
 	.shutdown = ffs_shutdown,
+	.reload = ffs_reload,
 };
 
 static struct fs_type ffs_type = {.name = "ffs", .needs_dev = true, .mount = ffs_mount};
