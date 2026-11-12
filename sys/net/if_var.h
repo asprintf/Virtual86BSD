@@ -116,10 +116,21 @@ extern struct netinfo netinfo;
 
 void net_init_conf(const char *ipconf, const char *loss); /* ip=, netloss= */
 void dhcp_stop(struct ifnet *ifp); /* an address was set by hand: the kernel's DHCP client leaves ifp alone */
+
+/* a limit of events per second (net.inet.icmp.errppslimit and the like) */
+struct ratelim {
+  uint64_t sec;
+  int n;
+};
+bool net_ratelimit(struct ratelim *r, int pps); /* true: this one may go (pps < 0: no limit) */
+extern int icmp_bmcastecho;    /* net.inet.icmp.bmcastecho: answer echo requests to a broadcast address */
+extern int icmp_errppslimit;   /* net.inet.icmp.errppslimit: ICMP errors per second (-1: no limit) */
+extern int tcp_rstppslimit;    /* net.inet.tcp.rstppslimit: RSTs per second for segments that have no connection */
 void net_pnp(void (*out)(void *, const char *, ...), void *sb);
 void net_rx(struct ifnet *ifp, const void *frame, size_t len); /* a driver: a frame came (from the network thread) */
 void net_wake(void);                         /* (any context) */
 bool ip_is_local(uint32_t ip);               /* one of this system's addresses (or 127.x) */
+bool ip_is_bcast(uint32_t ip);               /* all ones, or the broadcast address of an interface's network */
 bool ip_routable(uint32_t ip);               /* reachable through an interface */
 uint32_t ip_srcaddr(uint32_t dst);           /* the address a packet to dst leaves from, or 0 */
 int ip_output(int proto, uint32_t src, uint32_t dst, const void *payload, size_t len);

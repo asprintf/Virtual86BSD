@@ -34,7 +34,7 @@
    once, 30 seconds each), ICMP (echo, unreachable), UDP to and from the
    sockets, and a DHCP client.  The first Ethernet interface is configured
    by DHCP or by ip= on the kernel command line (ip=dhcp, ip=off,
-   ip=ADDR/PREFIX[,GATEWAY[,DNS]]), the others by ifconfig(8);
+   ip=ADDR/PREFIX[,GATEWAY[,DNS]]), the others by ifconfig(8) (/etc/netstart);
    /proc/net/pnp tells the name server, as on Linux.  For testing,
    netloss=N on the command line loses every Nth frame each way.
 
@@ -44,6 +44,7 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/buf.h>
+#include <sys/conf.h>
 #include <uvm/uvm.h>
 #include <net/if_var.h>
 #include <sys/socketvar.h>
@@ -66,6 +67,22 @@ static inline void put32(uint8_t *p, uint32_t v) {
 }
 
 uint64_t net_now_ms(void) { return monotonic_ns() / 1000000UL; }
+
+int icmp_bmcastecho = 0, icmp_errppslimit = 100, tcp_rstppslimit = 100;
+
+bool net_ratelimit(struct ratelim *r, int pps) {
+  if (pps < 0)
+    return true;
+  uint64_t sec = net_now_ms() / 1000;
+  if (r->sec != sec) {
+    r->sec = sec;
+    r->n = 0;
+  }
+  if (r->n >= pps)
+    return false;
+  r->n++;
+  return true;
+}
 
 uint16_t ip_csum(const void *buf, size_t n, uint32_t sum) {
   const uint8_t *p = buf;
@@ -119,6 +136,16 @@ static uint32_t srcfor(const struct ifnet *ifp, uint32_t hop) {
   return if_addr(ifp);
 }
 
+/* all ones, or the broadcast address of a network an interface is on */
+bool ip_is_bcast(uint32_t ip) {
+  if (ip == 0xffffffffU)
+    return true;
+  for (int i = 0; i < nifnet; i++)
+    if (if_is_bcast(ifnet[i], ip))
+      return true;
+  return false;
+}
+
 bool ip_routable(uint32_t ip) {
   if (ip == 0)
     return false;
@@ -163,6 +190,7 @@ static struct arp {
   uint32_t ip;
   uint8_t mac[6];
   int state; /* 0 free, 1 asking, 2 known */
+  bool passive; /* learned from somebody's request and not used since: the first to go */
   uint64_t expires, next_try;
   int tries, npend;
   struct pend *pend;
@@ -197,12 +225,21 @@ static void arp_drop(struct arp *e) {
   e->state = 0;
 }
 
+/* what an entry is worth keeping: 0 a resolved one that a request made and
+   nothing used, 1 a resolved one in use, 2 one that is being resolved (a
+   packet waits for it) */
+static int arp_rank(const struct arp *e) { return e->state == 1 ? 2 : e->passive ? 0 : 1; }
+
+/* a free entry, else the least worth keeping, the oldest of those: what a
+   flood of requests made goes before what is in use, and what is in use
+   before what is being resolved (those would lose their packets) */
 static struct arp *arp_slot(void) {
-  struct arp *old = &arps[0];
+  struct arp *old = NULL;
   for (int i = 0; i < NARP; i++) {
     if (!arps[i].state)
       return &arps[i];
-    if (arps[i].expires < old->expires)
+    if (!old || arp_rank(&arps[i]) < arp_rank(old) ||
+        (arp_rank(&arps[i]) == arp_rank(old) && arps[i].expires < old->expires))
       old = &arps[i];
   }
   arp_drop(old);
@@ -217,6 +254,7 @@ static void arp_learn(struct ifnet *ifp, uint32_t ip, const uint8_t *mac, bool c
     e = arp_slot();
     e->ifp = ifp;
     e->ip = ip;
+    e->passive = true;
   }
   memcpy(e->mac, mac, 6);
   e->state = 2;
@@ -234,10 +272,23 @@ static void arp_input(struct ifnet *ifp, const uint8_t *a, size_t len) {
   if (len < 28 || be16(a) != 1 || be16(a + 2) != ETH_IP || a[4] != 6 || a[5] != 4)
     return;
   uint32_t spa = be32(a + 14), tpa = be32(a + 24);
+  unsigned op = be16(a + 6);
+  if ((op != 1 && op != 2) || (a[8] & 1) || !memcmp(a + 8, ifp->if_lladdr, 6))
+    return; /* not a request or a reply, from a group address, or our own frame */
+  if (spa == 0xffffffffU || spa >= 0xe0000000U || (spa >> 24) == 127)
+    return;
+  if (spa && if_has_addr(ifp, spa)) { /* somebody else uses our address */
+    static struct ratelim dup;
+    if (net_ratelimit(&dup, 1))
+      printf("%s: duplicate IP address %u.%u.%u.%u sent from ethernet address %02x:%02x:%02x:%02x:%02x:%02x\n",
+             ifp->if_xname, spa >> 24, (spa >> 16) & 255, (spa >> 8) & 255, spa & 255, a[8], a[9], a[10], a[11],
+             a[12], a[13]);
+    return;
+  }
   bool forme = if_has_addr(ifp, tpa);
-  if (spa)
-    arp_learn(ifp, spa, a + 8, forme);
-  if (forme && be16(a + 6) == 1) {
+  if (spa) /* (an entry is made for a request to us; a reply only changes what is there) */
+    arp_learn(ifp, spa, a + 8, forme && op == 1);
+  if (forme && op == 1) {
     uint8_t r[28];
     memcpy(r, a, 8);
     put16(r + 6, 2);
@@ -257,6 +308,7 @@ static int ip_xmit(struct ifnet *ifp, uint32_t hop, const void *pkt, size_t len)
   }
   struct arp *e = arp_lookup(ifp, hop);
   if (e && e->state == 2) {
+    e->passive = false;
     eth_send(ifp, e->mac, ETH_IP, pkt, len);
     return 0;
   }
@@ -264,6 +316,7 @@ static int ip_xmit(struct ifnet *ifp, uint32_t hop, const void *pkt, size_t len)
     e = arp_slot();
     e->ifp = ifp;
     e->ip = hop;
+    e->passive = false;
     e->state = 1;
     e->tries = 1;
     e->expires = net_now_ms() + 10000;
@@ -330,7 +383,24 @@ static struct ifnet *route_out(uint32_t dst, uint32_t src, uint32_t *hop, int *e
   return r->ifp;
 }
 
-static uint16_t ip_id;
+/* the identification of a datagram: a counter per destination (a hash of it
+   picks one), each starting at random and growing by 1 to 4, so that it
+   cannot be guessed by one that does not talk to us (fragments are matched
+   by it) */
+static uint16_t ip_ids[256];
+static bool ip_ids_ready;
+
+static uint16_t ip_newid(uint32_t dst) {
+  uint8_t r;
+  if (!ip_ids_ready) {
+    get_random_bytes(ip_ids, sizeof ip_ids);
+    ip_ids_ready = true;
+  }
+  get_random_bytes(&r, 1);
+  uint16_t *c = &ip_ids[(dst * 2654435761U) >> 24];
+  *c = (uint16_t)(*c + 1 + (r & 3));
+  return *c;
+}
 
 /* a packet out of ifp towards hop, in fragments if it does not fit */
 static int ip_output_on(struct ifnet *ifp, uint32_t hop, int proto, uint32_t src, uint32_t dst, const void *payload,
@@ -338,7 +408,7 @@ static int ip_output_on(struct ifnet *ifp, uint32_t hop, int proto, uint32_t src
   size_t mtu = MIN(ifp->if_mtu, MTU);
   if (len > 65515)
     return -EMSGSIZE;
-  uint16_t id = ++ip_id;
+  uint16_t id = ip_newid(dst);
   const uint8_t *data = payload;
   size_t off = 0;
   do { /* fragments of at most MTU, offsets in 8-byte units */
@@ -394,7 +464,7 @@ int ip_output_raw(void *buf, size_t len) {
   if (!be32(pkt + 12))
     put32(pkt + 12, srcfor(ifp, hop));
   if (!be16(pkt + 4))
-    put16(pkt + 4, ++ip_id);
+    put16(pkt + 4, ip_newid(dst));
   put16(pkt + 2, (uint16_t)len);
   put16(pkt + 10, 0);
   put16(pkt + 10, ip_csum(pkt, hl, 0));
@@ -403,6 +473,9 @@ int ip_output_raw(void *buf, size_t len) {
 
 /* ICMP destination unreachable about packet ip (header first) */
 static void icmp_unreach(int code, const uint8_t *ip, size_t len) {
+  static struct ratelim rl;
+  if (!net_ratelimit(&rl, icmp_errppslimit))
+    return;
   size_t hl = (size_t)(ip[0] & 15) * 4;
   size_t n = MIN(len, hl + 8);
   uint8_t m[8 + 60 + 8];
@@ -413,10 +486,16 @@ static void icmp_unreach(int code, const uint8_t *ip, size_t len) {
   ip_output(1, 0, be32(ip + 12), m, 8 + n);
 }
 
-static void icmp_input(uint32_t src, uint32_t dst, const uint8_t *m, size_t len) {
+static void icmp_input(struct ifnet *ifp, uint32_t src, uint32_t dst, const uint8_t *m, size_t len) {
   if (len < 8 || ip_csum(m, len, 0) != 0)
     return;
   if (m[0] == 8 && m[1] == 0) { /* echo request */
+    /* one to a broadcast address is not answered (a smurf: every host on the
+       network would answer the one whose address the sender forged), unless
+       net.inet.icmp.bmcastecho says so, and then from an address of ours */
+    bool bcast = dst == 0xffffffffU || if_is_bcast(ifp, dst);
+    if (bcast && !icmp_bmcastecho)
+      return;
     uint8_t *r = kmalloc(len);
     if (!r)
       return;
@@ -424,13 +503,13 @@ static void icmp_input(uint32_t src, uint32_t dst, const uint8_t *m, size_t len)
     r[0] = 0;
     put16(r + 2, 0);
     put16(r + 2, ip_csum(r, len, 0));
-    ip_output(1, dst, src, r, len);
+    ip_output(1, bcast ? 0 : dst, src, r, len);
     kfree(r);
   } else if (m[0] == 3 && len >= 8 + 20 + 8) { /* unreachable: about our packet */
     const uint8_t *ip = m + 8;
     size_t hl = (size_t)(ip[0] & 15) * 4;
-    if (len < 8 + hl + 8)
-      return;
+    if ((ip[0] >> 4) != 4 || hl < 20 || len < 8 + hl + 8 || !ip_is_local(be32(ip + 12)))
+      return; /* (not about a packet from this system) */
     int err = m[1] == 3 ? ECONNREFUSED : m[1] == 0 ? ENETUNREACH : EHOSTUNREACH;
     struct inaddr ls, rd;
     in_set4(&ls, be32(ip + 12), be16(ip + hl));
@@ -476,6 +555,7 @@ static void udp_input(struct ifnet *ifp, uint32_t src, uint32_t dst, const uint8
 /* ---- reassembly ---- */
 
 #define NFRAG 8
+#define FRAGBUF (60 + 65536) /* the payload goes at 60 (room for any header), up to 65535 bytes of it */
 static struct frag {
   bool used;
   uint32_t src, dst;
@@ -490,6 +570,7 @@ static struct frag {
 static void frag_free(struct frag *f) {
   kfree(f->buf);
   kfree(f->have);
+  f->buf = f->have = NULL;
   f->used = false;
 }
 
@@ -500,9 +581,9 @@ static void frag_input(struct ifnet *ifp, const uint8_t *p, size_t hl, size_t tl
   uint16_t id = be16(p + 4), fo = be16(p + 6);
   size_t off = (size_t)(fo & 0x1fff) * 8, n = tl - hl;
   bool more = fo & 0x2000;
-  if (off + n > 65515 || (more && (n & 7)))
+  if (n == 0 || off + n > 65535 || (more && (n & 7)))
     return;
-  struct frag *f = NULL, *freeslot = NULL;
+  struct frag *f = NULL, *freeslot = NULL, *oldest = NULL;
   uint64_t now = net_now_ms();
   for (int i = 0; i < NFRAG; i++) {
     if (frags[i].used && now >= frags[i].expires)
@@ -511,15 +592,19 @@ static void frag_input(struct ifnet *ifp, const uint8_t *p, size_t hl, size_t tl
       f = &frags[i];
     else if (!frags[i].used && !freeslot)
       freeslot = &frags[i];
+    if (frags[i].used && (!oldest || frags[i].expires < oldest->expires))
+      oldest = &frags[i];
   }
   if (!f) {
-    if (!freeslot)
-      return;
+    if (!freeslot) { /* all are taken: the oldest goes (a flood of first fragments cannot keep the table full) */
+      frag_free(oldest);
+      freeslot = oldest;
+    }
     f = freeslot;
-    f->buf = kmalloc(65535);
+    f->buf = kmalloc(FRAGBUF);
     f->have = kzalloc(65536 / 8);
     if (!f->buf || !f->have) {
-      kfree(f->buf), kfree(f->have);
+      frag_free(f);
       return;
     }
     f->used = true;
@@ -528,15 +613,36 @@ static void frag_input(struct ifnet *ifp, const uint8_t *p, size_t hl, size_t tl
     f->total = 0;
     f->expires = now + 30000;
   }
+  /* what the datagram has of this range must be the same as what came now: a
+     fragment that says otherwise (overlapping ones are how a datagram is
+     made to look different to a filter and to the receiver) ends the datagram */
+  size_t u0 = off / 8, u1 = (off + n + 7) / 8;
+  for (size_t u = u0; u < u1; u++) {
+    if (!f->have[u])
+      continue;
+    size_t from = u * 8 > off ? u * 8 : off, to = (u + 1) * 8 < off + n ? (u + 1) * 8 : off + n;
+    if (memcmp(f->buf + 60 + from, p + hl + (from - off), to - from)) {
+      frag_free(f);
+      return;
+    }
+  }
+  if (!more && f->total && f->total != off + n) { /* two different ends */
+    frag_free(f);
+    return;
+  }
+  if (!more)
+    f->total = off + n;
+  if (f->total && off + n > f->total) { /* data beyond the end */
+    frag_free(f);
+    return;
+  }
   if (off == 0) { /* the first fragment's header */
     memcpy(f->buf, p, hl);
     f->hl = hl;
   }
-  memcpy(f->buf + 60 + off, p + hl, n); /* (payload at 60: room for any header) */
-  for (size_t u = off / 8; u < (off + n + 7) / 8; u++)
+  memcpy(f->buf + 60 + off, p + hl, n);
+  for (size_t u = u0; u < u1; u++)
     f->have[u] = 1;
-  if (!more)
-    f->total = off + n;
   if (!f->total || !f->have[0])
     return;
   for (size_t u = 0; u < (f->total + 7) / 8; u++)
@@ -544,6 +650,10 @@ static void frag_input(struct ifnet *ifp, const uint8_t *p, size_t hl, size_t tl
       return;
   /* complete: header and payload together, as one unfragmented datagram */
   size_t whole = f->hl + f->total;
+  if (whole > 65535) { /* (more than an IP datagram holds, with its header) */
+    frag_free(f);
+    return;
+  }
   memmove(f->buf + f->hl, f->buf + 60, f->total);
   put16(f->buf + 2, (uint16_t)whole);
   put16(f->buf + 6, 0);
@@ -556,6 +666,37 @@ static void frag_input(struct ifnet *ifp, const uint8_t *p, size_t hl, size_t tl
   kfree(d);
 }
 
+/* the options of a header are well formed and none is a source route: a
+   packet that says by which hosts it must travel is not for a host that
+   forwards nothing (RFC 7126) */
+static bool ip_options_ok(const uint8_t *p, size_t hl) {
+  for (size_t i = 20; i < hl;) {
+    uint8_t t = p[i];
+    if (t == 0)
+      break;
+    if (t == 1) {
+      i++;
+      continue;
+    }
+    if (i + 1 >= hl || p[i + 1] < 2 || i + p[i + 1] > hl)
+      return false;
+    if (t == 131 || t == 137) /* loose and strict source route */
+      return false;
+    i += p[i + 1];
+  }
+  return true;
+}
+
+/* a source address that a packet from the wire may have: one host's, so not
+   0, not a group, not all ones, not loopback, not a broadcast address of
+   an interface and not one of ours (what the LAND attack and the reflection
+   of our own traffic look like) */
+static bool ip_src_ok(uint32_t src) {
+  if (src == 0 || src >= 0xe0000000U || (src >> 24) == 127 || ip_is_local(src))
+    return false;
+  return !ip_is_bcast(src);
+}
+
 static void ip_input(struct ifnet *ifp, const uint8_t *p, size_t len) {
   if (len < 20 || (p[0] >> 4) != 4)
     return;
@@ -564,6 +705,8 @@ static void ip_input(struct ifnet *ifp, const uint8_t *p, size_t len) {
     return;
   uint32_t src = be32(p + 12), dst = be32(p + 16);
   if ((src >> 24) == 127 || (dst >> 24) == 127) /* a loopback address does not come from a wire */
+    return;
+  if (!ip_src_ok(src) || !ip_options_ok(p, hl))
     return;
   bool unconfigured = !if_addr(ifp); /* (DHCP answers come before there is an address) */
   if (be16(p + 6) & 0x3fff) { /* a fragment */
@@ -582,7 +725,7 @@ static void ip_input(struct ifnet *ifp, const uint8_t *p, size_t len) {
   const uint8_t *pl = p + hl;
   size_t n = tl - hl;
   switch (proto) {
-  case 1: icmp_input(src, dst, pl, n); break;
+  case 1: icmp_input(ifp, src, dst, pl, n); break;
   case 17: udp_input(ifp, src, dst, pl, n, p, tl); break;
   case 6:
     if (ip_is_local(dst))
@@ -601,8 +744,9 @@ void net_rx(struct ifnet *ifp, const void *frame, size_t len) {
   }
   if (loss_every && ++loss_rx % loss_every == 0)
     return;
-  if (memcmp(f, ifp->if_lladdr, 6) && memcmp(f, bmac, 6))
-    return;
+  if (len < 14 || (f[6] & 1) || (memcmp(f, ifp->if_lladdr, 6) && memcmp(f, bmac, 6)))
+    return; /* too short, from a group address, or not for this card */
+  random_mix((uint64_t)len << 32 | be32(f + 6)); /* (when frames come is entropy) */
   uint16_t type = be16(f + 12);
   if (type == ETH_ARP)
     arp_input(ifp, f + 14, len - 14);
@@ -695,7 +839,10 @@ static void dhcp_input(const uint8_t *b, size_t len) {
     dhcp_next = net_now_ms() + 2000;
   } else if (type == 5 && dhcp_state == 2) { /* ack */
     uint32_t m = mask ? mask : 0xffffff00U;
-    ifa_add(dhcp_ifp, yi, m);
+    if (yi == 0 || yi >= 0xe0000000U || (yi >> 24) == 127 || ifa_add(dhcp_ifp, yi, m))
+      return; /* (not an address a host can have: the offer was not meant) */
+    if (router >= 0xe0000000U)
+      router = 0;
     if (router)
       rt_add(0, 0, router, dhcp_ifp, 0);
     netinfo.ndns = ndns;
