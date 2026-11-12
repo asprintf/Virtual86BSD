@@ -253,6 +253,14 @@ static void do_bsync(struct blockdev *b, bool may_yield) {
   flush_devices(b);
 }
 
+/* writes the buffer now, as it is (a file system's metadata that must be
+   on the disk before what refers to it) */
+int bwritenow(struct buf *bp) {
+  if (!bp->dirty)
+    bdirty(bp);
+  return bwrite(bp);
+}
+
 void bsync(struct blockdev *b) { do_bsync(b, true); }
 void bsync_atomic(struct blockdev *b) { do_bsync(b, false); }
 

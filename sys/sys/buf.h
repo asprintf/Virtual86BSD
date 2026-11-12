@@ -49,6 +49,7 @@ struct buf {
 struct buf *bread(struct blockdev *b, uint64_t block, unsigned size);
 struct buf *bget(struct blockdev *b, uint64_t block, unsigned size); /* no read */
 void bdirty(struct buf *bp);
+int bwritenow(struct buf *bp);          /* written to the device now */
 void brelse(struct buf *bp);
 void bsync(struct blockdev *b);        /* may let others run meanwhile */
 void bsync_atomic(struct blockdev *b); /* does not */
