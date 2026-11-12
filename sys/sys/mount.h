@@ -55,6 +55,7 @@ struct super_ops {
   void (*sync)(struct super *sb);
   void (*umount)(struct super *sb);
   void (*shutdown)(struct super *sb); /* the system stops: write all, mark clean */
+  int (*reload)(struct super *sb);    /* a read-only file system was changed on the disk (by fsck): read it again */
 };
 
 struct super {
@@ -89,12 +90,13 @@ struct mount {
 };
 #endif
 
-/* mount(2) flags; only MS_RDONLY and MS_REMOUNT do something so far */
+/* mount(2) flags; only MS_RDONLY, MS_REMOUNT and MS_RELOAD do something so far */
 #define MS_RDONLY 1
 #define MS_NOSUID 2
 #define MS_NODEV 4
 #define MS_NOEXEC 8
 #define MS_REMOUNT 32
+#define MS_RELOAD 0x10000000 /* with MS_REMOUNT|MS_RDONLY: read the file system again (the BSDs' MNT_RELOAD) */
 #define MS_BIND 4096
 
 #ifndef _KERNEL
@@ -103,7 +105,9 @@ extern "C" {
 #endif
 /* Mount the file system of type fstype on source (a block device, for the
    types that have one) at target.  With MS_REMOUNT, change the flags of the
-   mount at target (read-only or read-write).  Root only. */
+   mount at target (read-only or read-write); with MS_REMOUNT|MS_RDONLY|
+   MS_RELOAD, read a read-only file system again after fsck changed it on
+   the disk.  Root only. */
 int mount(const char *source, const char *target, const char *fstype, unsigned long flags, const void *data);
 int umount(const char *target);
 int umount2(const char *target, int flags);
@@ -119,6 +123,7 @@ extern struct mount *root_mount;
 void register_fs(struct fs_type *t);
 struct fs_type *find_fs(const char *name);
 struct super *super_alloc(const struct fs_type *t, struct blockdev *b);
+void inode_foreach(struct super *sb, void (*fn)(struct inode *, void *), void *arg);
 int do_mount(const char *dev, const char *dir, const char *type, unsigned long flags, const char *data);
 int mount_root(const char *type, struct blockdev *b);
 

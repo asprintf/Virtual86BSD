@@ -275,6 +275,18 @@ void bforget(struct blockdev *b, uint64_t block, unsigned size) {
   }
 }
 
+/* the disk was changed behind the cache's back (fsck on the raw device): what
+   the cache holds of b, that is not waiting to be written and not in use, is
+   read again when it is next wanted */
+void binval(struct blockdev *b) {
+  for (int h = 0; h < HASH; h++)
+    list_for_each(p, &hash[h]) {
+      struct buf *bp = list_entry(p, struct buf, hash);
+      if (bp->bdev == b && !bp->ref && !bp->dirty)
+        bp->valid = false;
+    }
+}
+
 /* the flush thread: inodes and buffers every 5 seconds */
 long flush_thread(void *arg) {
   (void)arg;

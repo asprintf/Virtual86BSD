@@ -51,6 +51,7 @@ struct buf *bget(struct blockdev *b, uint64_t block, unsigned size); /* no read 
 void bdirty(struct buf *bp);
 int bwritenow(struct buf *bp);          /* written to the device now */
 void brelse(struct buf *bp);
+void binval(struct blockdev *b);       /* read what is cached of b again */
 void bsync(struct blockdev *b);        /* may let others run meanwhile */
 void bsync_atomic(struct blockdev *b); /* does not */
 void bforget(struct blockdev *b, uint64_t block, unsigned size);

@@ -99,6 +99,15 @@ struct inode *iget(struct super *sb, ino_t ino) {
   return i;
 }
 
+/* fn for each inode of sb that the cache holds */
+void inode_foreach(struct super *sb, void (*fn)(struct inode *, void *), void *arg) {
+  list_for_each(p, &icache) {
+    struct inode *i = list_entry(p, struct inode, cache_link);
+    if (i->sb == sb)
+      fn(i, arg);
+  }
+}
+
 struct inode *igrab(struct inode *i) {
   i->ref++;
   return i;
@@ -592,9 +601,16 @@ int do_mount(const char *dev, const char *dir, const char *type, unsigned long f
   if (e)
     return e;
   if (flags & MS_REMOUNT) {
+    struct super *rsb = where.mnt->sb;
     if (where.ino != where.mnt->root)
       e = -EINVAL;
-    else {
+    else if (flags & MS_RELOAD) {
+      /* what fsck changed on the disk of a read-only file system */
+      if (!rsb->rdonly || !(flags & MS_RDONLY) || !rsb->ops->reload)
+        e = -EINVAL;
+      else
+        e = rsb->ops->reload(rsb);
+    } else {
       where.mnt->flags = (int)flags;
       where.mnt->sb->rdonly = flags & MS_RDONLY;
       if (where.mnt->sb->ops->sync)
