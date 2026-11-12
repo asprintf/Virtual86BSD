@@ -134,7 +134,7 @@ static bool cmdline_flag(const char *name) {
 extern const char cf_rootdev[]; /* ioconf.c */
 
 static void mount_root_fs(void) {
-  char root[64] = "", type[32] = "ext2";
+  char root[64] = "", type[32] = "ffs";
   bool given = cmdline_get("root", root, sizeof(root)) && root[0];
   if (!given)
     snprintf(root, sizeof(root), "%s", cf_rootdev);
