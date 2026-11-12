@@ -98,10 +98,6 @@ void tym_init(const char *conf);
 void tym_populate(void);
 void tym_report(void);
 
-/* network cards */
-void em_start(void);   /* the card's interrupt on (the network is ready for it) */
-void e1000_poll(void); /* received frames to net_rx (the network thread) */
-
 /* random numbers (drivers/mem.c) */
 void get_random_bytes(void *buf, size_t n);
 void random_mix(uint64_t v);

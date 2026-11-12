@@ -323,11 +323,11 @@ int main(void)
 	}
 
 	/* the interface and the name service */
-	CHECK(if_nametoindex("lo") == 1);
-	CHECK(if_indextoname(1, txt) && !strcmp(txt, "lo"));
+	CHECK(if_nametoindex("lo0") == 1);
+	CHECK(if_indextoname(1, txt) && !strcmp(txt, "lo0"));
 	{
 		struct if_nameindex *ni = if_nameindex();
-		CHECK(ni && ni[0].if_index == 1 && !strcmp(ni[0].if_name, "lo") &&
+		CHECK(ni && ni[0].if_index == 1 && !strcmp(ni[0].if_name, "lo0") &&
 		      (ni[1].if_index == 0 || (ni[1].if_index == 2 && !strcmp(ni[1].if_name, "em0") && ni[2].if_index == 0)));
 		if (ni)
 			if_freenameindex(ni);

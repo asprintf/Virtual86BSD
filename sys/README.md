@@ -154,6 +154,8 @@ and the `machine` link.
                        counts), address spaces and page faults, mmap & co.
     ufs/ext2fs/       ext2 (tmpfs/ and miscfs/procfs/ are tmpfs/devtmpfs
                        and procfs)
+    net/               if.c (the interfaces: lo0, em0, their
+                       addresses and flags), route.c (the routing table)
     netinet/           ip.c (Ethernet, ARP, IPv4 with fragments, ICMP, UDP,
                        DHCP, the network thread), tcp.c (TCP)
     dev/               ic/ (16550 serial console, VGA text console, PS/2
@@ -224,9 +226,8 @@ halt line.
 
 ### Devices, names and partitions
 
-* The network card is `em0` (and `lo0` the loopback): in `SIOCGIFNAME`
-  and friends, `/proc/net/dev` and the DHCP line.  (`eth0` is only the name
-  of the C object.)
+* The network cards are `em0` (Intel e1000), `em1` ... and `lo0` the
+  loopback: in `SIOCGIFNAME` and friends, `/proc/net/dev` and the DHCP line.
 * The serial console, COM1, is `/dev/tty00` (dial-in) and `/dev/cua00`
   (call-out): the same device, major 4 minor 64.  The VGA console is
   `/dev/ttyC0` (major 4 minor 1).  `/dev/pts` and `ptmx` stay.
@@ -295,7 +296,7 @@ section `.boot`, which c17 (and `kernel.ld` for ld) puts first, and
 Kernel command line (`-append`): `root=/dev/disk0s1` (default: the
 `root on` of the configuration, GENERIC: disk0s1),
 `rootfstype=ext2`, `ro`, `init=/path`; `ip=dhcp` (default when there is a
-card), `ip=off` or `ip=ADDR/PREFIX[,GATEWAY[,DNS]]`; `tym=NAME:SIZE,...`
+card; it configures the first one), `ip=off` or `ip=ADDR/PREFIX[,GATEWAY[,DNS]]`; `tym=NAME:SIZE,...`
 (typed memory pools, `off` for none); `netloss=N` (testing: lose every
 Nth frame each way).  As on Linux, other `name=value`
 words become init's environment; init uses `CONSOLE` (default
@@ -413,6 +414,20 @@ words become init's environment; init uses `CONSOLE` (default
   the same sockets as to the loopback (`kern/uipc_socket.c`): a TCP socket to
   another host has a `struct tcb`, whose received data goes into the
   socket's queue.  IPv6 is loopback only so far.
+  **Interfaces and routes** (`net/if.c`, `net/route.c`, `net/if_var.h`):
+  `struct ifnet` as in the BSDs (`if_xname`, `if_flags` with the BSD
+  `IFF_` values, `if_mtu`, up to four IPv4 addresses, counters, the
+  driver's `if_xmit`/`if_poll`/`if_start`); a driver attaches with
+  `if_attach_ether("em", mac, ...)` and the interface is `em0`, then
+  `em1`...  `lo0` is index 1 with 127.0.0.1/8 (loopback traffic stays in
+  the socket layer).  Every address has its connected route; the table
+  (32 entries, `RTF_UP/GATEWAY/HOST`, a metric) is searched for the longest
+  prefix and then the lowest metric, and an interface that is down is not
+  used.  DHCP and `ip=` put the address, the default route and the name
+  servers there; the first Ethernet interface goes up at boot and is the
+  one DHCP configures.  A packet from the wire whose source or destination
+  is 127.x is dropped.  `if_ioctl` (`SIOCGIF*`, Linux's numbers and
+  `struct ifreq`) reads this.
 * **Typed memory** (`kern/kern_tym.c`). Pools reserved at boot; mappings
   are shared memory objects over the pool's pages (with a release hook
   that returns allocated pages and unpins mapped ones); allocation by

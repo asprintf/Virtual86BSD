@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2026, Joost Orchidee Winter
+ * Copyright (c) 2026, asprintf
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,30 +29,112 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* if_var.h - network interfaces, and IP as the drivers and the rest see it. */
+/* if_var.h - network interfaces (net/if.c), the routing table
+   (net/route.c), and IP as the drivers and the rest see it
+   (netinet/ip.c).  Names and flag values are the BSDs' (struct ifnet,
+   IFF_*, RTF_*); a driver attaches with if_attach_ether(). */
 #ifndef _NET_IF_VAR_H_
 #define _NET_IF_VAR_H_
 
 #include <sys/systm.h>
 
-/* the interface (netinet/ip.c) */
-struct netif {
-  bool present, configured;
-  uint8_t mac[6];
-  uint32_t addr, mask, gw, dns[3]; /* host order */
+#define IFNAMSIZ 16
+#define IF_MAXIF 8   /* interfaces, lo0 included */
+#define IF_MAXADDR 4 /* IPv4 addresses on one interface */
+
+/* ifnet.if_flags */
+#define IFF_UP 0x1
+#define IFF_BROADCAST 0x2
+#define IFF_DEBUG 0x4
+#define IFF_LOOPBACK 0x8
+#define IFF_POINTOPOINT 0x10
+#define IFF_STATICARP 0x20
+#define IFF_RUNNING 0x40
+#define IFF_NOARP 0x80
+#define IFF_PROMISC 0x100
+#define IFF_ALLMULTI 0x200
+#define IFF_OACTIVE 0x400
+#define IFF_SIMPLEX 0x800
+#define IFF_LINK0 0x1000
+#define IFF_LINK1 0x2000
+#define IFF_LINK2 0x4000
+#define IFF_MULTICAST 0x8000
+
+/* an IPv4 address of an interface (host order); its broadcast address is
+   addr | ~mask */
+struct ifaddr4 {
+  bool used;
+  uint32_t addr, mask;
+};
+
+struct ifnet {
+  char if_xname[IFNAMSIZ]; /* "em0", "vio0", "lo0" */
+  int if_index;            /* 1 is lo0 */
+  unsigned if_flags;       /* IFF_ */
+  unsigned if_mtu;
+  bool if_ether;           /* an Ethernet: if_lladdr, ARP, if_xmit */
+  uint8_t if_lladdr[6];
+  struct ifaddr4 if_addrs[IF_MAXADDR];
+  uint64_t if_ipackets, if_ibytes, if_idrops, if_opackets, if_obytes, if_odrops;
+  /* the driver: a whole frame out (0 or -errno); the received frames to
+     net_rx() (the network thread calls it); the device's interrupt on
+     (the interface goes up) */
+  int (*if_xmit)(struct ifnet *, const void *frame, size_t len);
+  void (*if_poll)(struct ifnet *);
+  void (*if_start)(struct ifnet *);
+  void *if_softc;
+};
+
+extern struct ifnet *ifnet[IF_MAXIF]; /* by index - 1 */
+extern int nifnet;
+
+struct ifnet *if_attach_ether(const char *driver, const uint8_t *mac, unsigned mtu,
+                              int (*xmit)(struct ifnet *, const void *, size_t), void (*poll)(struct ifnet *),
+                              void (*start)(struct ifnet *), void *softc);
+struct ifnet *if_byname(const char *name);
+struct ifnet *if_byindex(int index);
+void if_up(struct ifnet *ifp);
+void if_down(struct ifnet *ifp);
+int ifa_add(struct ifnet *ifp, uint32_t addr, uint32_t mask); /* also its connected route */
+int ifa_remove(struct ifnet *ifp, uint32_t addr);
+uint32_t if_addr(const struct ifnet *ifp); /* its first address, or 0 */
+bool if_has_addr(const struct ifnet *ifp, uint32_t addr);
+bool if_is_bcast(const struct ifnet *ifp, uint32_t addr); /* a subnet broadcast of it */
+
+/* the routing table */
+#define RTF_UP 0x1
+#define RTF_GATEWAY 0x2
+#define RTF_HOST 0x4
+#define RTMAX 32
+struct rtentry {
+  bool used;
+  uint32_t dst, mask, gw; /* host order; gw 0: on the link */
+  struct ifnet *ifp;
+  unsigned flags;         /* RTF_ */
+  int metric;
+};
+extern struct rtentry rtable[RTMAX];
+int rt_add(uint32_t dst, uint32_t mask, uint32_t gw, struct ifnet *ifp, int metric);
+int rt_delete(uint32_t dst, uint32_t mask);
+struct rtentry *rt_lookup(uint32_t dst); /* longest prefix, then the lowest metric; the interface is up */
+void rt_prune(void);                     /* drop the routes whose gateway is no longer on a connected network */
+
+/* what DHCP (or ip=) told about the network as a whole */
+struct netinfo {
+  bool dhcp;
+  uint32_t dns[3]; /* host order */
   int ndns;
   char domain[64];
-  bool dhcp;
-  uint64_t rx_packets, rx_bytes, tx_packets, tx_bytes, rx_dropped, tx_dropped;
-  int (*xmit)(const void *frame, size_t len);
 };
-extern struct netif eth0;
+extern struct netinfo netinfo;
+
 void net_init_conf(const char *ipconf, const char *loss); /* ip=, netloss= */
 void net_pnp(void (*out)(void *, const char *, ...), void *sb);
-void net_rx(const void *frame, size_t len);  /* a driver: a frame came (from the network thread) */
+void net_rx(struct ifnet *ifp, const void *frame, size_t len); /* a driver: a frame came (from the network thread) */
 void net_wake(void);                         /* (any context) */
-bool ip_is_local(uint32_t ip);               /* one of this system's addresses */
-bool ip_routable(uint32_t ip);               /* reachable through eth0 */
+bool ip_is_local(uint32_t ip);               /* one of this system's addresses (or 127.x) */
+bool ip_routable(uint32_t ip);               /* reachable through an interface */
+uint32_t ip_srcaddr(uint32_t dst);           /* the address a packet to dst leaves from, or 0 */
 int ip_output(int proto, uint32_t src, uint32_t dst, const void *payload, size_t len);
 int ip_output_raw(void *pkt, size_t len);    /* a whole IPv4 packet */
 uint16_t ip_csum(const void *p, size_t n, uint32_t sum);

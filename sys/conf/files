@@ -84,6 +84,8 @@ file kern/sys_pipe.c
 file kern/vfs_lockf.c
 file kern/uipc_socket.c
 file kern/vfs_pcache.c
+file net/if.c
+file net/route.c
 file netinet/ip.c
 file netinet/tcp.c
 file kern/kern_tym.c

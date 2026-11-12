@@ -577,11 +577,12 @@ static int make_text(struct inode *i, struct sbuf *s) {
                  "                    |  Transmit\n"
                  " face |bytes    packets errs drop fifo frame compressed multicast"
                  "|bytes    packets errs drop fifo colls carrier compressed\n");
-    sb_printf(s, "    lo:       0       0    0    0    0     0          0         0"
-                 "        0       0    0    0    0     0       0          0\n");
-    if (eth0.present)
-      sb_printf(s, "   em0: %7lu %7lu    0 %4lu    0     0          0         0 %8lu %7lu    0 %4lu    0     0       0          0\n",
-                eth0.rx_bytes, eth0.rx_packets, eth0.rx_dropped, eth0.tx_bytes, eth0.tx_packets, eth0.tx_dropped);
+    for (int i = 1; i <= nifnet; i++) {
+      struct ifnet *ifp = if_byindex(i);
+      sb_printf(s, "%6s: %7lu %7lu    0 %4lu    0     0          0         0 %8lu %7lu    0 %4lu    0     0       0          0\n",
+                ifp->if_xname, ifp->if_ibytes, ifp->if_ipackets, ifp->if_idrops, ifp->if_obytes, ifp->if_opackets,
+                ifp->if_odrops);
+    }
     return 0;
   case R_NETPNP:
     net_pnp((void (*)(void *, const char *, ...))sb_printf, s);

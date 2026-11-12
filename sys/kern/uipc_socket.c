@@ -577,7 +577,7 @@ static int in_autobind(struct sock *s) {
 }
 
 /* a destination: the wildcard means the loopback; else it must be there */
-/* 0: on this system (the loopback, or eth0's own address); 1: through
+/* 0: on this system (the loopback, or an address of an interface); 1: through
    the network interface (IPv4); or an error */
 static int in_dest(struct sock *s, struct inaddr *a) {
   if (in_any(a))
@@ -597,9 +597,9 @@ static void in_src(struct sock *s, const struct inaddr *dst, struct inaddr *src)
   if (in_any(src)) {
     uint16_t port = src->port;
     if (in_v4(dst) && !ip_is_local(in_ip4(dst)))
-      in_set4(src, eth0.addr, port); /* through the network: eth0's */
+      in_set4(src, ip_srcaddr(in_ip4(dst)), port); /* through the network: the route's interface's */
     else if (in_v4(dst))
-      *src = *dst; /* 127.x.y.z (or eth0's address) answers from itself */
+      *src = *dst; /* 127.x.y.z (or an interface's address) answers from itself */
     else
       in_loopback(src, false);
     src->port = port;
@@ -2140,33 +2140,40 @@ static void sock_release(struct file *f) {
 #define SIOCGIFBRDADDR 0x8919
 #define SIOCGIFHWADDR 0x8927
 
-/* the interfaces: lo, index 1 */
-/* struct ifreq for interface i (1 lo, 2 eth0): its name, and for cmd its value */
+/* the interface ioctls: Linux's numbers and struct ifreq (the name, 16
+   bytes, then a sockaddr_in or an int or a short, 40 bytes in all); the
+   interfaces are net/if.c's */
 static void put_ip4(char *r, uint32_t ip) {
   r[0] = AF_INET;
   r[4] = (char)(ip >> 24), r[5] = (char)(ip >> 16), r[6] = (char)(ip >> 8), r[7] = (char)ip;
 }
 
+/* IFF_ as Linux has them: the first ten are the same, the BSD-only ones go
+   and IFF_MULTICAST moves */
+static unsigned linux_flags(unsigned f) { return (f & 0x3ffU) | ((f & IFF_MULTICAST) ? 0x1000U : 0); }
+
 static long if_ioctl(unsigned cmd, uint64_t arg) {
   char r[40];
-  int nif = eth0.present ? 2 : 1;
-  if (cmd == SIOCGIFCONF) { /* struct ifconf { int len; char *buf; }: addressed interfaces */
+  if (cmd == SIOCGIFCONF) { /* struct ifconf { int len; char *buf; }: an entry per address */
     int32_t len;
     uint64_t ubuf;
     if (copy_from_user(&len, (void *)arg, 4) || copy_from_user(&ubuf, (char *)arg + 8, 8))
       return -EFAULT;
     int32_t out = 0;
-    for (int i = 1; i <= nif; i++) {
-      if (i == 2 && !eth0.configured)
-        continue;
-      if (ubuf && len >= out + 40) {
-        memset(r, 0, sizeof(r));
-        strcpy(r, i == 1 ? "lo" : "em0");
-        put_ip4(r + 16, i == 1 ? 0x7f000001U : eth0.addr);
-        if (copy_to_user((char *)ubuf + out, r, 40))
-          return -EFAULT;
+    for (int i = 1; i <= nifnet; i++) {
+      struct ifnet *ifp = if_byindex(i);
+      for (int k = 0; k < IF_MAXADDR; k++) {
+        if (!ifp->if_addrs[k].used)
+          continue;
+        if (ubuf && len >= out + 40) {
+          memset(r, 0, sizeof(r));
+          strcpy(r, ifp->if_xname);
+          put_ip4(r + 16, ifp->if_addrs[k].addr);
+          if (copy_to_user((char *)ubuf + out, r, 40))
+            return -EFAULT;
+        }
+        out += 40;
       }
-      out += 40;
     }
     return copy_to_user((void *)arg, &out, 4) ? -EFAULT : 0;
   }
@@ -2175,32 +2182,34 @@ static long if_ioctl(unsigned cmd, uint64_t arg) {
   int32_t idx;
   memcpy(&idx, r + 16, 4);
   if (cmd == SIOCGIFNAME) {
-    if (idx < 1 || idx > nif)
+    struct ifnet *ifp = if_byindex(idx);
+    if (!ifp)
       return -ENODEV;
     memset(r, 0, 16);
-    strcpy(r, idx == 1 ? "lo" : "em0");
+    strcpy(r, ifp->if_xname);
   } else {
     r[15] = 0;
-    int i = !strcmp(r, "lo") ? 1 : !strcmp(r, "em0") && nif == 2 ? 2 : 0;
-    if (!i)
+    struct ifnet *ifp = if_byname(r);
+    if (!ifp)
       return -ENODEV;
+    const struct ifaddr4 *a = NULL;
+    for (int k = 0; k < IF_MAXADDR && !a; k++)
+      if (ifp->if_addrs[k].used)
+        a = &ifp->if_addrs[k];
     memset(r + 16, 0, 24);
-    if (i == 2 && !eth0.configured && (cmd == SIOCGIFADDR || cmd == SIOCGIFNETMASK || cmd == SIOCGIFBRDADDR))
+    if (!a && (cmd == SIOCGIFADDR || cmd == SIOCGIFNETMASK || cmd == SIOCGIFBRDADDR))
       return -EADDRNOTAVAIL;
     switch (cmd) {
-    case SIOCGIFINDEX: idx = i; memcpy(r + 16, &idx, 4); break;
-    case SIOCGIFFLAGS: /* UP, BROADCAST / LOOPBACK, RUNNING, MULTICAST */
-      idx = i == 1 ? 0x49 : 0x1043;
-      memcpy(r + 16, &idx, 4);
-      break;
-    case SIOCGIFMTU: idx = i == 1 ? 65536 : 1500; memcpy(r + 16, &idx, 4); break;
-    case SIOCGIFADDR: put_ip4(r + 16, i == 1 ? 0x7f000001U : eth0.addr); break;
-    case SIOCGIFNETMASK: put_ip4(r + 16, i == 1 ? 0xff000000U : eth0.mask); break;
-    case SIOCGIFBRDADDR: put_ip4(r + 16, i == 1 ? 0 : eth0.addr | ~eth0.mask); break;
+    case SIOCGIFINDEX: idx = ifp->if_index; memcpy(r + 16, &idx, 4); break;
+    case SIOCGIFFLAGS: idx = (int32_t)linux_flags(ifp->if_flags); memcpy(r + 16, &idx, 4); break;
+    case SIOCGIFMTU: idx = (int32_t)ifp->if_mtu; memcpy(r + 16, &idx, 4); break;
+    case SIOCGIFADDR: put_ip4(r + 16, a->addr); break;
+    case SIOCGIFNETMASK: put_ip4(r + 16, a->mask); break;
+    case SIOCGIFBRDADDR: put_ip4(r + 16, (ifp->if_flags & IFF_BROADCAST) ? a->addr | ~a->mask : 0); break;
     case SIOCGIFHWADDR:
-      r[16] = i == 1 ? 4 : 1, r[17] = 0; /* ARPHRD_LOOPBACK, ARPHRD_ETHER */
-      if (i == 2)
-        memcpy(r + 18, eth0.mac, 6);
+      r[16] = ifp->if_ether ? 1 : 4, r[17] = 0; /* ARPHRD_ETHER, ARPHRD_LOOPBACK */
+      if (ifp->if_ether)
+        memcpy(r + 18, ifp->if_lladdr, 6);
       break;
     default: return -EINVAL;
     }
