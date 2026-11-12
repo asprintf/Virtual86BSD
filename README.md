@@ -162,6 +162,7 @@ makes the disk image); no root privileges:
 
 The kernel starts `/sbin/init`, which runs `/etc/rc` (the host name from
 `/etc/myname`, `mount -uw /` and `mount -a` from `/etc/fstab`, `/etc/sysctl.conf`,
+`/etc/netstart` (an interface per `/etc/hostname.em1`, the gateway in `/etc/mygate`),
 clearing `/tmp`, `dmesg > /var/run/dmesg.boot`, the daemons that `/etc/rc.conf` turns on,
 each a script in `/etc/rc.d`: `syslogd`, `cron`, `atd`), then a `getty` on each
 line `/etc/ttys` switches on (the console, `tty00`), which asks for a login name
@@ -172,7 +173,9 @@ ROOTPW=word` builds a root with another).
 turns daemons on and off (`rcctl enable atd`, `rcctl restart syslogd`, `rcctl ls on`).
 `ifconfig` shows and sets the interfaces (`ifconfig vio0 10.0.2.20/24`, `ifconfig em0 alias
 10.1.0.1/16`, `ifconfig em0 mtu 1400 down`) and `route` the routing table (`route show`,
-`route add default 10.0.2.2`, `route add -net 10.1.0.0/16 10.0.2.9`, `route flush`).
+`route add default 10.0.2.2`, `route add -net 10.1.0.0/16 10.0.2.9`, `route flush`).  The kernel configures the first Ethernet interface itself (DHCP); the others,
+and that one too if you want it otherwise, come up from `/etc/hostname.INTERFACE` (one `ifconfig`
+parameter line per line, `inet 10.1.0.2/24`) when `/etc/netstart` runs at boot.
 `shutdown -p now` (or `halt -p`, `reboot`) stops the system: init hangs up the
 sessions, runs `/etc/rc.shutdown`, ends every process and powers off after the
 disks are written.  (Without an `/etc/ttys`, init keeps its old behaviour: the

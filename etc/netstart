@@ -1,0 +1,102 @@
+# /etc/netstart - configure the network interfaces.
+#
+# /etc/rc runs it at boot; by hand: `sh /etc/netstart [interface ...]`
+# (all of them, or just those named: again after a change).
+#
+# The kernel has already brought up lo0 and the first Ethernet interface
+# (DHCP, or ip= on the kernel's command line).  Every other interface, and
+# that one too if you want it different, is set up by a file
+# /etc/hostname.INTERFACE (hostname.em1, hostname.vio0 ...): each line is
+# what ifconfig(8) gets after the interface's name, for example
+#
+#	inet 192.168.7.2 netmask 255.255.255.0
+#	inet alias 192.168.7.3/24
+#	mtu 1400
+#
+# Comments (#) and blank lines are ignored; the interface is brought up
+# afterwards unless a line says `down`.  A line `dhcp` leaves the kernel's
+# own DHCP client's work as it is (it serves the first Ethernet interface
+# only).  /etc/mygate holds the default gateway's address, and replaces the
+# one the kernel got from DHCP.  The names of the name servers are in
+# /etc/resolv.conf.
+
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export PATH
+
+# The text of a file without comments and blank lines.
+stripcom() {
+	[ -s "$1" ] || return 0
+	sed -e 's/#.*//' -e 's/^[ 	]*//' -e 's/[ 	]*$//' -e '/^$/d' "$1"
+}
+
+status=0
+
+# one interface: its file's lines are ifconfig's parameters
+netif() {
+	_if=$1
+	if ! ifconfig "$_if" > /dev/null 2>&1; then
+		echo "$_if: no such interface"
+		return 1
+	fi
+	_lines=$(stripcom "/etc/hostname.$_if")
+	_down=NO _st=0
+	while read -r _l; do
+		[ -n "$_l" ] || continue
+		case $_l in
+		dhcp | "dhcp "*)
+			if ! ifconfig "$_if" 2> /dev/null | grep '^[	 ]inet ' > /dev/null; then
+				echo "$_if: dhcp: the kernel runs DHCP on the first Ethernet interface only"
+				_st=1
+			fi
+			continue ;;
+		esac
+		case " $_l " in
+		*" down "*) _down=YES ;;
+		esac
+		set -f # (a line is words, not patterns)
+		ifconfig "$_if" $_l || _st=1
+		set +f
+	done <<EOT
+$_lines
+EOT
+	[ "$_down" = YES ] || ifconfig "$_if" up || _st=1
+	return $_st
+}
+
+if [ $# -gt 0 ]; then
+	ifs=" $*"
+	for i in $*; do
+		if [ ! -f "/etc/hostname.$i" ]; then
+			echo "netstart: no /etc/hostname.$i"
+			exit 1
+		fi
+	done
+else
+	ifs=
+	for f in /etc/hostname.*; do
+		[ -f "$f" ] || continue
+		i=${f#/etc/hostname.}
+		case $i in
+		'' | *[!a-z0-9]*) continue ;; # (hostname.em0.bak is not an interface)
+		esac
+		ifs="$ifs $i"
+	done
+fi
+
+if [ -n "$ifs" ]; then
+	echo "configuring network interfaces:$ifs."
+	for i in $ifs; do
+		netif "$i" || status=1
+	done
+fi
+
+# The default gateway (a full run only): the one of DHCP goes.
+if [ $# -eq 0 ]; then
+	set -- $(stripcom /etc/mygate | head -n 1)
+	if [ $# -gt 0 ]; then
+		route -q delete default > /dev/null 2>&1
+		route add default "$1" > /dev/null || status=1
+	fi
+fi
+
+exit $status

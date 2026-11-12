@@ -13,7 +13,8 @@ are real directories (not links into `/usr`).
     /proc/          the kernel's process file system (it is always mounted)
     /etc/           configuration files (the sources: etc/): passwd, group,
                     profile, hosts, services, protocols, shells, motd,
-                    rc, rc.conf, syslog.conf; rc.d/ holds one script per
+                    rc, rc.conf, netstart, hostname.*, mygate,
+                    syslog.conf; rc.d/ holds one script per
                     daemon (rcctl(8) runs them)
     /home/          the home directories of users
     /mnt/           a place to mount file systems for a while

@@ -35,6 +35,13 @@ mount -a || echo 'warning: some file systems in /etc/fstab did not mount'
 # Kernel state: /etc/sysctl.conf.
 [ -s /etc/sysctl.conf ] && sysctl -f /etc/sysctl.conf
 
+# The network: the kernel has brought up lo0 and the first Ethernet interface
+# (DHCP); /etc/hostname.* configure the others, /etc/mygate the default
+# gateway (netstart(8)'s work is that of /etc/netstart).
+if [ -f /etc/netstart ]; then
+	sh /etc/netstart || echo 'warning: the network was not configured completely'
+fi
+
 # Prune /tmp before anyone can log in.
 if [ "${clear_tmp-YES}" != NO ]; then
 	echo 'clearing /tmp'
