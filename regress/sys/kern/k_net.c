@@ -55,14 +55,15 @@ int main(int argc, char **argv)
 	signal(SIGPIPE, SIG_IGN);
 
 	/* the interface */
-	CHECK(if_nametoindex("em0") == 2);
+	char nic[16]; /* em0 (the Intel card) or vio0 (virtio-net) */
+	CHECK(if_indextoname(2, nic) && nic[0] && if_nametoindex(nic) == 2);
 	{
 		struct { char name[16]; struct sockaddr_in addr; char pad[8]; } r;   /* Linux's struct ifreq */
 		memset(&r, 0, sizeof r);
-		strcpy(r.name, "em0");
+		strcpy(r.name, nic);
 		fd = socket(AF_INET, SOCK_DGRAM, 0);
 		CHECK(ioctl(fd, 0x8915 /* SIOCGIFADDR */, &r) == 0);
-		printf("em0 %s\n", inet_ntoa(r.addr.sin_addr));
+		printf("%s %s\n", nic, inet_ntoa(r.addr.sin_addr));
 		close(fd);
 	}
 

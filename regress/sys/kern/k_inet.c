@@ -117,7 +117,7 @@ int main(void)
 	c = socket(AF_INET, SOCK_STREAM, 0);
 	sa = v4("192.0.2.1", 80);
 	CHECK(bind(c, (struct sockaddr *)&sa, sizeof sa) == -1 && errno == EADDRNOTAVAIL);
-	if (!if_nametoindex("em0"))
+	if (!if_indextoname(2, txt)) /* (no card: no interface after lo0) */
 		CHECK(connect(c, (struct sockaddr *)&sa, sizeof sa) == -1 && errno == ENETUNREACH);
 	close(c);
 
@@ -328,7 +328,9 @@ int main(void)
 	{
 		struct if_nameindex *ni = if_nameindex();
 		CHECK(ni && ni[0].if_index == 1 && !strcmp(ni[0].if_name, "lo0") &&
-		      (ni[1].if_index == 0 || (ni[1].if_index == 2 && !strcmp(ni[1].if_name, "em0") && ni[2].if_index == 0)));
+		      (ni[1].if_index == 0 ||
+		       (ni[1].if_index == 2 && (!strcmp(ni[1].if_name, "em0") || !strcmp(ni[1].if_name, "vio0")) &&
+			ni[2].if_index == 0)));
 		if (ni)
 			if_freenameindex(ni);
 	}
