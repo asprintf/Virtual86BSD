@@ -1007,6 +1007,9 @@ ffs_blkfree(struct inode *ip, daddr_t bno, long size)
 	daddr_t blkno;
 	int i, cg, blk, frags, bbase;
 
+	if (um->um_damaged)	/* (what is left to free is for fsck_ffs) */
+		return;
+
 	if ((u_int)size > (u_int)fs->fs_bsize || fragoff(fs, size) != 0 ||
 	    fragnum(fs, bno) + numfrags(fs, size) > fs->fs_frag) {
 		printf("ffs: ffs_blkfree: bad size %ld, inode %lu\n", size,
@@ -1100,6 +1103,8 @@ ffs_freefile(struct inode *pip, ino_t ino, mode_t mode)
 	struct cg *cgp;
 	u_int cg;
 
+	if (um->um_damaged)
+		return;
 	if (ino >= (ino_t)fs->fs_ipg * fs->fs_ncg) {
 		printf("ffs: ffs_freefile: inode %lu out of range\n", (unsigned long)ino);
 		ffs_damaged(um);

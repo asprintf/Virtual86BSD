@@ -352,6 +352,11 @@ ffs_sync(struct super *sb)
 	struct ffsmount *um = VFSTOFFS(sb);
 	struct fs *fs = um->um_fs;
 
+	if (um->um_damaged && !sb->rdonly) {
+		printf("ffs: %s: damaged, stays read-only: unmount it and run fsck_ffs\n",
+		    um->um_bdev->name);
+		sb->rdonly = true;
+	}
 	if (!sb->rdonly && !um->um_rw) {
 		if (um->um_unclean || um->um_damaged || fs->fs_contigsumsize > 0) {
 			printf("ffs: %s: not clean, stays read-only: check it with fsck_ffs\n",
