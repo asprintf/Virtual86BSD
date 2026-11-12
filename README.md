@@ -46,7 +46,8 @@ Tests, the test suites of the ports).
                     its configuration
     sbin/init/      init, the first process
     etc/            the configuration files of a Virtual/86 BSD system
-    share/doc/      conformance.md: the external test suites and their results
+    share/doc/      conformance.md: the external test suites and their results;
+                    credits.md: the code adapted from OpenBSD and NetBSD, with its licences
     distrib/        the scripts behind all of that: build.sh (the stages),
                     mkdisk.sh, boot.sh, chroot.sh
     regress/        the tests: regress/{bin,sbin,usr.bin,usr.sbin}/<utility>, lib/libc
