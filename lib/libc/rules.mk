@@ -55,6 +55,7 @@ HDRS = \
 	../../include/glob.h \
 	../../include/grp.h \
 	../../include/iconv.h \
+	../../include/ifaddrs.h \
 	../../include/inttypes.h \
 	../../include/iso646.h \
 	../../include/langinfo.h \
@@ -67,6 +68,9 @@ HDRS = \
 	../../include/mqueue.h \
 	../../include/ndbm.h \
 	../../include/net/if.h \
+	../../include/net/if_dl.h \
+	../../include/net/if_types.h \
+	../../include/net/route.h \
 	../../include/netdb.h \
 	../../include/netinet/in.h \
 	../../include/netinet/tcp.h \
@@ -100,6 +104,7 @@ HDRS = \
 	../../include/sys/sem.h \
 	../../include/sys/shm.h \
 	../../include/sys/socket.h \
+	../../include/sys/sockio.h \
 	../../include/sys/stat.h \
 	../../include/sys/statvfs.h \
 	../../include/sys/sysctl.h \
@@ -317,6 +322,7 @@ OBJS = \
 	$(B)/obj/network/getaddrinfo.o \
 	$(B)/obj/network/getnameinfo.o \
 	$(B)/obj/network/if.o \
+	$(B)/obj/network/ifaddrs.o \
 	$(B)/obj/network/in6addr.o \
 	$(B)/obj/network/inet.o \
 	$(B)/obj/network/netdb_ent.o \
@@ -1075,6 +1081,10 @@ $(B)/obj/network/getnameinfo.o: network/getnameinfo.c $(HDRS)
 $(B)/obj/network/if.o: network/if.c $(HDRS)
 	mkdir -p $(B)/obj/network
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/if.c
+
+$(B)/obj/network/ifaddrs.o: network/ifaddrs.c $(HDRS)
+	mkdir -p $(B)/obj/network
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/ifaddrs.c
 
 $(B)/obj/network/in6addr.o: network/in6addr.c $(HDRS)
 	mkdir -p $(B)/obj/network
