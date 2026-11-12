@@ -124,6 +124,7 @@ int mount_root(const char *type, struct blockdev *b);
 
 /* file systems */
 void ext2_register(void);
+void ffs_register(void);
 void tmpfs_register(void);
 void procfs_register(void);
 struct super *tmpfs_mount_internal(void);

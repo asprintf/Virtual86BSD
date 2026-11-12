@@ -765,6 +765,7 @@ long sys_umount2(long udir, long flags) {
 
 void vfs_init(void) {
   ext2_register();
+  ffs_register();
   tmpfs_register();
   procfs_register();
 }

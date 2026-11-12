@@ -79,6 +79,12 @@ file kern/kern_descrip.c
 file kern/vfs_lookup.c
 file kern/vfs_bio.c
 file ufs/ext2fs/ext2fs.c
+file ufs/ffs/ffs_subr.c
+file ufs/ffs/ffs_tables.c
+file ufs/ffs/ffs_vfsops.c
+file ufs/ffs/ffs_alloc.c
+file ufs/ffs/ffs_balloc.c
+file ufs/ffs/ffs_vnops.c
 file tmpfs/tmpfs.c
 file miscfs/procfs/procfs.c
 file miscfs/deadfs/dead_vnops.c
