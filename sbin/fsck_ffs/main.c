@@ -32,13 +32,16 @@
 
 /*
  * Adapted for V86BSD from OpenBSD sbin/fsck_ffs/main.c (revision 1.55).
- * Changes: integer types from <stdint.h>; no mount reload of a modified root (the
- *   kernel has none: REBOOT NOW, exit status 4); the exit status is checkfilesys()'s
+ * Changes: integer types from <stdint.h>; a modified root is reloaded with
+ *   mount(2) and MS_RELOAD (the kernel's ffs_reload()), and only when that fails
+ *   is it REBOOT NOW, exit status 4; the exit status is checkfilesys()'s
  *   (8 for a file system that cannot be checked, 4 for the reboot, 1 when a problem
  *   was left, as with -n), where OpenBSD's main() drops it; otherwise as OpenBSD.
  */
 
 #include <sys/time.h>
+#include <sys/mount.h>
+#include <errno.h>
 #include <signal.h>
 #include <sys/param.h>
 #include <time.h>
@@ -377,12 +380,19 @@ checkfilesys(char *filesys, char *mntpt, long auxdata, int child)
 		printf("\n***** PLEASE RERUN FSCK *****\n");
 	if (hotroot()) {
 		/*
-		 * We modified the root: OpenBSD mounts it again with the new
-		 * contents (MNT_RELOAD); V86BSD's kernel has no reload, a reboot it is.
+		 * We modified the root, which is mounted read-only: the kernel
+		 * reads it again (MS_RELOAD, as OpenBSD's MNT_RELOAD); if that
+		 * fails the system has to be rebooted.
 		 */
+		sync();
+		if (mount("", "/", NULL, MS_REMOUNT | MS_RDONLY | MS_RELOAD, NULL) == 0) {
+			if (!preen)
+				printf("\n***** ROOT FILE SYSTEM RELOADED *****\n");
+			return (resolved ? 0 : 1);
+		}
+		pwarn("CANNOT RELOAD THE ROOT FILE SYSTEM: %s\n", strerror(errno));
 		if (!preen)
 			printf("\n***** REBOOT NOW *****\n");
-		sync();
 		return (4);
 	}
 	return (resolved ? 0 : 1);
