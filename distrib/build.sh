@@ -289,6 +289,9 @@ stage() {
 	say "stage $n: the utilities, with c17 on V86BSD's C library ($how)"
 	copy bin "$S/bin"
 	copy sbin "$S/sbin"
+	# fsck_ffs builds the driver'"'"'s bit map code from ../../sys/ufs/ffs
+	mkdir -p "$S/sys/ufs/ffs" && cp -p "$SRC/sys/ufs/ffs/ffs_subr.c" "$SRC/sys/ufs/ffs/ffs_tables.c" \
+		"$S/sys/ufs/ffs/" || fail "copying sys/ufs/ffs"
 	copy libexec "$S/libexec"
 	copy usr.bin "$S/usr.bin"
 	copy usr.sbin "$S/usr.sbin"
