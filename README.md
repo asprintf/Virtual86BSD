@@ -185,6 +185,7 @@ The disk is a virtio disk (`/dev/disk0` inside, with the root on its
 partition `/dev/disk0s1`); `-i` makes it a PC's IDE disk (also `disk0`)
 instead, which is much slower.  `boot.sh` options: `-m 2G` the memory (default 1G), `-g` a window with
 the VGA screen and the keyboard instead of this terminal, `-n` no network,
+`-v` a virtio network card (`vio0`) instead of the Intel e1000 (`em0`),
 `-p 8080:80` forwards port 8080 of the host (127.0.0.1) to port 80 of the
 system, `-k kernel` another kernel, `-e` no KVM, and after `--` more
 arguments for QEMU.  It uses KVM when `/dev/kvm` is usable (much faster;

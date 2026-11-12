@@ -30,7 +30,7 @@
 # boot.sh - boot a V86BSD system in QEMU: V86BSD's kernel with the disk image
 # mkdisk.sh made.
 #
-# Usage: sh boot.sh [-egi] [-m memory] [-n] [-k kernel] [-p hostport:port]...
+# Usage: sh boot.sh [-egiv] [-m memory] [-n] [-k kernel] [-p hostport:port]...
 #                   [image [-- qemu-argument...]]
 #
 #   image     the disk image (default: v86bsd.img beside this script)
@@ -39,6 +39,7 @@
 #   -g        a window with the VGA screen and the keyboard, instead of the
 #             console on this terminal (the serial port)
 #   -n        no network card
+#   -v        the network card is a virtio one (vio0), not the Intel e1000 (em0)
 #   -e        QEMU's emulation of the processor, also where KVM is available
 #   -i        the disk as a PC's IDE disk (disk0 at pciide0: the ATA driver,
 #             much slower) instead of a virtio disk (disk0 at vioblk0)
@@ -65,15 +66,15 @@
 # -e uses that even where KVM is available).
 
 usage() {
-	echo "usage: sh boot.sh [-egi] [-m memory] [-n] [-k kernel] [-p hostport:port]... [image [-- qemu-argument...]]" >&2
+	echo "usage: sh boot.sh [-egiv] [-m memory] [-n] [-k kernel] [-p hostport:port]... [image [-- qemu-argument...]]" >&2
 	exit 2
 }
 
 here=$(pwd)
 cd "$(dirname "$0")/.." || exit 2
 SRC=$(pwd)
-kernel=$SRC/root/bsd mem=1G graphic=false net=true fwd= kvm=true ide=false
-while getopts egik:m:np: opt; do
+kernel=$SRC/root/bsd mem=1G graphic=false net=true fwd= kvm=true ide=false nic=e1000
+while getopts egik:m:nvp: opt; do
 	case $opt in
 	e) kvm=false ;;
 	i) ide=true ;;
@@ -81,6 +82,7 @@ while getopts egik:m:np: opt; do
 	k) kernel=$OPTARG ;;
 	m) mem=$OPTARG ;;
 	n) net=false ;;
+	v) nic=virtio-net-pci ;;
 	p)
 		h=${OPTARG%%:*} g=${OPTARG#*:}
 		case $h:$g in *[!0-9:]*|:*|*:|*:*:*) usage ;; esac
@@ -123,7 +125,7 @@ if $ide; then if=ide; else if=virtio; fi
 set -- -m "$mem" -no-reboot -kernel "$kernel" -append "CONSOLE=/dev/tty00" \
 	-drive "file=$img,format=raw,if=$if" "$@"
 if $net; then
-	set -- "$@" -nic "user,model=e1000$fwd"
+	set -- "$@" -nic "user,model=$nic$fwd"
 else
 	set -- "$@" -nic none
 fi
