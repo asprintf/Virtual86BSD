@@ -32,7 +32,9 @@
 
 /*
  * Adapted for V86BSD from OpenBSD sbin/fsck/fsutil.c (revision 1.25).
- * Changes: integer types from <stdint.h>; otherwise as OpenBSD.
+ * Changes: integer types from <stdint.h>; blockcheck() takes a regular file
+ *   (an image) as it is, so that it does not rewind the walk through fstab
+ *   that checkfstab() makes; otherwise as OpenBSD.
  */
 
 #include <stdio.h>
@@ -228,6 +230,10 @@ retry:
 			printf("%s is not a character device\n", raw);
 			return (origname);
 		}
+	} else if (S_ISREG(stblock.st_mode)) {
+		/* an image file: as it is (and the walk through fstab that
+		   may be going on is not rewound by getfsfile) */
+		return (origname);
 	} else if (S_ISCHR(stblock.st_mode) && !retried) {
 		newname = unrawname(newname);
 		retried++;
