@@ -39,8 +39,9 @@
  * -r mounts read-only (-o ro), -w read-write (-o rw), -u changes the mount
  * that is there (a remount: `mount -uw /' makes / writable); -v prints what
  * was mounted.  The options are ro, rw, noauto (in the fstab: -a skips the
- * entry), update (-u) and defaults; the kernel knows no others, so any other
- * word is an error.  -a skips what is already mounted (or, with -u, changes
+ * entry), update (-u), reload (with -ur: read a read-only file system again,
+ * after fsck changed its disk) and defaults; the kernel knows no others, so any
+ * other word is an error.  -a skips what is already mounted (or, with -u, changes
  * it), and entries of type swap, sw and xx.  With no type a /dev/ special is
  * ffs and anything else tmpfs.  The list is the system's table (/proc/self/mounts):
  *     /dev/disk0s1 on / type ffs (local)
@@ -72,7 +73,7 @@ static void usage(void)
 
 /* what the options say: ro is -1 (not said), 0 (rw) or 1 (ro) */
 struct want {
-	int ro, noauto, update;
+	int ro, noauto, update, reload;
 };
 
 /* the words of a comma-separated option list; 0, or -1 with a message for
@@ -91,6 +92,7 @@ static int parse_opts(const char *opts, struct want *w)
 		else if (!strcmp(o, "rw")) w->ro = 0;
 		else if (!strcmp(o, "noauto")) w->noauto = 1;
 		else if (!strcmp(o, "update")) w->update = 1;
+		else if (!strcmp(o, "reload")) w->reload = 1;
 		else if (!strcmp(o, "defaults") || !strcmp(o, "auto")) ;
 		else {
 			fprintf(stderr, "mount: option not supported by this kernel: %s\n", o);
@@ -126,13 +128,13 @@ static const struct mnt *find_mount(const struct mnt *cur, size_t ncur, const ch
 
 /* mount, or with update change the mount at dir; ro as the want says (an
    update that says nothing keeps the mount as it is) */
-static void do_mount(const char *special, const char *dir, const char *type, int ro, int update)
+static void do_mount(const char *special, const char *dir, const char *type, int ro, int update, int reload)
 {
 	unsigned long flags = ro == 1 ? MS_RDONLY : 0;
 	int e;
 
 	if (update)
-		e = mount(special, dir, NULL, flags | MS_REMOUNT, NULL);
+		e = mount(special, dir, NULL, flags | MS_REMOUNT | (reload ? MS_RELOAD : 0), NULL);
 	else
 		e = mount(special, dir, type, flags, NULL);
 	if (e == -1) {
@@ -146,7 +148,7 @@ static void do_mount(const char *special, const char *dir, const char *type, int
 int main(int argc, char *argv[])
 {
 	int ch, all = 0, bad = 0;
-	struct want cmd = { -1, 0, 0 };
+	struct want cmd = { -1, 0, 0, 0 };
 	const char *types = NULL;
 	struct mnt *cur = NULL, *tab = NULL;
 	size_t ncur = 0, ntab = 0, i;
@@ -196,7 +198,7 @@ int main(int argc, char *argv[])
 			at = find_mount(cur, ncur, tab[i].dir, 0);
 			if (at && !cmd.update)
 				continue;
-			do_mount(tab[i].fsname, tab[i].dir, tab[i].type, w.ro, at != NULL);
+			do_mount(tab[i].fsname, tab[i].dir, tab[i].type, w.ro, at != NULL, 0);
 		}
 		return status;
 	}
@@ -220,7 +222,7 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "mount: %s: not mounted\n", argv[0]);
 			return 1;
 		}
-		do_mount(m->fsname, m->dir, m->type, cmd.ro != -1 ? cmd.ro : mnt_hasopt(m->opts, "ro"), 1);
+		do_mount(m->fsname, m->dir, m->type, cmd.ro != -1 ? cmd.ro : mnt_hasopt(m->opts, "ro"), 1, cmd.reload);
 		return status;
 	}
 	if (argc == 1) { /* a directory or special file of the fstab */
@@ -233,12 +235,12 @@ int main(int argc, char *argv[])
 					return 1;
 				if (cmd.ro != -1)
 					w.ro = cmd.ro;
-				do_mount(tab[i].fsname, tab[i].dir, types ? types : tab[i].type, w.ro, 0);
+				do_mount(tab[i].fsname, tab[i].dir, types ? types : tab[i].type, w.ro, 0, 0);
 				return status;
 			}
 		fprintf(stderr, "mount: %s: not in %s\n", argv[0], PATH_FSTAB);
 		return 1;
 	}
-	do_mount(argv[0], argv[1], types ? types : (strncmp(argv[0], "/dev/", 5) == 0 ? "ffs" : "tmpfs"), cmd.ro, 0);
+	do_mount(argv[0], argv[1], types ? types : (strncmp(argv[0], "/dev/", 5) == 0 ? "ffs" : "tmpfs"), cmd.ro, 0, 0);
 	return status;
 }

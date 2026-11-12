@@ -98,4 +98,12 @@ te "a name that is not in the fstab" "mount: /nowhere: not in /etc/fstab" 1 "$U"
 te "an fstab with a bad option" "mount: option not supported by this kernel: nosuid" 1 sh -c 'printf "tmpfs $1/a tmpfs nosuid 0 0\n" > /etc/fstab; "$2" -a' sh "$T" "$U"
 rm -f /etc/fstab
 te "no fstab" "mount: /etc/fstab: No such file or directory" 1 "$U" -a
+# reload: a read-only mount read again (what fsck_ffs asks of the root); only
+# a file system that can (ffs) and only a read-only one
+if [ "$RT" = ffs ]; then
+    ok "-ur -o reload / : reloads the read-only root" sh -c '"$1" -ur / && "$1" -ur -o reload / && "$1" -uw /' sh "$U"
+    ok "  and / is writable after it" sh -c 'touch "$1/.reload" && rm "$1/.reload"' sh /
+    te "reload of a writable mount: refused" "mount: /: Invalid argument" 1 "$U" -uw -o reload /
+    te "reload of tmpfs: refused" "mount: $T/b: Invalid argument" 1 sh -c '"$1" -t tmpfs tmpfs "$2/b" && "$1" -ur -o reload "$2/b"; r=$?; "$3" "$2/b"; exit $r' sh "$U" "$T" "$UM"
+fi
 done_tests mount
