@@ -50,4 +50,20 @@
 
 #define NORETURN _Noreturn
 
+/* the BSD block sizes and helper macros (as the program's <sys/param.h>) */
+#define NBBY       8                    /* bits per byte */
+#define DEV_BSHIFT 9                    /* log2(DEV_BSIZE) */
+#define DEV_BSIZE  (1 << DEV_BSHIFT)    /* the unit of disk addresses */
+#define MAXBSIZE   65536                /* the largest file system block */
+#define btodb(bytes) ((bytes) >> DEV_BSHIFT)
+#define dbtob(db)    ((db) << DEV_BSHIFT)
+#define setbit(a, i) ((a)[(i) / NBBY] |= 1 << ((i) % NBBY))
+#define clrbit(a, i) ((a)[(i) / NBBY] &= ~(1 << ((i) % NBBY)))
+#define isset(a, i)  ((a)[(i) / NBBY] & (1 << ((i) % NBBY)))
+#define isclr(a, i)  (((a)[(i) / NBBY] & (1 << ((i) % NBBY))) == 0)
+#define howmany(x, y)   (((x) + ((y) - 1)) / (y))
+#define roundup(x, y)   ((((x) + ((y) - 1)) / (y)) * (y))
+#define rounddown(x, y) (((x) / (y)) * (y))
+#define powerof2(x)     ((((x) - 1) & (x)) == 0)
+
 #endif
