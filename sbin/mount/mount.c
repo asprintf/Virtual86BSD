@@ -42,8 +42,8 @@
  * entry), update (-u) and defaults; the kernel knows no others, so any other
  * word is an error.  -a skips what is already mounted (or, with -u, changes
  * it), and entries of type swap, sw and xx.  With no type a /dev/ special is
- * ext2 and anything else tmpfs.  The list is the system's table (/proc/self/mounts):
- *     /dev/disk0s1 on / type ext2 (local)
+ * ffs and anything else tmpfs.  The list is the system's table (/proc/self/mounts):
+ *     /dev/disk0s1 on / type ffs (local)
  * The status is 1 if any mount failed. */
 #define _POSIX_C_SOURCE 202405L
 #define _XOPEN_SOURCE 800
@@ -239,6 +239,6 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "mount: %s: not in %s\n", argv[0], PATH_FSTAB);
 		return 1;
 	}
-	do_mount(argv[0], argv[1], types ? types : (strncmp(argv[0], "/dev/", 5) == 0 ? "ext2" : "tmpfs"), cmd.ro, 0);
+	do_mount(argv[0], argv[1], types ? types : (strncmp(argv[0], "/dev/", 5) == 0 ? "ffs" : "tmpfs"), cmd.ro, 0);
 	return status;
 }

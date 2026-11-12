@@ -39,10 +39,11 @@ cleanup() { "$UM" "$T/a" "$T/b" "$T/c" 2>/dev/null; if [ -f "$T/fstab.save" ]; t
 trap cleanup EXIT
 usage1="usage: mount [-aruvw] [-t type[,type...]] [-o options] [special | node]"
 
-# the list
-ok "the list has /" sh -c '"$1" | grep " on / type ext2 (local" > /dev/null' sh "$U"
+# the list (the type of / is whatever the system booted with: ffs, or ext2)
+RT=$("$U" | sed -n 's/^.* on \/ type \([^ ]*\) .*/\1/p')
+ok "the list has /" sh -c '"$1" | grep " on / type $2 (local" > /dev/null' sh "$U" "$RT"
 ok "the list has /proc" sh -c '"$1" | grep " on /proc type proc (local" > /dev/null' sh "$U"
-ok "-t keeps to a type" sh -c '"$1" -t proc | grep -c " type proc " > /dev/null && ! "$1" -t proc | grep " type ext2 " > /dev/null' sh "$U"
+ok "-t keeps to a type" sh -c '"$1" -t proc | grep -c " type proc " > /dev/null && ! "$1" -t proc | grep " type $2 " > /dev/null' sh "$U" "$RT"
 t "-t of a type nothing has" "" 0 "$U" -t nosuchtype
 
 # a mount by hand
@@ -87,7 +88,7 @@ te "-a mounts the entries that are auto" "" 0 "$U" -a
 t "a is there, c read-only, b (noauto) not" "a c(ro) -" 0 sh -c 'x=$("$1" | grep -c " on $2/a "); y=$("$1" | grep " on $2/c " | grep -c read-only); z=$("$1" | grep -c " on $2/b "); [ $x = 1 ] && [ $y = 1 ] && [ $z = 0 ] && echo "a c(ro) -"' sh "$U" "$T"
 te "-a again: what is mounted is left alone" "" 0 "$U" -a
 t "no second mount" "1" 0 sh -c '"$1" | grep -c " on $2/a "' sh "$U" "$T"
-t "-a -t: only that type" "0" 0 sh -c '"$1" -a -t ext2; "$1" | grep -c " on $2/b "; true' sh "$U" "$T"
+t "-a -t: only that type" "0" 0 sh -c '"$1" -a -t $3; "$1" | grep -c " on $2/b "; true' sh "$U" "$T" "$RT"
 t "a noauto entry by its directory" "1" 0 sh -c '"$1" "$2/b" && "$1" | grep -c " on $2/b "' sh "$U" "$T"
 t "-u -a: updates what is mounted (c: ro stays, a: rw)" "ok" 0 sh -c '"$1" -ua && "$1" | grep " on $2/c " | grep read-only > /dev/null && echo ok' sh "$U" "$T"
 "$UM" "$T/a" "$T/b" "$T/c"

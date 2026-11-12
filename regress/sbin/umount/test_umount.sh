@@ -61,5 +61,5 @@ t "-a -t of a type nothing has: nothing happens" "" 0 "$U" -a -t nosuchtype
 if [ "$("$M" -t tmpfs | wc -l | tr -d ' ')" = 0 ]; then
     t "-a -t tmpfs: all of them, the last first" "00" 0 sh -c '"$1" -t tmpfs tmpfs "$2/a"; "$1" -t tmpfs tmpfs "$2/b"; "$3" -a -t tmpfs; echo $("$1" -t tmpfs | wc -l | tr -d " ")$("$1" | grep -c "$2")' sh "$M" "$T" "$U"
 fi
-t "-a keeps /, /dev and /proc" "ok" 0 sh -c '"$1" -a -t ext2,proc,devtmpfs; "$2" | grep " on / " > /dev/null && "$2" | grep " on /proc " > /dev/null && echo ok' sh "$U" "$M"
+t "-a keeps /, /dev and /proc" "ok" 0 sh -c '"$1" -a -t ffs,ext2,proc,devtmpfs; "$2" | grep " on / " > /dev/null && "$2" | grep " on /proc " > /dev/null && echo ok' sh "$U" "$M"
 done_tests umount
