@@ -45,7 +45,7 @@
 PREFIX = /usr/local
 BINDIR = /sbin
 
-SUBDIR = chown dmesg halt ifconfig mount route shutdown sysctl umount
+SUBDIR = chown dmesg dumpfs fsck_ffs halt ifconfig mount newfs route shutdown sysctl umount
 
 all:
 	@for u in $(SUBDIR); do \
