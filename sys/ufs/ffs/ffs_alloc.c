@@ -266,7 +266,11 @@ ffs_realloccg(struct inode *ip, daddr_t lbprev, daddr_t bpref, int osize,
 		}
 		memset(tmp, 0, (size_t)nsize);
 		ffs_rw(um, bprev, 0, tmp, (size_t)osize, false, false);
-		ffs_rw(um, bno, 0, tmp, (size_t)nsize, true, false);
+		/*
+		 * (V86BSD: a directory's chunks are what its inode, written
+		 * soon after, points to: they go to the disk now.)
+		 */
+		ffs_rw(um, bno, 0, tmp, (size_t)nsize, true, S_ISDIR(ip->mode));
 		kfree(tmp);
 	}
 	ffs_blkfree(ip, bprev, (long)osize);
@@ -859,6 +863,7 @@ ffs_nodealloccg(struct inode *ip, u_int cg, daddr_t ipref, int mode)
 	struct fs *fs = um->um_fs;
 	struct cg *cgp;
 	int start, len, loc, map, i;
+	bool advanced = false;
 
 	/*
 	 * For efficiency, before looking at the bitmaps for free inodes,
@@ -961,12 +966,20 @@ gotit:
 				while (dp2[i].di_gen == 0)
 					dp2[i].di_gen = (int32_t)ffs_random(0xffffffffU);
 			}
+			/*
+			 * (V86BSD: the block of inodes and the group that says it
+			 * is in use go to the disk now, in that order: fsck
+			 * takes the inodes beyond cg_initediblk for unused, so
+			 * after a crash the inode written next must be inside
+			 * it, and what is inside must have been initialized.)
+			 */
 			ffs_rw(um, ino_to_fsba(fs, cg * fs->fs_ipg + cgp->cg_initediblk),
-			    0, dp2, fs->fs_bsize, true, false);
+			    0, dp2, fs->fs_bsize, true, true);
 			kfree(dp2);
 
 			/* Update the counter of initialized inodes */
 			cgp->cg_initediblk += INOPB(fs);
+			advanced = true;
 		}
 	}
 
@@ -985,7 +998,11 @@ gotit:
 		fs->fs_cs(fs, cg).cs_ndir++;
 	}
 
-	ffs_cgwrite(um, cg, cgp);
+	if (advanced) {
+		ffs_rw(um, cgtod(fs, cg), 0, cgp, fs->fs_cgsize, true, true);
+		kfree(cgp);
+	} else
+		ffs_cgwrite(um, cg, cgp);
 
 	/* Return the allocated inode number */
 	return cg * fs->fs_ipg + ipref;
