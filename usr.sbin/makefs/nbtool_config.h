@@ -1,0 +1,60 @@
+/*
+ * V86BSD: what the NetBSD sources of makefs expect from NetBSD's own libc and
+ * headers (NetBSD names it nbtool_config.h, for building makefs on other
+ * systems): the fields this system's struct stat lacks are not there, and the
+ * few NetBSD library functions the code calls are in misc.c.
+ */
+#ifndef _NBTOOL_CONFIG_H
+#define _NBTOOL_CONFIG_H
+
+#include <sys/types.h>
+#include <sys/cdefs.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include <inttypes.h>
+#include <limits.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef unsigned char u_char;
+typedef unsigned short u_short;
+typedef unsigned int u_int;
+typedef unsigned long u_long;
+typedef uint8_t u_int8_t;
+typedef uint16_t u_int16_t;
+typedef uint32_t u_int32_t;
+typedef uint64_t u_int64_t;
+typedef int64_t quad_t;
+typedef uint64_t u_quad_t;
+
+#define HAVE_STRUCT_STAT_ST_FLAGS 0
+#define HAVE_STRUCT_STAT_ST_GEN 0
+#define HAVE_STRUCT_STAT_ST_MTIMENSEC 0
+#define HAVE_STRUCT_STATVFS_F_IOSIZE 0
+#define HAVE_STRUCT_STAT_BIRTHTIME 0
+#define HAVE_FSTATVFS 0
+
+#ifndef MAXPHYS
+#define MAXPHYS		(64 * 1024)
+#endif
+#ifndef timersub
+#define timersub(a, b, r) do { \
+	(r)->tv_sec = (a)->tv_sec - (b)->tv_sec; \
+	(r)->tv_usec = (a)->tv_usec - (b)->tv_usec; \
+	if ((r)->tv_usec < 0) { (r)->tv_sec--; (r)->tv_usec += 1000000; } \
+} while (0)
+#endif
+
+/* NetBSD's <util.h> and libc, in misc.c */
+void	*emalloc(size_t);
+void	*ecalloc(size_t, size_t);
+void	*erealloc(void *, size_t);
+char	*estrdup(const char *);
+long long strsuftoll(const char *, const char *, long long, long long);
+char	*strsep(char **, const char *);
+const char *inotype(mode_t);
+
+#endif

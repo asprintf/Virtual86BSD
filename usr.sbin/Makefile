@@ -45,7 +45,7 @@
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/sbin
 
-SUBDIR = config rcctl syslogd
+SUBDIR = config makefs rcctl syslogd
 
 all:
 	@for u in $(SUBDIR); do \
