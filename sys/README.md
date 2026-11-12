@@ -154,14 +154,14 @@ and the `machine` link.
                        counts), address spaces and page faults, mmap & co.
     ufs/ext2fs/       ext2 (tmpfs/ and miscfs/procfs/ are tmpfs/devtmpfs
                        and procfs)
-    net/               if.c (the interfaces: lo0, em0, their
+    net/               if.c (the interfaces: lo0, em0, vio0, their
                        addresses and flags), route.c (the routing table)
     netinet/           ip.c (Ethernet, ARP, IPv4 with fragments, ICMP, UDP,
                        DHCP, the network thread), tcp.c (TCP)
     dev/               ic/ (16550 serial console, VGA text console, PS/2
                        keyboard), isa/ (the ISA bus), pci/ (PCI and pcidevs.h,
                        e1000 as if_em.c, ATA disks (PIO) as pciide.c), pv/
-                       (virtio, vioblk)
+                       (virtio, vioblk, virtio-net as if_vio.c)
     sys/ net/ ...      the kernel's headers (its own types; no C library
                        headers)
     lib/libkern/       memory and string routines
@@ -226,8 +226,10 @@ halt line.
 
 ### Devices, names and partitions
 
-* The network cards are `em0` (Intel e1000), `em1` ... and `lo0` the
-  loopback: in `SIOCGIFNAME` and friends, `/proc/net/dev` and the DHCP line.
+* The network card is `em0` (Intel e1000) or `vio0` (virtio-net, QEMU's
+  `-nic model=virtio-net-pci`, `boot.sh -v`), and `lo0` the loopback: in
+  `SIOCGIFNAME` and friends, `/proc/net/dev` and the DHCP line.  A second
+  card is em1 or vio1.
 * The serial console, COM1, is `/dev/tty00` (dial-in) and `/dev/cua00`
   (call-out): the same device, major 4 minor 64.  The VGA console is
   `/dev/ttyC0` (major 4 minor 1).  `/dev/pts` and `ptmx` stay.
@@ -428,6 +430,13 @@ words become init's environment; init uses `CONSOLE` (default
   one DHCP configures.  A packet from the wire whose source or destination
   is 127.x is dropped.  `if_ioctl` (`SIOCGIF*`, Linux's numbers and
   `struct ifreq`) reads this.
+  **vio0** (`dev/pv/if_vio.c`) is written from the Virtio 1.2
+  specification (5.1) on the legacy PCI interface of `virtio.c`: features
+  MAC and STATUS only, a 10-byte header and one descriptor per packet, 64
+  receive buffers and 32 transmit buffers of 2 KiB, receive interrupts on
+  (the ISR register acknowledges them), transmit interrupts off.  PCI
+  interrupt lines can be shared (`irq_register` keeps up to four handlers
+  on a line).
 * **Typed memory** (`kern/kern_tym.c`). Pools reserved at boot; mappings
   are shared memory objects over the pool's pages (with a release hook
   that returns allocated pages and unpins mapped ones); allocation by
@@ -527,8 +536,7 @@ without one: `xargs -p`, `test -t`, `tput cols`), for example from
 ## Not yet
 
 * IPv6 on the wire (neighbour discovery, ICMPv6, SLAAC); TCP window
-  scaling and SACK; more network cards (virtio-net).  SMP, preemption,
-  swap.
+  scaling and SACK.  SMP, preemption, swap.
 * Disks with the waiting task sleeping (now both drivers wait for the
   transfer: the virtio one by watching memory, the ATA one by polling the
   drive's ports, and the task doing disk I/O keeps the processor until

@@ -36,6 +36,8 @@ device disk
 attach disk at pciide, vioblk
 device em
 attach em at pci
+device vio
+attach vio at virtio
 device com
 attach com at isa
 device pckbc
@@ -97,8 +99,9 @@ file dev/pci/pchb.c pchb
 file dev/pci/pcib.c pcib
 file dev/pci/if_em.c em
 file dev/pci/pciide.c pciide
-file dev/pv/virtio.c virtio | vioblk
+file dev/pv/virtio.c virtio | vioblk | vio
 file dev/pv/vioblk.c vioblk
+file dev/pv/if_vio.c vio
 file kern/subr_disk.c
 file dev/isa/isa.c isa
 file dev/ic/com.c com

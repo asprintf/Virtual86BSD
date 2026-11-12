@@ -30,6 +30,7 @@ virtio*		at pci?
 vioblk*		at virtio?
 disk*		at vioblk?
 em*		at pci?
+vio*		at virtio?
 vga*		at pci?
 wsdisplay*	at vga?
 

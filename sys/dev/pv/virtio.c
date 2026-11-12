@@ -31,13 +31,16 @@
 /* virtio.c - the virtio transport on PCI: the legacy ("transitional")
    interface, vendor 1af4 devices 1000..103f, registers in I/O BAR 0.  What
    kind of device it is, is in the subsystem ID; the driver for that kind
-   (vioblk) attaches at virtio. */
+   (vioblk, vio) attaches at virtio.  The virtqueue helpers below are for
+   the drivers (vioblk keeps its own single-request code). */
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 #include <dev/pv/virtiovar.h>
+#include <uvm/uvm.h>
+#include <machine/cpu.h>
 
 static int virtio_match(struct device *parent, void *match, void *aux) {
   struct pci_dev *d = aux;
@@ -73,6 +76,58 @@ static void virtio_attach(struct device *parent, struct device *self, void *aux)
   va.va_pd = d;
   va.va_devid = (int)(pci_read(d, 0x2c) >> 16); /* subsystem ID */
   config_found(self, &va, virtio_print);
+}
+
+/* ---- virtqueues (the legacy layout: the used ring starts on a page) ---- */
+
+/* queue number index of the device at io: its memory, and the device told
+   where it is (the queue's size is the device's) */
+int virtio_queue_setup(uint16_t io, unsigned index, struct virtqueue *vq) {
+  outw((uint16_t)(io + VIRTIO_R_QUEUE_SELECT), (uint16_t)index);
+  unsigned size = inw((uint16_t)(io + VIRTIO_R_QUEUE_SIZE));
+  if (!size)
+    return -ENODEV; /* no such queue */
+  size_t part1 = 16 * (size_t)size + 6 + 2 * (size_t)size;
+  size_t total = PAGE_UP(part1) + PAGE_UP(6 + 8 * (size_t)size);
+  int order = 0;
+  while ((PAGE_SIZE << order) < total)
+    order++;
+  uint64_t q = alloc_pages(order);
+  if (!q)
+    return -ENOMEM;
+  memset(P2V(q), 0, PAGE_SIZE << order);
+  vq->io = io;
+  vq->index = (uint16_t)index;
+  vq->size = size;
+  vq->desc = (volatile struct vring_desc *)P2V(q);
+  vq->avail = (volatile uint16_t *)((uint8_t *)P2V(q) + 16 * (size_t)size);
+  vq->used = (volatile uint16_t *)((uint8_t *)P2V(q) + PAGE_UP(part1));
+  vq->avail_idx = vq->used_seen = 0;
+  outl((uint16_t)(io + VIRTIO_R_QUEUE_PFN), (uint32_t)(q >> 12));
+  return 0;
+}
+
+void virtio_queue_push(struct virtqueue *vq, unsigned head) {
+  vq->avail[2 + vq->avail_idx % vq->size] = (uint16_t)head;
+  mb(); /* the entry before the index */
+  vq->avail_idx++;
+  vq->avail[1] = vq->avail_idx;
+}
+
+void virtio_queue_notify(struct virtqueue *vq) {
+  mb();
+  outw((uint16_t)(vq->io + VIRTIO_R_QUEUE_NOTIFY), vq->index);
+}
+
+bool virtio_queue_pop(struct virtqueue *vq, unsigned *head, uint32_t *len) {
+  if (vq->used[1] == vq->used_seen)
+    return false;
+  mb(); /* the index before the entry */
+  volatile uint32_t *e = (volatile uint32_t *)(vq->used + 2) + 2 * (vq->used_seen % vq->size);
+  *head = e[0];
+  *len = e[1];
+  vq->used_seen++;
+  return true;
 }
 
 struct cfdriver virtio_cd = {NULL, "virtio", DV_DULL, 0};
