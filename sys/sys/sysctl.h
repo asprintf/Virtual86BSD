@@ -420,6 +420,87 @@ struct loadavg {
 	{ 0, 0 }, \
 }
 
+/* net.inet.icmp.<variable> (the ones the kernel has: bmcastecho and
+   errppslimit) */
+#define ICMPCTL_MASKREPL    1  /* int */
+#define ICMPCTL_BMCASTECHO  2  /* int: answer echo requests to a broadcast address (0) */
+#define ICMPCTL_ERRPPSLIMIT 3  /* int: ICMP errors per second, -1 for no limit (100) */
+#define ICMPCTL_REDIRACCEPT 4  /* int */
+#define ICMPCTL_REDIRTIMEOUT 5 /* int */
+#define ICMPCTL_TSTAMPREPL  6  /* int */
+#define ICMPCTL_STATS       7  /* struct */
+#define ICMPCTL_MAXID       8
+
+#define ICMPCTL_NAMES { \
+	{ 0, 0 }, \
+	{ "maskrepl", CTLTYPE_INT }, \
+	{ "bmcastecho", CTLTYPE_INT }, \
+	{ "errppslimit", CTLTYPE_INT }, \
+	{ "rediraccept", CTLTYPE_INT }, \
+	{ "redirtimeout", CTLTYPE_INT }, \
+	{ "tstamprepl", CTLTYPE_INT }, \
+	{ "stats", CTLTYPE_STRUCT }, \
+}
+
+/* net.inet.tcp.<variable> (the one the kernel has: rstppslimit) */
+#define TCPCTL_RFC1323      1
+#define TCPCTL_KEEPINITTIME 2
+#define TCPCTL_KEEPIDLE     3
+#define TCPCTL_KEEPINTVL    4
+#define TCPCTL_SLOWHZ       5
+#define TCPCTL_BADDYNAMIC   6
+#define TCPCTL_RECVSPACE    7
+#define TCPCTL_SENDSPACE    8
+#define TCPCTL_IDENT        9
+#define TCPCTL_SACK         10
+#define TCPCTL_MSSDFLT      11
+#define TCPCTL_RSTPPSLIMIT  12 /* int: RSTs per second for segments that have no connection (100) */
+#define TCPCTL_ACK_ON_PUSH  13
+#define TCPCTL_ECN          14
+#define TCPCTL_SYN_CACHE_LIMIT 15
+#define TCPCTL_SYN_BUCKET_LIMIT 16
+#define TCPCTL_RFC3390      17
+#define TCPCTL_REASS_LIMIT  18
+#define TCPCTL_DROP         19
+#define TCPCTL_SACKHOLE_LIMIT 20
+#define TCPCTL_STATS        21
+#define TCPCTL_ALWAYS_KEEPALIVE 22
+#define TCPCTL_SYN_USE_LIMIT 23
+#define TCPCTL_ROOTONLY     24
+#define TCPCTL_SYN_HASH_SIZE 25
+#define TCPCTL_TSO          26
+#define TCPCTL_MAXID        27
+
+#define TCPCTL_NAMES { \
+	{ 0, 0 }, \
+	{ "rfc1323", CTLTYPE_INT }, \
+	{ "keepinittime", CTLTYPE_INT }, \
+	{ "keepidle", CTLTYPE_INT }, \
+	{ "keepintvl", CTLTYPE_INT }, \
+	{ 0, 0 }, \
+	{ "baddynamic", CTLTYPE_STRUCT }, \
+	{ 0, 0 }, \
+	{ 0, 0 }, \
+	{ "ident", CTLTYPE_STRUCT }, \
+	{ "sack", CTLTYPE_INT }, \
+	{ "mssdflt", CTLTYPE_INT }, \
+	{ "rstppslimit", CTLTYPE_INT }, \
+	{ "ackonpush", CTLTYPE_INT }, \
+	{ "ecn", CTLTYPE_INT }, \
+	{ "syncachelimit", CTLTYPE_INT }, \
+	{ "synbucketlimit", CTLTYPE_INT }, \
+	{ "rfc3390", CTLTYPE_INT }, \
+	{ "reasslimit", CTLTYPE_INT }, \
+	{ "drop", CTLTYPE_STRUCT }, \
+	{ "sackholelimit", CTLTYPE_INT }, \
+	{ "stats", CTLTYPE_STRUCT }, \
+	{ "always_keepalive", CTLTYPE_INT }, \
+	{ "synuselimit", CTLTYPE_INT }, \
+	{ "rootonly", CTLTYPE_STRUCT }, \
+	{ "synhashsize", CTLTYPE_INT }, \
+	{ "tso", CTLTYPE_INT }, \
+}
+
 /* net.inet.ip.<variable> */
 #define IPCTL_FORWARDING            1  /* int: act as a router */
 #define IPCTL_SENDREDIRECTS         2  /* int */

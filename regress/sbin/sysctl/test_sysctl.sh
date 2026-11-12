@@ -58,12 +58,16 @@ t "two names" "kern.ostype=V86BSD${nl}hw.machine=amd64" 0 "$U" kern.ostype hw.ma
 ok "a node lists its leaves" sh -c '"$1" hw | grep "^hw.machine=amd64$" > /dev/null && "$1" hw | grep "^hw.pagesize=" > /dev/null' sh "$U"
 ok "a node lists only its own" sh -c '! "$1" hw | grep -v "^hw\." > /dev/null' sh "$U"
 ok "kern lists ostype" sh -c '"$1" kern | grep "^kern.ostype=V86BSD$" > /dev/null' sh "$U"
+t "net.inet.icmp lists its two" "net.inet.icmp.bmcastecho=0${nl}net.inet.icmp.errppslimit=100" 0 "$U" net.inet.icmp
+t "net.inet.tcp lists its one" "net.inet.tcp.rstppslimit=100" 0 "$U" net.inet.tcp
+te "an icmp name the kernel does not have" "sysctl: net.inet.icmp.maskrepl: value is not available" 1 "$U" net.inet.icmp.maskrepl
 ok "net.inet.ip lists nothing (reserved)" sh -c '"$1" net.inet.ip > "$2"; [ ! -s "$2" ]' sh "$U" "$T/o"
 
 # everything
 ok "-a: kern.ostype" sh -c '"$1" -a | grep "^kern.ostype=V86BSD$" > /dev/null' sh "$U"
 ok "-a: hw.model, vm.loadavg" sh -c '"$1" -a | grep "^hw.model=" > /dev/null && "$1" -a | grep "^vm.loadavg=" > /dev/null' sh "$U"
-ok "-a: no gaps, no unanswered names" sh -c '! "$1" -a | grep "gap\|kern.proc=\|net\." > /dev/null' sh "$U"
+ok "-a: no gaps, no unanswered names" sh -c '! "$1" -a | grep "gap\|kern.proc=\|net\.inet\.ip\." > /dev/null' sh "$U"
+t "-a: the network knobs" "net.inet.icmp.bmcastecho=0${nl}net.inet.icmp.errppslimit=100${nl}net.inet.tcp.rstppslimit=100" 0 sh -c '"$1" -a | grep "^net\."' sh "$U"
 ok "-a: every line is name=value (kern.version has more lines)" sh -c '! "$1" -a | grep -v "^[a-z0-9_.-]*=\|^ \|^$" > /dev/null' sh "$U"
 ok "no arguments: the same as -a" sh -c '[ "$("$1")" = "$("$1" -a)" ]' sh "$U"
 ok "-A is -a" sh -c '[ "$("$1" -A | head -n 3)" = "$("$1" -a | head -n 3)" ]' sh "$U"
@@ -115,7 +119,18 @@ CONF
     te "-f: an error in the file: the rest is read, the status is 1" "sysctl: level name nosuch in kern.nosuch is invalid
 kern.hostname: from-file -> after-error" 1 "$U" -f "$T/conf2"
     "$U" -q kern.hostname="$old" kern.domainname="(none)"
+    # the network knobs
+    t "set bmcastecho" "net.inet.icmp.bmcastecho: 0 -> 1" 0 "$U" net.inet.icmp.bmcastecho=1
+    t "it is set" "net.inet.icmp.bmcastecho=1" 0 "$U" net.inet.icmp.bmcastecho
+    te "bmcastecho is 0 or 1" "sysctl: net.inet.icmp.bmcastecho: Invalid argument" 1 "$U" net.inet.icmp.bmcastecho=2
+    t "back to 0" "net.inet.icmp.bmcastecho: 1 -> 0" 0 "$U" net.inet.icmp.bmcastecho=0
+    t "errppslimit: no limit" "net.inet.icmp.errppslimit: 100 -> -1" 0 "$U" net.inet.icmp.errppslimit=-1
+    te "errppslimit under -1" "sysctl: net.inet.icmp.errppslimit: Invalid argument" 1 "$U" net.inet.icmp.errppslimit=-2
+    t "errppslimit back" "net.inet.icmp.errppslimit: -1 -> 100" 0 "$U" net.inet.icmp.errppslimit=100
+    t "rstppslimit" "net.inet.tcp.rstppslimit: 100 -> 400" 0 "$U" net.inet.tcp.rstppslimit=400
+    t "rstppslimit back" "net.inet.tcp.rstppslimit: 400 -> 100" 0 "$U" net.inet.tcp.rstppslimit=100
 else
     te "not root: set is refused" "sysctl: kern.hostname: Operation not permitted" 1 "$U" kern.hostname=evil
+    te "not root: nor a network knob" "sysctl: net.inet.icmp.bmcastecho: Operation not permitted" 1 "$U" net.inet.icmp.bmcastecho=1
 fi
 done_tests sysctl

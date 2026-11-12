@@ -60,9 +60,10 @@ struct list {
 
 static const struct ctlname top_names[] = CTL_NAMES, kern_names[] = CTL_KERN_NAMES, vm_names[] = CTL_VM_NAMES,
     hw_names[] = CTL_HW_NAMES, net_names[] = CTL_NET_NAMES, ipproto_names[] = CTL_IPPROTO_NAMES,
-    ip_names[] = IPCTL_NAMES;
+    ip_names[] = IPCTL_NAMES, icmp_names[] = ICMPCTL_NAMES, tcp_names[] = TCPCTL_NAMES;
 static const struct list top = LIST(top_names), kern = LIST(kern_names), vm = LIST(vm_names), hw = LIST(hw_names),
-    net = LIST(net_names), ipproto = LIST(ipproto_names), ip = LIST(ip_names);
+    net = LIST(net_names), ipproto = LIST(ipproto_names), ip = LIST(ip_names), icmp = LIST(icmp_names),
+    tcp = LIST(tcp_names);
 
 static int aflag, nflag, qflag, status;
 
@@ -80,6 +81,10 @@ static const struct list *children(const int *mib, int depth)
 		return &ipproto;
 	} else if (depth == 3 && mib[0] == CTL_NET && mib[1] == PF_INET && mib[2] == IPPROTO_IP) {
 		return &ip;
+	} else if (depth == 3 && mib[0] == CTL_NET && mib[1] == PF_INET && mib[2] == IPPROTO_ICMP) {
+		return &icmp;
+	} else if (depth == 3 && mib[0] == CTL_NET && mib[1] == PF_INET && mib[2] == IPPROTO_TCP) {
+		return &tcp;
 	}
 	return NULL;
 }
@@ -104,8 +109,8 @@ static void show(const char *name, const int *mib, int depth, int type, const ch
 {
 	char buf[4096], *s;
 	size_t size = sizeof buf - 1;
-	int iv;
-	long long qv;
+	int iv, niv = 0;
+	long long qv, nqv = 0;
 	char *end;
 	void *newp = NULL;
 	size_t newlen = 0;
@@ -119,9 +124,9 @@ static void show(const char *name, const int *mib, int depth, int type, const ch
 				warnmsg(name, "value is invalid");
 				return;
 			}
-			iv = (int)qv;
-			newp = &iv;
-			newlen = sizeof iv;
+			niv = (int)qv;
+			newp = &niv;
+			newlen = sizeof niv;
 			break;
 		case CTLTYPE_QUAD:
 			errno = 0;
@@ -130,8 +135,9 @@ static void show(const char *name, const int *mib, int depth, int type, const ch
 				warnmsg(name, "value is invalid");
 				return;
 			}
-			newp = &qv;
-			newlen = sizeof qv;
+			nqv = qv;
+			newp = &nqv;
+			newlen = sizeof nqv;
 			break;
 		case CTLTYPE_STRING:
 			newp = (void *)newval;
@@ -176,11 +182,11 @@ static void show(const char *name, const int *mib, int depth, int type, const ch
 		    (double)la.ldavg[2] / (double)la.fscale);
 	} else if (type == CTLTYPE_INT && size == sizeof(int)) {
 		memcpy(&iv, buf, sizeof iv);
-		if (newval) { if (!qflag) { if (nflag) printf("%d\n", *(int *)newp); else printf("%s: %d -> %d\n", name, iv, *(int *)newp); } }
+		if (newval) { if (!qflag) { if (nflag) printf("%d\n", niv); else printf("%s: %d -> %d\n", name, iv, niv); } }
 		else { if (!nflag) printf("%s=", name); printf("%d\n", iv); }
 	} else if (type == CTLTYPE_QUAD && size == sizeof(long long)) {
 		memcpy(&qv, buf, sizeof qv);
-		if (newval) { if (!qflag) { if (nflag) printf("%lld\n", *(long long *)newp); else printf("%s: %lld -> %lld\n", name, qv, *(long long *)newp); } }
+		if (newval) { if (!qflag) { if (nflag) printf("%lld\n", nqv); else printf("%s: %lld -> %lld\n", name, qv, nqv); } }
 		else { if (!nflag) printf("%s=", name); printf("%lld\n", qv); }
 	} else if (type == CTLTYPE_STRING) {
 		if (newval) { if (!qflag) { if (nflag) printf("%s\n", newval); else printf("%s: %s -> %s\n", name, s, newval); } }

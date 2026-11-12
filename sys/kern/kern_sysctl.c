@@ -300,11 +300,40 @@ static long vm_sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp, 
   }
 }
 
+/* an int that can be set, within min..max */
+static long rw_int(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int *var, int min, int max) {
+  int v;
+  if (oldp && *oldlenp < sizeof v)
+    return -ENOMEM;
+  if (newp && newlen != sizeof v)
+    return -EINVAL;
+  if (newp && copy_from_user(&v, newp, sizeof v))
+    return -EFAULT;
+  if (newp && (v < min || v > max))
+    return -EINVAL;
+  *oldlenp = sizeof *var;
+  if (oldp && copy_to_user(oldp, var, sizeof *var))
+    return -EFAULT;
+  if (newp)
+    *var = v;
+  return 0;
+}
+
 /* net.route: the routing table, as BSD's route(8) and netstat(1) ask for it
    (net, AF_ROUTE, 0, AF_INET or 0, NET_RT_DUMP, 0), but an array of struct
-   rtinfo.  The rest of net.* answers nothing yet (the kernel's IP has no
-   knobs to show). */
-static long net_sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp, void *newp) {
+   rtinfo.  net.inet.icmp.bmcastecho, net.inet.icmp.errppslimit and
+   net.inet.tcp.rstppslimit are the variables of the kernel's IP; the rest of
+   net.* answers nothing yet. */
+static long net_sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
+  if (namelen == 3 && name[0] == AF_INET) {
+    if (name[1] == IPPROTO_ICMP && name[2] == ICMPCTL_BMCASTECHO)
+      return rw_int(oldp, oldlenp, newp, newlen, &icmp_bmcastecho, 0, 1);
+    if (name[1] == IPPROTO_ICMP && name[2] == ICMPCTL_ERRPPSLIMIT)
+      return rw_int(oldp, oldlenp, newp, newlen, &icmp_errppslimit, -1, 1000000);
+    if (name[1] == IPPROTO_TCP && name[2] == TCPCTL_RSTPPSLIMIT)
+      return rw_int(oldp, oldlenp, newp, newlen, &tcp_rstppslimit, -1, 1000000);
+    return -EOPNOTSUPP;
+  }
   if (namelen != 5 || name[0] != AF_ROUTE || name[1] != 0 || (name[2] != 0 && name[2] != AF_INET) ||
       name[3] != NET_RT_DUMP)
     return -EOPNOTSUPP;
@@ -339,7 +368,7 @@ long sys_sysctl(long uname, long namelen, long oldp, long oldlenp, long newp, lo
     err = vm_sysctl(name + 1, (unsigned)namelen - 1, (void *)oldp, &oldlen, (void *)newp, (size_t)newlen);
     break;
   case CTL_NET:
-    err = net_sysctl(name + 1, (unsigned)namelen - 1, (void *)oldp, &oldlen, (void *)newp);
+    err = net_sysctl(name + 1, (unsigned)namelen - 1, (void *)oldp, &oldlen, (void *)newp, (size_t)newlen);
     break;
   default:
     return -EOPNOTSUPP;
