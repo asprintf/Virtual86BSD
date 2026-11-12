@@ -50,6 +50,7 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/file.h>
+#include <sys/sockio.h>
 #include <uvm/uvm.h>
 #include <net/if_var.h>
 #include <sys/socketvar.h>
@@ -2129,93 +2130,6 @@ static void sock_release(struct file *f) {
 
 #define FIONREAD 0x541b
 #define SIOCOUTQ 0x5411
-#define SIOCATMARK 0x8905
-#define SIOCGIFNAME 0x8910
-#define SIOCGIFCONF 0x8912
-#define SIOCGIFFLAGS 0x8913
-#define SIOCGIFADDR 0x8915
-#define SIOCGIFNETMASK 0x891b
-#define SIOCGIFMTU 0x8921
-#define SIOCGIFINDEX 0x8933
-#define SIOCGIFBRDADDR 0x8919
-#define SIOCGIFHWADDR 0x8927
-
-/* the interface ioctls: Linux's numbers and struct ifreq (the name, 16
-   bytes, then a sockaddr_in or an int or a short, 40 bytes in all); the
-   interfaces are net/if.c's */
-static void put_ip4(char *r, uint32_t ip) {
-  r[0] = AF_INET;
-  r[4] = (char)(ip >> 24), r[5] = (char)(ip >> 16), r[6] = (char)(ip >> 8), r[7] = (char)ip;
-}
-
-/* IFF_ as Linux has them: the first ten are the same, the BSD-only ones go
-   and IFF_MULTICAST moves */
-static unsigned linux_flags(unsigned f) { return (f & 0x3ffU) | ((f & IFF_MULTICAST) ? 0x1000U : 0); }
-
-static long if_ioctl(unsigned cmd, uint64_t arg) {
-  char r[40];
-  if (cmd == SIOCGIFCONF) { /* struct ifconf { int len; char *buf; }: an entry per address */
-    int32_t len;
-    uint64_t ubuf;
-    if (copy_from_user(&len, (void *)arg, 4) || copy_from_user(&ubuf, (char *)arg + 8, 8))
-      return -EFAULT;
-    int32_t out = 0;
-    for (int i = 1; i <= nifnet; i++) {
-      struct ifnet *ifp = if_byindex(i);
-      for (int k = 0; k < IF_MAXADDR; k++) {
-        if (!ifp->if_addrs[k].used)
-          continue;
-        if (ubuf && len >= out + 40) {
-          memset(r, 0, sizeof(r));
-          strcpy(r, ifp->if_xname);
-          put_ip4(r + 16, ifp->if_addrs[k].addr);
-          if (copy_to_user((char *)ubuf + out, r, 40))
-            return -EFAULT;
-        }
-        out += 40;
-      }
-    }
-    return copy_to_user((void *)arg, &out, 4) ? -EFAULT : 0;
-  }
-  if (copy_from_user(r, (void *)arg, 40))
-    return -EFAULT;
-  int32_t idx;
-  memcpy(&idx, r + 16, 4);
-  if (cmd == SIOCGIFNAME) {
-    struct ifnet *ifp = if_byindex(idx);
-    if (!ifp)
-      return -ENODEV;
-    memset(r, 0, 16);
-    strcpy(r, ifp->if_xname);
-  } else {
-    r[15] = 0;
-    struct ifnet *ifp = if_byname(r);
-    if (!ifp)
-      return -ENODEV;
-    const struct ifaddr4 *a = NULL;
-    for (int k = 0; k < IF_MAXADDR && !a; k++)
-      if (ifp->if_addrs[k].used)
-        a = &ifp->if_addrs[k];
-    memset(r + 16, 0, 24);
-    if (!a && (cmd == SIOCGIFADDR || cmd == SIOCGIFNETMASK || cmd == SIOCGIFBRDADDR))
-      return -EADDRNOTAVAIL;
-    switch (cmd) {
-    case SIOCGIFINDEX: idx = ifp->if_index; memcpy(r + 16, &idx, 4); break;
-    case SIOCGIFFLAGS: idx = (int32_t)linux_flags(ifp->if_flags); memcpy(r + 16, &idx, 4); break;
-    case SIOCGIFMTU: idx = (int32_t)ifp->if_mtu; memcpy(r + 16, &idx, 4); break;
-    case SIOCGIFADDR: put_ip4(r + 16, a->addr); break;
-    case SIOCGIFNETMASK: put_ip4(r + 16, a->mask); break;
-    case SIOCGIFBRDADDR: put_ip4(r + 16, (ifp->if_flags & IFF_BROADCAST) ? a->addr | ~a->mask : 0); break;
-    case SIOCGIFHWADDR:
-      r[16] = ifp->if_ether ? 1 : 4, r[17] = 0; /* ARPHRD_ETHER, ARPHRD_LOOPBACK */
-      if (ifp->if_ether)
-        memcpy(r + 18, ifp->if_lladdr, 6);
-      break;
-    default: return -EINVAL;
-    }
-  }
-  return copy_to_user((void *)arg, r, 40) ? -EFAULT : 0;
-}
 
 static long sock_ioctl(struct file *f, unsigned cmd, uint64_t arg) {
   struct sock *s = SK(f);
@@ -2231,8 +2145,10 @@ static long sock_ioctl(struct file *f, unsigned cmd, uint64_t arg) {
     int32_t n = 0;
     return copy_to_user((void *)arg, &n, 4) ? -EFAULT : 0;
   }
+  if (cmd == SIOCADDRT || cmd == SIOCDELRT)
+    return rtioctl(cmd, arg);
   if ((cmd & 0xff00) == 0x8900)
-    return if_ioctl(cmd, arg);
+    return ifioctl(cmd, arg);
   return -ENOTTY;
 }
 

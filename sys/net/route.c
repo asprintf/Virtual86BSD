@@ -35,6 +35,10 @@
    gateway on such a network. */
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/proc.h>
+#include <sys/sockio.h>
+#include <sys/socket.h>
+#include <uvm/uvm.h>
 #include <net/if_var.h>
 
 struct rtentry rtable[RTMAX];
@@ -112,4 +116,80 @@ void rt_prune(void) {
         again = true;
       }
   }
+}
+
+/* ---- the route ioctls and the dump ---- */
+
+/* SIOCADDRT/SIOCDELRT: struct rtentry of <net/route.h> (Linux's layout):
+   rt_dst at 8, rt_gateway 24, rt_genmask 40, rt_flags 56, rt_metric 80,
+   rt_dev 88 */
+long rtioctl(unsigned cmd, uint64_t arg) {
+  char r[120];
+  uint32_t dst, gw = 0, mask;
+  uint16_t flags;
+  int16_t metric;
+  uint64_t udev;
+  if (!capable())
+    return -EPERM;
+  if (cmd != SIOCADDRT && cmd != SIOCDELRT)
+    return -EINVAL;
+  if (copy_from_user(r, (void *)arg, sizeof r))
+    return -EFAULT;
+  memcpy(&flags, r + 56, 2);
+  memcpy(&metric, r + 80, 2);
+  memcpy(&udev, r + 88, 8);
+  if (!sa_get4(r + 8, &dst))
+    return -EAFNOSUPPORT;
+  if (r[40] || r[41]) { /* a mask */
+    if (!sa_get4(r + 40, &mask))
+      return -EAFNOSUPPORT;
+  } else {
+    mask = (flags & RTF_HOST) ? 0xffffffffU : !dst ? 0 : dst < 0x80000000U ? 0xff000000U : dst < 0xc0000000U ? 0xffff0000U : 0xffffff00U;
+  }
+  if ((flags & RTF_HOST) && mask != 0xffffffffU)
+    return -EINVAL;
+  if (cmd == SIOCDELRT) {
+    int err = rt_delete(dst, mask);
+    rt_prune(); /* (what went through its network went with it) */
+    return err;
+  }
+  if (flags & RTF_GATEWAY) {
+    if (!sa_get4(r + 24, &gw) || !gw)
+      return -EINVAL;
+  }
+  struct ifnet *ifp = NULL;
+  if (udev) {
+    char name[IFNAMSIZ];
+    long len = strncpy_from_user(name, (const char *)udev, sizeof name);
+    if (len == -ENAMETOOLONG)
+      return -ENODEV;
+    if (len < 0)
+      return -EFAULT;
+    if (!(ifp = if_byname(name)))
+      return -ENODEV;
+  }
+  if (!gw && !ifp)
+    return -ENODEV; /* on the link of which interface? */
+  return rt_add(dst, mask, gw, ifp, metric > 0 ? metric - 1 : 0);
+}
+
+static unsigned be32(uint32_t v) { return v >> 24 | (v >> 8 & 0xff00U) | (v << 8 & 0xff0000U) | v << 24; }
+
+/* the table as struct rtinfo (network byte order addresses), at most max bytes */
+int rt_dump(void *buf, int max) {
+  struct rtinfo *o = buf;
+  int n = 0;
+  for (int i = 0; i < RTMAX && (int)((n + 1) * sizeof *o) <= max; i++) {
+    const struct rtentry *r = &rtable[i];
+    if (!r->used)
+      continue;
+    o[n].ri_dst = be32(r->dst);
+    o[n].ri_mask = be32(r->mask);
+    o[n].ri_gateway = be32(r->gw);
+    o[n].ri_flags = (int)r->flags;
+    o[n].ri_metric = r->metric;
+    o[n].ri_index = r->ifp->if_index;
+    n++;
+  }
+  return (int)(n * sizeof *o);
 }

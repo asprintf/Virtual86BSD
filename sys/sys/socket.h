@@ -35,6 +35,8 @@
 #define AF_UNIX 1
 #define AF_INET 2
 #define AF_INET6 10
+#define AF_ROUTE 17
+#define AF_LINK 18
 #define IPPROTO_IP 0
 #define IPPROTO_TCP 6
 #define IPPROTO_UDP 17

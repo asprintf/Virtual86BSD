@@ -37,28 +37,11 @@
 #define _NET_IF_VAR_H_
 
 #include <sys/systm.h>
+#include <net/if.h>
+#include <net/route.h>
 
-#define IFNAMSIZ 16
 #define IF_MAXIF 8   /* interfaces, lo0 included */
 #define IF_MAXADDR 4 /* IPv4 addresses on one interface */
-
-/* ifnet.if_flags */
-#define IFF_UP 0x1
-#define IFF_BROADCAST 0x2
-#define IFF_DEBUG 0x4
-#define IFF_LOOPBACK 0x8
-#define IFF_POINTOPOINT 0x10
-#define IFF_STATICARP 0x20
-#define IFF_RUNNING 0x40
-#define IFF_NOARP 0x80
-#define IFF_PROMISC 0x100
-#define IFF_ALLMULTI 0x200
-#define IFF_OACTIVE 0x400
-#define IFF_SIMPLEX 0x800
-#define IFF_LINK0 0x1000
-#define IFF_LINK1 0x2000
-#define IFF_LINK2 0x4000
-#define IFF_MULTICAST 0x8000
 
 /* an IPv4 address of an interface (host order); its broadcast address is
    addr | ~mask */
@@ -71,7 +54,8 @@ struct ifnet {
   char if_xname[IFNAMSIZ]; /* "em0", "vio0", "lo0" */
   int if_index;            /* 1 is lo0 */
   unsigned if_flags;       /* IFF_ */
-  unsigned if_mtu;
+  unsigned if_mtu, if_hardmtu; /* the card's own largest */
+  int if_metric;           /* of its connected routes */
   bool if_ether;           /* an Ethernet: if_lladdr, ARP, if_xmit */
   uint8_t if_lladdr[6];
   struct ifaddr4 if_addrs[IF_MAXADDR];
@@ -96,15 +80,17 @@ struct ifnet *if_byindex(int index);
 void if_up(struct ifnet *ifp);
 void if_down(struct ifnet *ifp);
 int ifa_add(struct ifnet *ifp, uint32_t addr, uint32_t mask); /* also its connected route */
+bool sa_get4(const void *sa, uint32_t *ip); /* a sockaddr_in (AF_INET): its address, host order */
+void sa_put4(void *sa, uint32_t ip);
+long ifioctl(unsigned cmd, uint64_t arg); /* the socket ioctls of <sys/sockio.h> (net/if.c, net/route.c) */
+long rtioctl(unsigned cmd, uint64_t arg);
+int rt_dump(void *buf, int max);          /* struct rtinfo of the table (<net/route.h>), the bytes */
 int ifa_remove(struct ifnet *ifp, uint32_t addr);
 uint32_t if_addr(const struct ifnet *ifp); /* its first address, or 0 */
 bool if_has_addr(const struct ifnet *ifp, uint32_t addr);
 bool if_is_bcast(const struct ifnet *ifp, uint32_t addr); /* a subnet broadcast of it */
 
 /* the routing table */
-#define RTF_UP 0x1
-#define RTF_GATEWAY 0x2
-#define RTF_HOST 0x4
 #define RTMAX 32
 struct rtentry {
   bool used;
