@@ -41,7 +41,7 @@ trap cleanup EXIT
 # what a boot starts from
 setup() {
     printf '# the name of this host\n\nrctest.example   # a comment\n' > /etc/myname
-    printf '# fstab\ntmpfs %s/m tmpfs rw 0 0\n/dev/disk0s1 / ext2 rw 1 0\n' "$TD" > /etc/fstab
+    printf '# fstab\ntmpfs %s/m tmpfs rw 0 0\n/dev/disk0s1 / ffs rw 1 0\n' "$TD" > /etc/fstab
     printf '# sysctl.conf\nkern.domainname=rc.example\n' > /etc/sysctl.conf
     rm -f /etc/rc.conf.local /etc/rc.local
     echo "no logins" > /etc/nologin
