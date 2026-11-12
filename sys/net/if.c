@@ -345,8 +345,14 @@ long ifioctl(unsigned cmd, uint64_t arg) {
   case SIOCSIFFLAGS:
     memcpy(&f16, r + 16, 2);
     return if_setflags(ifp, f16, lx);
-  case SIOCSIFADDR:
-    return sa_get4(r + 16, &ip) ? if_setaddr(ifp, ip) : -EAFNOSUPPORT;
+  case SIOCSIFADDR: {
+    if (!sa_get4(r + 16, &ip))
+      return -EAFNOSUPPORT;
+    long err = if_setaddr(ifp, ip);
+    if (!err)
+      dhcp_stop(ifp);
+    return err;
+  }
   case SIOCSIFNETMASK:
     if (!sa_get4(r + 16, &mask))
       return -EAFNOSUPPORT;
@@ -366,7 +372,7 @@ long ifioctl(unsigned cmd, uint64_t arg) {
       return -EINVAL;
     ifp->if_mtu = (unsigned)n;
     return 0;
-  case SIOCAIFADDR:
+  case SIOCAIFADDR: {
     if (!sa_get4(r + 16, &ip))
       return -EAFNOSUPPORT;
     if (!addr_ok(ifp, ip))
@@ -377,7 +383,11 @@ long ifioctl(unsigned cmd, uint64_t arg) {
         if (ifp->if_addrs[k].used && ifp->if_addrs[k].addr == ip)
           mask = ifp->if_addrs[k].mask;
     }
-    return ifa_add(ifp, ip, mask);
+    long err = ifa_add(ifp, ip, mask);
+    if (!err)
+      dhcp_stop(ifp);
+    return err;
+  }
   case SIOCDIFADDR:
     return sa_get4(r + 16, &ip) ? ifa_remove(ifp, ip) : -EAFNOSUPPORT;
   default:

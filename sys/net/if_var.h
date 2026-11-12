@@ -115,6 +115,7 @@ struct netinfo {
 extern struct netinfo netinfo;
 
 void net_init_conf(const char *ipconf, const char *loss); /* ip=, netloss= */
+void dhcp_stop(struct ifnet *ifp); /* an address was set by hand: the kernel's DHCP client leaves ifp alone */
 void net_pnp(void (*out)(void *, const char *, ...), void *sb);
 void net_rx(struct ifnet *ifp, const void *frame, size_t len); /* a driver: a frame came (from the network thread) */
 void net_wake(void);                         /* (any context) */

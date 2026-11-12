@@ -731,6 +731,15 @@ static uint64_t dhcp_timers(uint64_t now) {
   return dhcp_next;
 }
 
+/* an address was given to ifp by hand (ifconfig): a DHCP exchange that is
+   still going on must not add its own to it later */
+void dhcp_stop(struct ifnet *ifp) {
+  if (dhcp_running && ifp == dhcp_ifp) {
+    dhcp_running = false;
+    netinfo.dhcp = false;
+  }
+}
+
 /* ---- the thread ---- */
 
 void net_wake(void) {
