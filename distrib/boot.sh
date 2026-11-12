@@ -57,7 +57,7 @@
 # the host is 10.0.2.2, the name server 10.0.2.3, and connections out go
 # through the host (ping reaches only 10.0.2.2).
 #
-# Before booting, the disk image is checked with e2fsck -p (e2fsprogs),
+# Before booting, an ext2 disk image is checked with e2fsck -p (e2fsprogs),
 # which repairs it after a system that did not shut down cleanly.
 #
 # What is needed: QEMU (qemu-system-x86_64; on Ubuntu the package
@@ -103,20 +103,25 @@ command -v qemu-system-x86_64 >/dev/null 2>&1 ||
 [ -f "$kernel" ] || { echo "boot: no kernel $kernel (run sh bootstrap.sh)" >&2; exit 1; }
 [ -f "$img" ] || { echo "boot: no disk image $img (run sh mkdisk.sh)" >&2; exit 1; }
 
-# check the file system first, as a boot of Linux would: after a system
-# that did not shut down (QEMU stopped by Ctrl-A x, or killed) the disk
-# is marked "not clean", and e2fsck -p repairs what it safely can
+# An ext2 disk is checked first, as a boot of Linux would: after a system
+# that did not shut down (QEMU stopped by Ctrl-A x, or killed) the disk is
+# marked "not clean", and e2fsck -p repairs what it safely can.  An FFS disk
+# is checked by the system itself: the kernel mounts a root that is not clean
+# read-only, and /etc/rc runs fsck -p and reboots if it changed the root.
 PATH=$PATH:/sbin:/usr/sbin
-if command -v e2fsck >/dev/null 2>&1; then
-	# (the file system is the partition: 1 MiB into the disk)
-	e2fsck -p "$img?offset=1048576"
-	st=$?
-	if [ $st -ge 4 ]; then
-		echo "boot: $img has errors e2fsck -p cannot repair: run e2fsck -f '$img?offset=1048576'" >&2
-		exit 1
+ptype=$(od -A n -t x1 -j 450 -N 1 "$img" 2>/dev/null | tr -d ' ')
+if [ "$ptype" = 83 ]; then
+	if command -v e2fsck >/dev/null 2>&1; then
+		# (the file system is the partition: 1 MiB into the disk)
+		e2fsck -p "$img?offset=1048576"
+		st=$?
+		if [ $st -ge 4 ]; then
+			echo "boot: $img has errors e2fsck -p cannot repair: run e2fsck -f '$img?offset=1048576'" >&2
+			exit 1
+		fi
+	else
+		echo "boot: no e2fsck (e2fsprogs): the disk is not checked" >&2
 	fi
-else
-	echo "boot: no e2fsck (e2fsprogs): the disk is not checked" >&2
 fi
 
 # the disk: virtio, or with -i the IDE disk of a PC (the slower ATA driver).

@@ -28,26 +28,29 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # mkdisk.sh - make a bootable disk image of a V86BSD system made by
-# bootstrap.sh: an ext2 file system holding the root, to boot with V86BSD's
-# kernel (root/bsd) in QEMU (see boot.sh).  A wrapper: it runs "make image"
+# bootstrap.sh: an FFS2 file system holding the root (ext2 with -t), to boot
+# with V86BSD's kernel (root/bsd) in QEMU (see boot.sh).  A wrapper: it runs "make image"
 # (distrib/mkdisk.sh does the work).
 #
-# Usage: sh mkdisk.sh [-s size] [root [image]]
+# Usage: sh mkdisk.sh [-s size] [-t ffs|ext2] [root [image]]
 #
 #   root     the system (default: root/ beside this script)
 #   image    the disk image to write (default: v86bsd.img beside this script);
 #            it is made afresh
 #   -s size  its size in MiB (default 1024)
+#   -t type  ffs (the default) or ext2
 
-usage() { echo "usage: sh mkdisk.sh [-s size] [root [image]]" >&2; exit 2; }
+usage() { echo "usage: sh mkdisk.sh [-s size] [-t ffs|ext2] [root [image]]" >&2; exit 2; }
 
 here=$(pwd)
 cd "$(dirname "$0")" || exit 2
 SRC=$(pwd)
 size=1024
-while getopts s: opt; do
+type=ffs
+while getopts s:t: opt; do
 	case $opt in
 	s) size=$OPTARG ;;
+	t) type=$OPTARG ;;
 	*) usage ;;
 	esac
 done
@@ -57,4 +60,4 @@ root=${1:-$SRC/root}
 img=${2:-$SRC/v86bsd.img}
 case $root in /*) ;; *) root=$here/$root ;; esac
 case $img in /*) ;; *) img=$here/$img ;; esac
-exec "${MAKE:-make}" image IMGROOT="$root" IMAGE="$img" IMGSIZE="$size"
+exec "${MAKE:-make}" image IMGROOT="$root" IMAGE="$img" IMGSIZE="$size" IMGTYPE="$type"

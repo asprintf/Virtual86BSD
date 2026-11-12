@@ -39,7 +39,8 @@
 #   make installkernel    the kernel as $(DESTDIR)/bsd
 #   make newroot          $(DESTDIR) made afresh (removed first!)
 #   make image            a disk image of $(IMGROOT) (default $(RELROOT)):
-#                         $(IMAGE), an ext2 file system of $(IMGSIZE) MiB
+#                         $(IMAGE), an FFS2 file system of $(IMGSIZE) MiB
+#                         (IMGTYPE=ext2 for an ext2 one)
 #   make release          all of that into $(RELROOT) (obj/root) and
 #                         $(IMAGE) (obj/v86bsd.img)
 #   make boot             QEMU on that kernel and image (BOOTFLAGS="-m 2G -n"
@@ -80,6 +81,7 @@ RELROOT  = $(OBJDIR)/root
 IMGROOT  = $(RELROOT)
 IMAGE    = $(OBJDIR)/v86bsd.img
 IMGSIZE  = 1024
+IMGTYPE  = ffs
 BOOTFLAGS =
 
 # (BUILDER, DESTDIR, HOSTCC, KERNCONF and BUILDFLAGS are not set here: what
@@ -109,7 +111,7 @@ newroot:
 	$(BUILD) newroot
 
 image:
-	sh distrib/mkdisk.sh -s $(IMGSIZE) '$(IMGROOT)' '$(IMAGE)'
+	sh distrib/mkdisk.sh -s $(IMGSIZE) -t $(IMGTYPE) '$(IMGROOT)' '$(IMAGE)'
 
 release:
 	$(MAKE) buildworld buildkernel
