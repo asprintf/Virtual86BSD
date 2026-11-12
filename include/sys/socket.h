@@ -157,6 +157,12 @@ struct linger {
 #define PF_LOCAL   AF_UNIX
 #define AF_NETLINK 16
 #define PF_NETLINK AF_NETLINK
+/* the BSDs' numbers: the routing table (sysctl), and link level addresses
+   (struct sockaddr_dl in <net/if_dl.h>) */
+#define AF_ROUTE 17
+#define PF_ROUTE AF_ROUTE
+#define AF_LINK 18
+#define PF_LINK AF_LINK
 #endif
 
 #define SHUT_RD   0

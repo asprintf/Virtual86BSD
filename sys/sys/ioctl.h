@@ -34,6 +34,7 @@
 #include <bits/features.h>
 #define __NEED_struct_winsize
 #include <bits/alltypes.h>
+#include <sys/sockio.h>
 
 #define TCGETS     0x5401
 #define TCSETS     0x5402
@@ -51,11 +52,6 @@
 #define FIONCLEX   0x5450
 #define FIOCLEX    0x5451
 #define FIOASYNC   0x5452
-#define SIOCATMARK 0x8905
-#define SIOCGIFNAME  0x8910
-#define SIOCGIFCONF  0x8912
-#define SIOCGIFFLAGS 0x8913
-#define SIOCGIFINDEX 0x8933
 
 __BEGIN_DECLS
 int ioctl(int, unsigned long, ...);
