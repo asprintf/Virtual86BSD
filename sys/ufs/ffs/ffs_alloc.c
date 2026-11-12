@@ -267,12 +267,17 @@ ffs_realloccg(struct inode *ip, daddr_t lbprev, daddr_t bpref, int osize,
 		memset(tmp, 0, (size_t)nsize);
 		ffs_rw(um, bprev, 0, tmp, (size_t)osize, false, false);
 		/*
-		 * (V86BSD: a directory's chunks are what its inode, written
-		 * soon after, points to: they go to the disk now.)
+		 * (V86BSD: the contents go to the disk now, and then the
+		 * inode that points to them, before the old fragments are
+		 * free to go to another file: if they were reused while the
+		 * disk's inode still pointed to them, a crash would leave two
+		 * files with the same blocks.)
 		 */
-		ffs_rw(um, bno, 0, tmp, (size_t)nsize, true, S_ISDIR(ip->mode));
+		ffs_rw(um, bno, 0, tmp, (size_t)nsize, true, true);
 		kfree(tmp);
 	}
+	DINO(ip)->di_db[lbprev] = bno;
+	ffs_update(ip, true);
 	ffs_blkfree(ip, bprev, (long)osize);
 	if (nsize < request)
 		ffs_blkfree(ip, bno + numfrags(fs, nsize),
