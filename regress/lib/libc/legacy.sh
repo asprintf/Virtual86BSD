@@ -1,7 +1,7 @@
 #!/bin/sh
 # The legacy interfaces (share/doc/legacy.md) are declared under the
 # feature-test macros of their editions only.  Windows: X = _XOPEN_SOURCE
-# 500-700, X6 = 500-600, X5 = 500, P:lo:hi = _POSIX_C_SOURCE in [lo, hi),
+# 500-700, X6 = 500-600, X67 = 600-700, X5 = 500, P:lo:hi = _POSIX_C_SOURCE in [lo, hi),
 # A+B = either.  No macro, _GNU_SOURCE, _DEFAULT_SOURCE: all; strict ISO C:
 # none.
 # usage: legacy.sh CC   (CC is a libc-cc invocation, e.g. "tools/libc-cc gcc"; LEGACY_CC=c17
@@ -47,6 +47,18 @@ long v = _POSIX2_C_VERSION + _SC_2_C_VERSION;
 int main(void) { return v == 0; }
 fortdev|P:1:202405|#include <unistd.h>
 int main(void) { return _POSIX2_FORT_DEV + _SC_2_FORT_DEV; }
+v6env|P:200112:202405|#include <unistd.h>
+int main(void) { return _POSIX_V6_LP64_OFF64 + _POSIX_V6_ILP32_OFF32 + _SC_V6_LP64_OFF64 + _SC_V6_LPBIG_OFFBIG + _CS_POSIX_V6_LP64_OFF64_CFLAGS + _CS_POSIX_V6_ILP32_OFFBIG_LIBS + _CS_POSIX_V6_WIDTH_RESTRICTED_ENVS; }
+v6envstr|P:200809:202405|#include <unistd.h>
+int main(void) { return _CS_V6_ENV; }
+pbs|P:200112:202405|#include <unistd.h>
+int main(void) { return _POSIX2_PBS + _POSIX2_PBS_ACCOUNTING + _POSIX2_PBS_CHECKPOINT + _POSIX2_PBS_LOCATE + _POSIX2_PBS_MESSAGE + _POSIX2_PBS_TRACK + _SC_2_PBS + _SC_2_PBS_TRACK; }
+trace|P:200112:202405|#include <unistd.h>
+int main(void) { return _POSIX_TRACE + _POSIX_TRACE_EVENT_FILTER + _POSIX_TRACE_INHERIT + _POSIX_TRACE_LOG + _SC_TRACE + _SC_TRACE_EVENT_NAME_MAX + _SC_TRACE_USER_EVENT_MAX; }
+tracelim|P:200112:202405|#include <limits.h>
+int main(void) { return _POSIX_TRACE_EVENT_NAME_MAX + _POSIX_TRACE_NAME_MAX + _POSIX_TRACE_SYS_MAX + _POSIX_TRACE_USER_EVENT_MAX; }
+xstreams|X67|#include <unistd.h>
+int main(void) { return _XOPEN_STREAMS + _SC_XOPEN_STREAMS; }
 limits|X|#include <limits.h>
 double v = DBL_DIG + DBL_MAX + FLT_DIG + FLT_MAX;
 int main(void) { return v == 0; }
@@ -145,6 +157,7 @@ visible() {
 		case $part in
 		X)  [ "$x" -ge 500 ] && [ "$x" -lt 800 ] && return 0 ;;
 		X6) [ "$x" -ge 500 ] && [ "$x" -lt 700 ] && return 0 ;;
+		X67) [ "$x" -ge 600 ] && [ "$x" -lt 800 ] && return 0 ;;
 		X5) [ "$x" -eq 500 ] && return 0 ;;
 		P:*) lo=${part#P:}; hi=${lo#*:}; lo=${lo%%:*}
 		    [ "$p" -ge "$lo" ] && [ "$p" -lt "$hi" ] && return 0 ;;

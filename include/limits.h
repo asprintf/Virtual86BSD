@@ -199,6 +199,12 @@
 #define TMP_MAX        308915776 /* as <stdio.h> */
 #endif
 #endif
+#if __POSIX_RANGE(200112L, 202405L)
+#define _POSIX_TRACE_EVENT_NAME_MAX 30
+#define _POSIX_TRACE_NAME_MAX       8
+#define _POSIX_TRACE_SYS_MAX        8
+#define _POSIX_TRACE_USER_EVENT_MAX 32
+#endif
 #endif /* __POSIX_VISIBLE */
 
 #endif

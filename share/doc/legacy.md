@@ -19,6 +19,7 @@ strict ISO C compilation.
 | `__XSI_OB6` | `_XOPEN_SOURCE` 500, 600 | SUSv2, SUSv3 (XSI) |
 | `__XSI_OB5` | `_XOPEN_SOURCE` 500 | SUSv2 alone |
 | `__POSIX_RANGE(lo, hi)` | `_POSIX_C_SOURCE` (or what `_XOPEN_SOURCE` implies) in [lo, hi) | POSIX itself, not only XSI |
+| (in `<unistd.h>`) | `_XOPEN_SOURCE` 600, 700 | SUSv3, SUSv4 (XSI): `_XOPEN_STREAMS` |
 
 ## What there is
 
@@ -30,7 +31,7 @@ strict ISO C compilation.
 | `<fnmatch.h>`, `<glob.h>`, `<regex.h>`, `<wordexp.h>` | `FNM_NOSYS`, `GLOB_NOSYS`, `REG_ENOSYS`, `WRDE_NOSYS` (never returned) | SUSv3 |
 | `<langinfo.h>` | `YESSTR`, `NOSTR` | SUSv2 |
 | `<libgen.h>` | `regcmp`, `regex`, `__loc1` | SUSv2 |
-| `<limits.h>` | `DBL_DIG`, `DBL_MAX`, `FLT_DIG`, `FLT_MAX`; `NL_NMAX`; `PASS_MAX`, `TMP_MAX` | SUSv4; SUSv3; SUSv2 |
+| `<limits.h>` | `DBL_DIG`, `DBL_MAX`, `FLT_DIG`, `FLT_MAX`, the `_POSIX_TRACE_*_MAX` minimums; `NL_NMAX`; `PASS_MAX`, `TMP_MAX` | SUSv4; SUSv3; SUSv2 |
 | `<math.h>` | `MAXFLOAT`; `scalb`; `gamma` | SUSv4; SUSv3; SUSv2 |
 | `<netdb.h>` | `gethostbyname`, `gethostbyaddr`, `h_errno`, `HOST_NOT_FOUND`, `NO_DATA`, `NO_RECOVERY`, `TRY_AGAIN` | SUSv3 |
 | `<pthread.h>` | `pthread_attr_getstackaddr`, `pthread_attr_setstackaddr`; `pthread_getconcurrency`, `pthread_setconcurrency` | SUSv3; SUSv4 |
@@ -49,7 +50,7 @@ strict ISO C compilation.
 | `<time.h>` | `asctime_r`, `ctime_r`; `CLK_TCK` | SUSv4; SUSv2 |
 | `<ucontext.h>` | `getcontext`, `setcontext`, `makecontext`, `swapcontext` | SUSv3 |
 | `<ulimit.h>` | `ulimit`, `UL_GETFSIZE`, `UL_SETFSIZE` | SUSv4 |
-| `<unistd.h>` | `setpgrp`, `_POSIX2_FORT_DEV`; `usleep`, `ualarm`, `getwd`, `vfork`, `_XOPEN_LEGACY`, the `XBS5` names; `brk`, `sbrk`, `chroot`, `ctermid`, `cuserid`, `getdtablesize`, `getpagesize`, `getpass`, `_POSIX2_C_VERSION`, `_XOPEN_XCU_VERSION`, `_XOPEN_XPG2`-`4`, `_SC_PASS_MAX` | SUSv4; SUSv3; SUSv2 |
+| `<unistd.h>` | `setpgrp`, `_POSIX2_FORT_DEV`, the `POSIX_V6` environments (`_POSIX_V6_*`, `_SC_V6_*`, `_CS_POSIX_V6_*`, `_CS_V6_ENV`), the unsupported options `_POSIX_TRACE*`, `_POSIX2_PBS*`, `_XOPEN_STREAMS` (-1) and their `_SC_` names; `usleep`, `ualarm`, `getwd`, `vfork`, `_XOPEN_LEGACY`, the `XBS5` names; `brk`, `sbrk`, `chroot`, `ctermid`, `cuserid`, `getdtablesize`, `getpagesize`, `getpass`, `_POSIX2_C_VERSION`, `_XOPEN_XCU_VERSION`, `_XOPEN_XPG2`-`4`, `_SC_PASS_MAX` | SUSv4; SUSv3; SUSv2 |
 | `<utime.h>` | `utime`, `struct utimbuf` | SUSv4 |
 | `<wchar.h>` | the `isw*` and `tow*` functions, `wctype`, `wctype_t`; `wcswcs` | SUSv4; SUSv3 |
 

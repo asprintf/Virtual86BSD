@@ -55,13 +55,20 @@ size_t confstr(int name, char *buf, size_t len)
 	case _CS_XBS5_LP64_OFF64_LIBS: case _CS_XBS5_LP64_OFF64_LINTFLAGS:
 	case _CS_XBS5_LPBIG_OFFBIG_CFLAGS: case _CS_XBS5_LPBIG_OFFBIG_LDFLAGS:
 	case _CS_XBS5_LPBIG_OFFBIG_LIBS: case _CS_XBS5_LPBIG_OFFBIG_LINTFLAGS:
+	/* POSIX_V6 (SUSv3, SUSv4) */
+	case _CS_POSIX_V6_LP64_OFF64_CFLAGS: case _CS_POSIX_V6_LP64_OFF64_LDFLAGS:
+	case _CS_POSIX_V6_LP64_OFF64_LIBS: case _CS_POSIX_V6_LPBIG_OFFBIG_CFLAGS:
+	case _CS_POSIX_V6_LPBIG_OFFBIG_LDFLAGS: case _CS_POSIX_V6_LPBIG_OFFBIG_LIBS:
+	case _CS_V6_ENV:
 		s = ""; break;
 	case _CS_POSIX_V8_WIDTH_RESTRICTED_ENVS:
 		s = "POSIX_V8_LP64_OFF64\nPOSIX_V8_LPBIG_OFFBIG"; break;
 	case _CS_POSIX_V7_WIDTH_RESTRICTED_ENVS:
 		s = "POSIX_V7_LP64_OFF64\nPOSIX_V7_LPBIG_OFFBIG"; break;
+	case _CS_POSIX_V6_WIDTH_RESTRICTED_ENVS:
+		s = "POSIX_V6_LP64_OFF64\nPOSIX_V6_LPBIG_OFFBIG"; break;
 	default:
-		if ((unsigned)name > _CS_XBS5_LPBIG_OFFBIG_LINTFLAGS) { errno = EINVAL; return 0; }
+		if ((unsigned)name > _CS_V6_ENV) { errno = EINVAL; return 0; }
 		/* the unsupported programming environments: no value */
 		s = ""; break;
 	}

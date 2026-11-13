@@ -141,6 +141,25 @@
 #define _XBS5_LP64_OFF64                1
 #define _XBS5_LPBIG_OFFBIG              1       /* the same as LP64_OFF64 */
 #endif
+#if __POSIX_RANGE(200112L, 202405L)
+#define _POSIX_V6_ILP32_OFF32           (-1)
+#define _POSIX_V6_ILP32_OFFBIG          (-1)
+#define _POSIX_V6_LP64_OFF64            1
+#define _POSIX_V6_LPBIG_OFFBIG          1
+#define _POSIX_TRACE                    (-1)
+#define _POSIX_TRACE_EVENT_FILTER       (-1)
+#define _POSIX_TRACE_INHERIT            (-1)
+#define _POSIX_TRACE_LOG                (-1)
+#define _POSIX2_PBS                     (-1)
+#define _POSIX2_PBS_ACCOUNTING          (-1)
+#define _POSIX2_PBS_CHECKPOINT          (-1)
+#define _POSIX2_PBS_LOCATE              (-1)
+#define _POSIX2_PBS_MESSAGE             (-1)
+#define _POSIX2_PBS_TRACK               (-1)
+#endif
+#if __EXT_VISIBLE || (__XSI_VISIBLE >= 600 && __XSI_VISIBLE < 800)
+#define _XOPEN_STREAMS                  (-1)
+#endif
 
 /* ---- Execution-time constants ---- */
 #define _POSIX_ASYNC_IO  1
@@ -227,6 +246,24 @@
 #define _CS_XBS5_LPBIG_OFFBIG_LDFLAGS         46
 #define _CS_XBS5_LPBIG_OFFBIG_LIBS            47
 #define _CS_XBS5_LPBIG_OFFBIG_LINTFLAGS       48
+#endif
+#if __POSIX_RANGE(200112L, 202405L)
+#define _CS_POSIX_V6_ILP32_OFF32_CFLAGS       49
+#define _CS_POSIX_V6_ILP32_OFF32_LDFLAGS      50
+#define _CS_POSIX_V6_ILP32_OFF32_LIBS         51
+#define _CS_POSIX_V6_ILP32_OFFBIG_CFLAGS      52
+#define _CS_POSIX_V6_ILP32_OFFBIG_LDFLAGS     53
+#define _CS_POSIX_V6_ILP32_OFFBIG_LIBS        54
+#define _CS_POSIX_V6_LP64_OFF64_CFLAGS        55
+#define _CS_POSIX_V6_LP64_OFF64_LDFLAGS       56
+#define _CS_POSIX_V6_LP64_OFF64_LIBS          57
+#define _CS_POSIX_V6_LPBIG_OFFBIG_CFLAGS      58
+#define _CS_POSIX_V6_LPBIG_OFFBIG_LDFLAGS     59
+#define _CS_POSIX_V6_LPBIG_OFFBIG_LIBS        60
+#define _CS_POSIX_V6_WIDTH_RESTRICTED_ENVS    61
+#endif
+#if __POSIX_RANGE(200809L, 202405L)
+#define _CS_V6_ENV                            62
 #endif
 
 #define _PC_2_SYMLINKS             0
@@ -382,6 +419,29 @@
 #endif
 #if __POSIX_RANGE(1L, 202405L)
 #define _SC_2_FORT_DEV                  120
+#endif
+#if __POSIX_RANGE(200112L, 202405L)
+#define _SC_V6_ILP32_OFF32              121
+#define _SC_V6_ILP32_OFFBIG             122
+#define _SC_V6_LP64_OFF64               123
+#define _SC_V6_LPBIG_OFFBIG             124
+#define _SC_2_PBS                       125
+#define _SC_2_PBS_ACCOUNTING            126
+#define _SC_2_PBS_CHECKPOINT            127
+#define _SC_2_PBS_LOCATE                128
+#define _SC_2_PBS_MESSAGE               129
+#define _SC_2_PBS_TRACK                 130
+#define _SC_TRACE                       131
+#define _SC_TRACE_EVENT_FILTER          132
+#define _SC_TRACE_EVENT_NAME_MAX        133
+#define _SC_TRACE_INHERIT               134
+#define _SC_TRACE_LOG                   135
+#define _SC_TRACE_NAME_MAX              136
+#define _SC_TRACE_SYS_MAX               137
+#define _SC_TRACE_USER_EVENT_MAX        138
+#endif
+#if __EXT_VISIBLE || (__XSI_VISIBLE >= 600 && __XSI_VISIBLE < 800)
+#define _SC_XOPEN_STREAMS               139
 #endif
 
 __BEGIN_DECLS

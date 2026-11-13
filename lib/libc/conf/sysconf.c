@@ -98,6 +98,13 @@ static const long values[] = {
 	[_SC_XOPEN_XCU_VERSION] = 5, [_SC_XBS5_ILP32_OFF32] = -1,
 	[_SC_XBS5_ILP32_OFFBIG] = -1, [_SC_XBS5_LP64_OFF64] = 1,
 	[_SC_XBS5_LPBIG_OFFBIG] = 1, [_SC_XOPEN_LEGACY] = 1, [_SC_2_FORT_DEV] = -1,
+	[_SC_V6_ILP32_OFF32] = -1, [_SC_V6_ILP32_OFFBIG] = -1, [_SC_V6_LP64_OFF64] = 1,
+	[_SC_V6_LPBIG_OFFBIG] = 1, [_SC_2_PBS] = -1, [_SC_2_PBS_ACCOUNTING] = -1,
+	[_SC_2_PBS_CHECKPOINT] = -1, [_SC_2_PBS_LOCATE] = -1, [_SC_2_PBS_MESSAGE] = -1,
+	[_SC_2_PBS_TRACK] = -1, [_SC_TRACE] = -1, [_SC_TRACE_EVENT_FILTER] = -1,
+	[_SC_TRACE_EVENT_NAME_MAX] = -1, [_SC_TRACE_INHERIT] = -1, [_SC_TRACE_LOG] = -1,
+	[_SC_TRACE_NAME_MAX] = -1, [_SC_TRACE_SYS_MAX] = -1, [_SC_TRACE_USER_EVENT_MAX] = -1,
+	[_SC_XOPEN_STREAMS] = -1,
 };
 
 /* Count the CPUs in a kernel cpu mask. */
