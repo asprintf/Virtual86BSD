@@ -1,0 +1,578 @@
+#include <curses.h>
+# X/Open Curses, Issue 4, Version 2 (SUSv2): the <curses.h> page; where
+# X/Open Curses, Issue 7 changed a declaration, Issue 7's ([XCurses7]).
+# Objects
+[SUSv2] external COLOR_PAIRS: int COLOR_PAIRS;
+[SUSv2] external COLORS: int COLORS;
+[SUSv2] external COLS: int COLS;
+[SUSv2] external LINES: int LINES;
+[SUSv2] external curscr: WINDOW *curscr;
+[SUSv2] external stdscr: WINDOW *stdscr;
+# Constants
+[SUSv2] define EOF
+[SUSv2] define ERR
+[SUSv2] define FALSE
+[SUSv2] define OK
+[SUSv2] define TRUE
+[SUSv2] define WEOF
+[SUSv2] define _XOPEN_CURSES
+# Data types
+[SUSv2] typedef attr_t
+[SUSv2] typedef bool
+[SUSv2] typedef chtype
+[SUSv2] typedef SCREEN
+[SUSv2] typedef wchar_t
+[SUSv2] typedef wint_t
+[SUSv2] typedef cchar_t
+[SUSv2] typedef WINDOW
+# Attribute bits
+[SUSv2] define WA_ALTCHARSET
+[SUSv2] define WA_BLINK
+[SUSv2] define WA_BOLD
+[SUSv2] define WA_DIM
+[SUSv2] define WA_HORIZONTAL
+[SUSv2] define WA_INVIS
+[SUSv2] define WA_LEFT
+[SUSv2] define WA_LOW
+[SUSv2] define WA_PROTECT
+[SUSv2] define WA_REVERSE
+[SUSv2] define WA_RIGHT
+[SUSv2] define WA_STANDOUT
+[SUSv2] define WA_TOP
+[SUSv2] define WA_UNDERLINE
+[SUSv2] define WA_VERTICAL
+[SUSv2] define A_ALTCHARSET
+[SUSv2] define A_BLINK
+[SUSv2] define A_BOLD
+[SUSv2] define A_DIM
+[SUSv2] define A_INVIS
+[SUSv2] define A_PROTECT
+[SUSv2] define A_REVERSE
+[SUSv2] define A_STANDOUT
+[SUSv2] define A_UNDERLINE
+[SUSv2] define A_ATTRIBUTES
+[SUSv2] define A_CHARTEXT
+[SUSv2] define A_COLOR
+# Line-drawing constants
+[SUSv2] define ACS_ULCORNER
+[SUSv2] define WACS_ULCORNER
+[SUSv2] define ACS_LLCORNER
+[SUSv2] define WACS_LLCORNER
+[SUSv2] define ACS_URCORNER
+[SUSv2] define WACS_URCORNER
+[SUSv2] define ACS_LRCORNER
+[SUSv2] define WACS_LRCORNER
+[SUSv2] define ACS_RTEE
+[SUSv2] define WACS_RTEE
+[SUSv2] define ACS_LTEE
+[SUSv2] define WACS_LTEE
+[SUSv2] define ACS_BTEE
+[SUSv2] define WACS_BTEE
+[SUSv2] define ACS_TTEE
+[SUSv2] define WACS_TTEE
+[SUSv2] define ACS_HLINE
+[SUSv2] define WACS_HLINE
+[SUSv2] define ACS_VLINE
+[SUSv2] define WACS_VLINE
+[SUSv2] define ACS_PLUS
+[SUSv2] define WACS_PLUS
+[SUSv2] define ACS_S1
+[SUSv2] define WACS_S1
+[SUSv2] define ACS_S9
+[SUSv2] define WACS_S9
+[SUSv2] define ACS_DIAMOND
+[SUSv2] define WACS_DIAMOND
+[SUSv2] define ACS_CKBOARD
+[SUSv2] define WACS_CKBOARD
+[SUSv2] define ACS_DEGREE
+[SUSv2] define WACS_DEGREE
+[SUSv2] define ACS_PLMINUS
+[SUSv2] define WACS_PLMINUS
+[SUSv2] define ACS_BULLET
+[SUSv2] define WACS_BULLET
+[SUSv2] define ACS_LARROW
+[SUSv2] define WACS_LARROW
+[SUSv2] define ACS_RARROW
+[SUSv2] define WACS_RARROW
+[SUSv2] define ACS_DARROW
+[SUSv2] define WACS_DARROW
+[SUSv2] define ACS_UARROW
+[SUSv2] define WACS_UARROW
+[SUSv2] define ACS_BOARD
+[SUSv2] define WACS_BOARD
+[SUSv2] define ACS_LANTERN
+[SUSv2] define WACS_LANTERN
+[SUSv2] define ACS_BLOCK
+[SUSv2] define WACS_BLOCK
+# Colour-related macros
+[SUSv2] define COLOR_BLACK
+[SUSv2] define COLOR_BLUE
+[SUSv2] define COLOR_GREEN
+[SUSv2] define COLOR_CYAN
+[SUSv2] define COLOR_RED
+[SUSv2] define COLOR_MAGENTA
+[SUSv2] define COLOR_YELLOW
+[SUSv2] define COLOR_WHITE
+# Coordinate-related macros
+[SUSv2] define getbegyx
+[SUSv2] define getmaxyx
+[SUSv2] define getparyx
+[SUSv2] define getyx
+# Key codes
+[SUSv2] define KEY_CODE_YES
+[SUSv2] define KEY_BREAK
+[SUSv2] define KEY_DOWN
+[SUSv2] define KEY_UP
+[SUSv2] define KEY_LEFT
+[SUSv2] define KEY_RIGHT
+[SUSv2] define KEY_HOME
+[SUSv2] define KEY_BACKSPACE
+[SUSv2] define KEY_F0
+[SUSv2] define KEY_F
+[SUSv2] define KEY_DL
+[SUSv2] define KEY_IL
+[SUSv2] define KEY_DC
+[SUSv2] define KEY_IC
+[SUSv2] define KEY_EIC
+[SUSv2] define KEY_CLEAR
+[SUSv2] define KEY_EOS
+[SUSv2] define KEY_EOL
+[SUSv2] define KEY_SF
+[SUSv2] define KEY_SR
+[SUSv2] define KEY_NPAGE
+[SUSv2] define KEY_PPAGE
+[SUSv2] define KEY_STAB
+[SUSv2] define KEY_CTAB
+[SUSv2] define KEY_CATAB
+[SUSv2] define KEY_ENTER
+[SUSv2] define KEY_SRESET
+[SUSv2] define KEY_RESET
+[SUSv2] define KEY_PRINT
+[SUSv2] define KEY_LL
+[SUSv2] define KEY_A1
+[SUSv2] define KEY_A3
+[SUSv2] define KEY_B2
+[SUSv2] define KEY_C1
+[SUSv2] define KEY_C3
+[SUSv2] define KEY_BTAB
+[SUSv2] define KEY_BEG
+[SUSv2] define KEY_CANCEL
+[SUSv2] define KEY_CLOSE
+[SUSv2] define KEY_COMMAND
+[SUSv2] define KEY_COPY
+[SUSv2] define KEY_CREATE
+[SUSv2] define KEY_END
+[SUSv2] define KEY_EXIT
+[SUSv2] define KEY_FIND
+[SUSv2] define KEY_HELP
+[SUSv2] define KEY_MARK
+[SUSv2] define KEY_MESSAGE
+[SUSv2] define KEY_MOVE
+[SUSv2] define KEY_NEXT
+[SUSv2] define KEY_OPEN
+[SUSv2] define KEY_OPTIONS
+[SUSv2] define KEY_PREVIOUS
+[SUSv2] define KEY_REDO
+[SUSv2] define KEY_REFERENCE
+[SUSv2] define KEY_REFRESH
+[SUSv2] define KEY_REPLACE
+[SUSv2] define KEY_RESTART
+[SUSv2] define KEY_RESUME
+[SUSv2] define KEY_SAVE
+[SUSv2] define KEY_SBEG
+[SUSv2] define KEY_SCANCEL
+[SUSv2] define KEY_SCOMMAND
+[SUSv2] define KEY_SCOPY
+[SUSv2] define KEY_SCREATE
+[SUSv2] define KEY_SDC
+[SUSv2] define KEY_SDL
+[SUSv2] define KEY_SELECT
+[SUSv2] define KEY_SEND
+[SUSv2] define KEY_SEOL
+[SUSv2] define KEY_SEXIT
+[SUSv2] define KEY_SFIND
+[SUSv2] define KEY_SHELP
+[SUSv2] define KEY_SHOME
+[SUSv2] define KEY_SIC
+[SUSv2] define KEY_SLEFT
+[SUSv2] define KEY_SMESSAGE
+[SUSv2] define KEY_SMOVE
+[SUSv2] define KEY_SNEXT
+[SUSv2] define KEY_SOPTIONS
+[SUSv2] define KEY_SPREVIOUS
+[SUSv2] define KEY_SPRINT
+[SUSv2] define KEY_SREDO
+[SUSv2] define KEY_SREPLACE
+[SUSv2] define KEY_SRIGHT
+[SUSv2] define KEY_SRSUME
+[SUSv2] define KEY_SSAVE
+[SUSv2] define KEY_SSUSPEND
+[SUSv2] define KEY_SUNDO
+[SUSv2] define KEY_SUSPEND
+[SUSv2] define KEY_UNDO
+# Functions (they may also be macros)
+[SUSv2] maybe_define function addch: int addch(const chtype);
+[SUSv2] maybe_define function addchnstr: int addchnstr(const chtype *, int);
+[SUSv2] maybe_define function addchstr: int addchstr(const chtype *);
+[SUSv2] maybe_define function addnstr: int addnstr(const char *, int);
+[SUSv2] maybe_define function addnwstr: int addnwstr(const wchar_t *, int);
+[SUSv2] maybe_define function addstr: int addstr(const char *);
+[SUSv2] maybe_define function add_wch: int add_wch(const cchar_t *);
+[SUSv2] maybe_define function add_wchnstr: int add_wchnstr(const cchar_t *, int);
+[SUSv2] maybe_define function add_wchstr: int add_wchstr(const cchar_t *);
+[SUSv2] maybe_define function addwstr: int addwstr(const wchar_t *);
+[SUSv2] maybe_define function attroff: int attroff(int);
+[SUSv2] maybe_define function attron: int attron(int);
+[SUSv2] maybe_define function attrset: int attrset(int);
+[SUSv2] maybe_define function attr_get: int attr_get(attr_t *, short *, void *);
+[SUSv2] maybe_define function attr_off: int attr_off(attr_t, void *);
+[SUSv2] maybe_define function attr_on: int attr_on(attr_t, void *);
+[SUSv2] maybe_define function attr_set: int attr_set(attr_t, short, void *);
+[SUSv2] maybe_define function baudrate: int baudrate(void);
+[SUSv2] maybe_define function beep: int beep(void);
+[SUSv2] maybe_define function bkgd: int bkgd(chtype);
+[SUSv2] maybe_define function bkgdset: void bkgdset(chtype);
+[SUSv2] maybe_define function bkgrnd: int bkgrnd(const cchar_t *);
+[SUSv2] maybe_define function bkgrndset: void bkgrndset(const cchar_t *);
+[SUSv2] maybe_define function border: int border(chtype, chtype, chtype, chtype, chtype, chtype, chtype, chtype);
+[SUSv2] maybe_define function border_set: int border_set(const cchar_t *, const cchar_t *, const cchar_t *, const cchar_t *, const cchar_t *, const cchar_t *, const cchar_t *, const cchar_t *);
+[SUSv2] maybe_define function box: int box(WINDOW *, chtype, chtype);
+[SUSv2] maybe_define function box_set: int box_set(WINDOW *, const cchar_t *, const cchar_t *);
+[SUSv2] maybe_define function can_change_color: bool can_change_color(void);
+[SUSv2] maybe_define function cbreak: int cbreak(void);
+[SUSv2] maybe_define function chgat: int chgat(int, attr_t, short, const void *);
+[SUSv2] maybe_define function clearok: int clearok(WINDOW *, bool);
+[SUSv2] maybe_define function clear: int clear(void);
+[SUSv2] maybe_define function clrtobot: int clrtobot(void);
+[SUSv2] maybe_define function clrtoeol: int clrtoeol(void);
+[SUSv2] maybe_define function color_content: int color_content(short, short *, short *, short *);
+[XCurses7] define COLOR_PAIR
+[SUSv2] maybe_define function color_set: int color_set(short, void *);
+[SUSv2] maybe_define function copywin: int copywin(const WINDOW *, WINDOW *, int, int, int, int, int, int, int);
+[SUSv2] maybe_define function curs_set: int curs_set(int);
+[SUSv2] maybe_define function def_prog_mode: int def_prog_mode(void);
+[SUSv2] maybe_define function def_shell_mode: int def_shell_mode(void);
+[SUSv2] maybe_define function delay_output: int delay_output(int);
+[SUSv2] maybe_define function delch: int delch(void);
+[SUSv2] maybe_define function deleteln: int deleteln(void);
+[SUSv2] maybe_define function delscreen: void delscreen(SCREEN *);
+[SUSv2] maybe_define function delwin: int delwin(WINDOW *);
+[SUSv2] maybe_define function derwin: WINDOW *derwin(WINDOW *, int, int, int, int);
+[SUSv2] maybe_define function doupdate: int doupdate(void);
+[SUSv2] maybe_define function dupwin: WINDOW *dupwin(WINDOW *);
+[SUSv2] maybe_define function echo: int echo(void);
+[SUSv2] maybe_define function echochar: int echochar(const chtype);
+[SUSv2] maybe_define function echo_wchar: int echo_wchar(const cchar_t *);
+[SUSv2] maybe_define function endwin: int endwin(void);
+[SUSv2] maybe_define function erasechar: char erasechar(void);
+[SUSv2] maybe_define function erase: int erase(void);
+[SUSv2] maybe_define function erasewchar: int erasewchar(wchar_t *);
+[SUSv2] maybe_define function filter: void filter(void);
+[SUSv2] maybe_define function flash: int flash(void);
+[SUSv2] maybe_define function flushinp: int flushinp(void);
+[SUSv2] maybe_define function getbkgd: chtype getbkgd(WINDOW *);
+[SUSv2] maybe_define function getbkgrnd: int getbkgrnd(cchar_t *);
+[SUSv2] maybe_define function getcchar: int getcchar(const cchar_t *, wchar_t *, attr_t *, short *, void *);
+[SUSv2] maybe_define function getch: int getch(void);
+[SUSv2] maybe_define function getnstr: int getnstr(char *, int);
+[SUSv2] maybe_define function getn_wstr: int getn_wstr(wint_t *, int);
+[SUSv2] maybe_define function getstr: int getstr(char *);
+[SUSv2] maybe_define function get_wch: int get_wch(wint_t *);
+[SUSv2] maybe_define function getwin: WINDOW *getwin(FILE *);
+[SUSv2] maybe_define function get_wstr: int get_wstr(wint_t *);
+[SUSv2] maybe_define function halfdelay: int halfdelay(int);
+[SUSv2] maybe_define function has_colors: bool has_colors(void);
+[SUSv2] maybe_define function has_ic: bool has_ic(void);
+[SUSv2] maybe_define function has_il: bool has_il(void);
+[SUSv2] maybe_define function hline: int hline(chtype, int);
+[SUSv2] maybe_define function hline_set: int hline_set(const cchar_t *, int);
+[SUSv2] maybe_define function idcok: void idcok(WINDOW *, bool);
+[SUSv2] maybe_define function idlok: int idlok(WINDOW *, bool);
+[SUSv2] maybe_define function immedok: void immedok(WINDOW *, bool);
+[SUSv2] maybe_define function inch: chtype inch(void);
+[SUSv2] maybe_define function inchnstr: int inchnstr(chtype *, int);
+[SUSv2] maybe_define function inchstr: int inchstr(chtype *);
+[SUSv2] maybe_define function initscr: WINDOW *initscr(void);
+[SUSv2] maybe_define function init_color: int init_color(short, short, short, short);
+[SUSv2] maybe_define function init_pair: int init_pair(short, short, short);
+[SUSv2] maybe_define function innstr: int innstr(char *, int);
+[SUSv2] maybe_define function innwstr: int innwstr(wchar_t *, int);
+[SUSv2] maybe_define function insch: int insch(chtype);
+[SUSv2] maybe_define function insdelln: int insdelln(int);
+[SUSv2] maybe_define function insertln: int insertln(void);
+[SUSv2] maybe_define function insnstr: int insnstr(const char *, int);
+[SUSv2] maybe_define function ins_nwstr: int ins_nwstr(const wchar_t *, int);
+[SUSv2] maybe_define function insstr: int insstr(const char *);
+[SUSv2] maybe_define function instr: int instr(char *);
+[SUSv2] maybe_define function ins_wch: int ins_wch(const cchar_t *);
+[SUSv2] maybe_define function ins_wstr: int ins_wstr(const wchar_t *);
+[SUSv2] maybe_define function intrflush: int intrflush(WINDOW *, bool);
+[SUSv2] maybe_define function in_wch: int in_wch(cchar_t *);
+[SUSv2] maybe_define function in_wchnstr: int in_wchnstr(cchar_t *, int);
+[SUSv2] maybe_define function in_wchstr: int in_wchstr(cchar_t *);
+[SUSv2] maybe_define function inwstr: int inwstr(wchar_t *);
+[SUSv2] maybe_define function isendwin: bool isendwin(void);
+[SUSv2] maybe_define function is_linetouched: bool is_linetouched(WINDOW *, int);
+[SUSv2] maybe_define function is_wintouched: bool is_wintouched(WINDOW *);
+[SUSv2] maybe_define function keyname: char *keyname(int);
+[SUSv2] maybe_define function key_name: char *key_name(wchar_t);
+[SUSv2] maybe_define function keypad: int keypad(WINDOW *, bool);
+[SUSv2] maybe_define function killchar: char killchar(void);
+[SUSv2] maybe_define function killwchar: int killwchar(wchar_t *);
+[SUSv2] maybe_define function leaveok: int leaveok(WINDOW *, bool);
+[SUSv2] maybe_define function longname: char *longname(void);
+[SUSv2] maybe_define function meta: int meta(WINDOW *, bool);
+[SUSv2] maybe_define function move: int move(int, int);
+[SUSv2] maybe_define function mvaddch: int mvaddch(int, int, const chtype);
+[SUSv2] maybe_define function mvaddchnstr: int mvaddchnstr(int, int, const chtype *, int);
+[SUSv2] maybe_define function mvaddchstr: int mvaddchstr(int, int, const chtype *);
+[SUSv2] maybe_define function mvaddnstr: int mvaddnstr(int, int, const char *, int);
+[SUSv2] maybe_define function mvaddnwstr: int mvaddnwstr(int, int, const wchar_t *, int);
+[SUSv2] maybe_define function mvaddstr: int mvaddstr(int, int, const char *);
+[SUSv2] maybe_define function mvadd_wch: int mvadd_wch(int, int, const cchar_t *);
+[SUSv2] maybe_define function mvadd_wchnstr: int mvadd_wchnstr(int, int, const cchar_t *, int);
+[SUSv2] maybe_define function mvadd_wchstr: int mvadd_wchstr(int, int, const cchar_t *);
+[SUSv2] maybe_define function mvaddwstr: int mvaddwstr(int, int, const wchar_t *);
+[SUSv2] maybe_define function mvchgat: int mvchgat(int, int, int, attr_t, short, const void *);
+[SUSv2] maybe_define function mvcur: int mvcur(int, int, int, int);
+[SUSv2] maybe_define function mvdelch: int mvdelch(int, int);
+[SUSv2] maybe_define function mvderwin: int mvderwin(WINDOW *, int, int);
+[SUSv2] maybe_define function mvgetch: int mvgetch(int, int);
+[SUSv2] maybe_define function mvgetnstr: int mvgetnstr(int, int, char *, int);
+[SUSv2] maybe_define function mvgetn_wstr: int mvgetn_wstr(int, int, wint_t *, int);
+[SUSv2] maybe_define function mvgetstr: int mvgetstr(int, int, char *);
+[SUSv2] maybe_define function mvget_wch: int mvget_wch(int, int, wint_t *);
+[SUSv2] maybe_define function mvget_wstr: int mvget_wstr(int, int, wint_t *);
+[SUSv2] maybe_define function mvhline: int mvhline(int, int, chtype, int);
+[SUSv2] maybe_define function mvhline_set: int mvhline_set(int, int, const cchar_t *, int);
+[SUSv2] maybe_define function mvinch: chtype mvinch(int, int);
+[SUSv2] maybe_define function mvinchnstr: int mvinchnstr(int, int, chtype *, int);
+[SUSv2] maybe_define function mvinchstr: int mvinchstr(int, int, chtype *);
+[SUSv2] maybe_define function mvinnstr: int mvinnstr(int, int, char *, int);
+[SUSv2] maybe_define function mvinnwstr: int mvinnwstr(int, int, wchar_t *, int);
+[SUSv2] maybe_define function mvinsch: int mvinsch(int, int, chtype);
+[SUSv2] maybe_define function mvinsnstr: int mvinsnstr(int, int, const char *, int);
+[SUSv2] maybe_define function mvins_nwstr: int mvins_nwstr(int, int, const wchar_t *, int);
+[SUSv2] maybe_define function mvinsstr: int mvinsstr(int, int, const char *);
+[SUSv2] maybe_define function mvinstr: int mvinstr(int, int, char *);
+[SUSv2] maybe_define function mvins_wch: int mvins_wch(int, int, const cchar_t *);
+[SUSv2] maybe_define function mvins_wstr: int mvins_wstr(int, int, const wchar_t *);
+[SUSv2] maybe_define function mvin_wch: int mvin_wch(int, int, cchar_t *);
+[SUSv2] maybe_define function mvin_wchnstr: int mvin_wchnstr(int, int, cchar_t *, int);
+[SUSv2] maybe_define function mvin_wchstr: int mvin_wchstr(int, int, cchar_t *);
+[SUSv2] maybe_define function mvinwstr: int mvinwstr(int, int, wchar_t *);
+[XCurses7] maybe_define function mvprintw: int mvprintw(int, int, const char *, ...);
+[XCurses7] maybe_define function mvscanw: int mvscanw(int, int, const char *, ...);
+[SUSv2] maybe_define function mvvline: int mvvline(int, int, chtype, int);
+[SUSv2] maybe_define function mvvline_set: int mvvline_set(int, int, const cchar_t *, int);
+[SUSv2] maybe_define function mvwaddch: int mvwaddch(WINDOW *, int, int, const chtype);
+[SUSv2] maybe_define function mvwaddchnstr: int mvwaddchnstr(WINDOW *, int, int, const chtype *, int);
+[SUSv2] maybe_define function mvwaddchstr: int mvwaddchstr(WINDOW *, int, int, const chtype *);
+[SUSv2] maybe_define function mvwaddnstr: int mvwaddnstr(WINDOW *, int, int, const char *, int);
+[SUSv2] maybe_define function mvwaddnwstr: int mvwaddnwstr(WINDOW *, int, int, const wchar_t *, int);
+[SUSv2] maybe_define function mvwaddstr: int mvwaddstr(WINDOW *, int, int, const char *);
+[SUSv2] maybe_define function mvwadd_wch: int mvwadd_wch(WINDOW *, int, int, const cchar_t *);
+[SUSv2] maybe_define function mvwadd_wchnstr: int mvwadd_wchnstr(WINDOW *, int, int, const cchar_t *, int);
+[SUSv2] maybe_define function mvwadd_wchstr: int mvwadd_wchstr(WINDOW *, int, int, const cchar_t *);
+[SUSv2] maybe_define function mvwaddwstr: int mvwaddwstr(WINDOW *, int, int, const wchar_t *);
+[SUSv2] maybe_define function mvwchgat: int mvwchgat(WINDOW *, int, int, int, attr_t, short, const void *);
+[SUSv2] maybe_define function mvwdelch: int mvwdelch(WINDOW *, int, int);
+[SUSv2] maybe_define function mvwgetch: int mvwgetch(WINDOW *, int, int);
+[SUSv2] maybe_define function mvwgetnstr: int mvwgetnstr(WINDOW *, int, int, char *, int);
+[SUSv2] maybe_define function mvwgetn_wstr: int mvwgetn_wstr(WINDOW *, int, int, wint_t *, int);
+[SUSv2] maybe_define function mvwgetstr: int mvwgetstr(WINDOW *, int, int, char *);
+[SUSv2] maybe_define function mvwget_wch: int mvwget_wch(WINDOW *, int, int, wint_t *);
+[SUSv2] maybe_define function mvwget_wstr: int mvwget_wstr(WINDOW *, int, int, wint_t *);
+[SUSv2] maybe_define function mvwhline: int mvwhline(WINDOW *, int, int, chtype, int);
+[SUSv2] maybe_define function mvwhline_set: int mvwhline_set(WINDOW *, int, int, const cchar_t *, int);
+[SUSv2] maybe_define function mvwin: int mvwin(WINDOW *, int, int);
+[SUSv2] maybe_define function mvwinch: chtype mvwinch(WINDOW *, int, int);
+[SUSv2] maybe_define function mvwinchnstr: int mvwinchnstr(WINDOW *, int, int, chtype *, int);
+[SUSv2] maybe_define function mvwinchstr: int mvwinchstr(WINDOW *, int, int, chtype *);
+[SUSv2] maybe_define function mvwinnstr: int mvwinnstr(WINDOW *, int, int, char *, int);
+[SUSv2] maybe_define function mvwinnwstr: int mvwinnwstr(WINDOW *, int, int, wchar_t *, int);
+[SUSv2] maybe_define function mvwinsch: int mvwinsch(WINDOW *, int, int, chtype);
+[SUSv2] maybe_define function mvwinsnstr: int mvwinsnstr(WINDOW *, int, int, const char *, int);
+[SUSv2] maybe_define function mvwins_nwstr: int mvwins_nwstr(WINDOW *, int, int, const wchar_t *, int);
+[SUSv2] maybe_define function mvwinsstr: int mvwinsstr(WINDOW *, int, int, const char *);
+[SUSv2] maybe_define function mvwinstr: int mvwinstr(WINDOW *, int, int, char *);
+[SUSv2] maybe_define function mvwins_wch: int mvwins_wch(WINDOW *, int, int, const cchar_t *);
+[SUSv2] maybe_define function mvwins_wstr: int mvwins_wstr(WINDOW *, int, int, const wchar_t *);
+[SUSv2] maybe_define function mvwin_wch: int mvwin_wch(WINDOW *, int, int, cchar_t *);
+[SUSv2] maybe_define function mvwin_wchnstr: int mvwin_wchnstr(WINDOW *, int, int, cchar_t *, int);
+[SUSv2] maybe_define function mvwin_wchstr: int mvwin_wchstr(WINDOW *, int, int, cchar_t *);
+[SUSv2] maybe_define function mvwinwstr: int mvwinwstr(WINDOW *, int, int, wchar_t *);
+[XCurses7] maybe_define function mvwprintw: int mvwprintw(WINDOW *, int, int, const char *, ...);
+[XCurses7] maybe_define function mvwscanw: int mvwscanw(WINDOW *, int, int, const char *, ...);
+[SUSv2] maybe_define function mvwvline: int mvwvline(WINDOW *, int, int, chtype, int);
+[SUSv2] maybe_define function mvwvline_set: int mvwvline_set(WINDOW *, int, int, const cchar_t *, int);
+[SUSv2] maybe_define function napms: int napms(int);
+[SUSv2] maybe_define function newpad: WINDOW *newpad(int, int);
+[XCurses7] maybe_define function newterm: SCREEN *newterm(const char *, FILE *, FILE *);
+[SUSv2] maybe_define function newwin: WINDOW *newwin(int, int, int, int);
+[SUSv2] maybe_define function nl: int nl(void);
+[SUSv2] maybe_define function nocbreak: int nocbreak(void);
+[SUSv2] maybe_define function nodelay: int nodelay(WINDOW *, bool);
+[SUSv2] maybe_define function noecho: int noecho(void);
+[SUSv2] maybe_define function nonl: int nonl(void);
+[SUSv2] maybe_define function noqiflush: void noqiflush(void);
+[SUSv2] maybe_define function noraw: int noraw(void);
+[SUSv2] maybe_define function notimeout: int notimeout(WINDOW *, bool);
+[SUSv2] maybe_define function overlay: int overlay(const WINDOW *, WINDOW *);
+[SUSv2] maybe_define function overwrite: int overwrite(const WINDOW *, WINDOW *);
+[SUSv2] maybe_define function pair_content: int pair_content(short, short *, short *);
+[XCurses7] define PAIR_NUMBER
+[SUSv2] maybe_define function pechochar: int pechochar(WINDOW *, chtype);
+[SUSv2] maybe_define function pecho_wchar: int pecho_wchar(WINDOW *, const cchar_t *);
+[SUSv2] maybe_define function pnoutrefresh: int pnoutrefresh(WINDOW *, int, int, int, int, int, int);
+[SUSv2] maybe_define function prefresh: int prefresh(WINDOW *, int, int, int, int, int, int);
+[XCurses7] maybe_define function printw: int printw(const char *, ...);
+[SUSv2] maybe_define function putp: int putp(const char *);
+[SUSv2] maybe_define function putwin: int putwin(WINDOW *, FILE *);
+[SUSv2] maybe_define function qiflush: void qiflush(void);
+[SUSv2] maybe_define function raw: int raw(void);
+[SUSv2] maybe_define function redrawwin: int redrawwin(WINDOW *);
+[SUSv2] maybe_define function refresh: int refresh(void);
+[SUSv2] maybe_define function reset_prog_mode: int reset_prog_mode(void);
+[SUSv2] maybe_define function reset_shell_mode: int reset_shell_mode(void);
+[SUSv2] maybe_define function resetty: int resetty(void);
+[SUSv2] maybe_define function ripoffline: int ripoffline(int, int (*)(WINDOW *, int));
+[SUSv2] maybe_define function savetty: int savetty(void);
+[XCurses7] maybe_define function scanw: int scanw(const char *, ...);
+[SUSv2] maybe_define function scr_dump: int scr_dump(const char *);
+[SUSv2] maybe_define function scr_init: int scr_init(const char *);
+[SUSv2] maybe_define function scrl: int scrl(int);
+[SUSv2] maybe_define function scroll: int scroll(WINDOW *);
+[SUSv2] maybe_define function scrollok: int scrollok(WINDOW *, bool);
+[SUSv2] maybe_define function scr_restore: int scr_restore(const char *);
+[SUSv2] maybe_define function scr_set: int scr_set(const char *);
+[SUSv2] maybe_define function setcchar: int setcchar(cchar_t *, const wchar_t *, const attr_t, short, const void *);
+[SUSv2] maybe_define function setscrreg: int setscrreg(int, int);
+[SUSv2] maybe_define function set_term: SCREEN *set_term(SCREEN *);
+[SUSv2] maybe_define function setupterm: int setupterm(char *, int, int *);
+[SUSv2] maybe_define function slk_attr_off: int slk_attr_off(const attr_t, void *);
+[SUSv2] maybe_define function slk_attroff: int slk_attroff(const chtype);
+[SUSv2] maybe_define function slk_attr_on: int slk_attr_on(const attr_t, void *);
+[SUSv2] maybe_define function slk_attron: int slk_attron(const chtype);
+[SUSv2] maybe_define function slk_attr_set: int slk_attr_set(const attr_t, short, void *);
+[SUSv2] maybe_define function slk_attrset: int slk_attrset(const chtype);
+[SUSv2] maybe_define function slk_clear: int slk_clear(void);
+[SUSv2] maybe_define function slk_color: int slk_color(short);
+[SUSv2] maybe_define function slk_init: int slk_init(int);
+[SUSv2] maybe_define function slk_label: char *slk_label(int);
+[SUSv2] maybe_define function slk_noutrefresh: int slk_noutrefresh(void);
+[SUSv2] maybe_define function slk_refresh: int slk_refresh(void);
+[SUSv2] maybe_define function slk_restore: int slk_restore(void);
+[SUSv2] maybe_define function slk_set: int slk_set(int, const char *, int);
+[SUSv2] maybe_define function slk_touch: int slk_touch(void);
+[SUSv2] maybe_define function slk_wset: int slk_wset(int, const wchar_t *, int);
+[SUSv2] maybe_define function standend: int standend(void);
+[SUSv2] maybe_define function standout: int standout(void);
+[SUSv2] maybe_define function start_color: int start_color(void);
+[SUSv2] maybe_define function subpad: WINDOW *subpad(WINDOW *, int, int, int, int);
+[SUSv2] maybe_define function subwin: WINDOW *subwin(WINDOW *, int, int, int, int);
+[SUSv2] maybe_define function syncok: int syncok(WINDOW *, bool);
+[SUSv2] maybe_define function termattrs: chtype termattrs(void);
+[SUSv2] maybe_define function term_attrs: attr_t term_attrs(void);
+[SUSv2] maybe_define function termname: char *termname(void);
+[XCurses7] maybe_define function tigetflag: int tigetflag(const char *);
+[XCurses7] maybe_define function tigetnum: int tigetnum(const char *);
+[XCurses7] maybe_define function tigetstr: char *tigetstr(const char *);
+[SUSv2] maybe_define function timeout: void timeout(int);
+[SUSv2] maybe_define function touchline: int touchline(WINDOW *, int, int);
+[SUSv2] maybe_define function touchwin: int touchwin(WINDOW *);
+[XCurses7] maybe_define function tparm: char *tparm(const char *, long, long, long, long, long, long, long, long, long);
+[SUSv2] maybe_define function typeahead: int typeahead(int);
+[SUSv2] maybe_define function ungetch: int ungetch(int);
+[SUSv2] maybe_define function unget_wch: int unget_wch(const wchar_t);
+[SUSv2] maybe_define function untouchwin: int untouchwin(WINDOW *);
+[SUSv2] maybe_define function use_env: void use_env(bool);
+[SUSv2] maybe_define function vid_attr: int vid_attr(attr_t, short, void *);
+[SUSv2] maybe_define function vidattr: int vidattr(chtype);
+[SUSv2] maybe_define function vid_puts: int vid_puts(attr_t, short, void *, int (*)(int));
+[SUSv2] maybe_define function vidputs: int vidputs(chtype, int (*)(int));
+[SUSv2] maybe_define function vline: int vline(chtype, int);
+[SUSv2] maybe_define function vline_set: int vline_set(const cchar_t *, int);
+# vwprintw and vwscanw: as on their own pages (the header's list has va_list *)
+[SUSv2] maybe_define function vwprintw: int vwprintw(WINDOW *, char *, va_list);
+[XCurses7] maybe_define function vw_printw: int vw_printw(WINDOW *, const char *, va_list);
+[SUSv2] maybe_define function vwscanw: int vwscanw(WINDOW *, char *, va_list);
+[XCurses7] maybe_define function vw_scanw: int vw_scanw(WINDOW *, const char *, va_list);
+[SUSv2] maybe_define function waddch: int waddch(WINDOW *, const chtype);
+[SUSv2] maybe_define function waddchnstr: int waddchnstr(WINDOW *, const chtype *, int);
+[SUSv2] maybe_define function waddchstr: int waddchstr(WINDOW *, const chtype *);
+[SUSv2] maybe_define function waddnstr: int waddnstr(WINDOW *, const char *, int);
+[SUSv2] maybe_define function waddnwstr: int waddnwstr(WINDOW *, const wchar_t *, int);
+[SUSv2] maybe_define function waddstr: int waddstr(WINDOW *, const char *);
+[SUSv2] maybe_define function wadd_wch: int wadd_wch(WINDOW *, const cchar_t *);
+[SUSv2] maybe_define function wadd_wchnstr: int wadd_wchnstr(WINDOW *, const cchar_t *, int);
+[SUSv2] maybe_define function wadd_wchstr: int wadd_wchstr(WINDOW *, const cchar_t *);
+[SUSv2] maybe_define function waddwstr: int waddwstr(WINDOW *, const wchar_t *);
+[SUSv2] maybe_define function wattroff: int wattroff(WINDOW *, int);
+[SUSv2] maybe_define function wattron: int wattron(WINDOW *, int);
+[SUSv2] maybe_define function wattrset: int wattrset(WINDOW *, int);
+[SUSv2] maybe_define function wattr_get: int wattr_get(WINDOW *, attr_t *, short *, void *);
+[SUSv2] maybe_define function wattr_off: int wattr_off(WINDOW *, attr_t, void *);
+[SUSv2] maybe_define function wattr_on: int wattr_on(WINDOW *, attr_t, void *);
+[SUSv2] maybe_define function wattr_set: int wattr_set(WINDOW *, attr_t, short, void *);
+[SUSv2] maybe_define function wbkgd: int wbkgd(WINDOW *, chtype);
+[SUSv2] maybe_define function wbkgdset: void wbkgdset(WINDOW *, chtype);
+[SUSv2] maybe_define function wbkgrnd: int wbkgrnd(WINDOW *, const cchar_t *);
+[SUSv2] maybe_define function wbkgrndset: void wbkgrndset(WINDOW *, const cchar_t *);
+[SUSv2] maybe_define function wborder: int wborder(WINDOW *, chtype, chtype, chtype, chtype, chtype, chtype, chtype, chtype);
+[SUSv2] maybe_define function wborder_set: int wborder_set(WINDOW *, const cchar_t *, const cchar_t *, const cchar_t *, const cchar_t *, const cchar_t *, const cchar_t *, const cchar_t *, const cchar_t *);
+[SUSv2] maybe_define function wchgat: int wchgat(WINDOW *, int, attr_t, short, const void *);
+[SUSv2] maybe_define function wclear: int wclear(WINDOW *);
+[SUSv2] maybe_define function wclrtobot: int wclrtobot(WINDOW *);
+[SUSv2] maybe_define function wclrtoeol: int wclrtoeol(WINDOW *);
+[SUSv2] maybe_define function wcursyncup: void wcursyncup(WINDOW *);
+[SUSv2] maybe_define function wcolor_set: int wcolor_set(WINDOW *, short, void *);
+[SUSv2] maybe_define function wdelch: int wdelch(WINDOW *);
+[SUSv2] maybe_define function wdeleteln: int wdeleteln(WINDOW *);
+[SUSv2] maybe_define function wechochar: int wechochar(WINDOW *, const chtype);
+[SUSv2] maybe_define function wecho_wchar: int wecho_wchar(WINDOW *, const cchar_t *);
+[SUSv2] maybe_define function werase: int werase(WINDOW *);
+[SUSv2] maybe_define function wgetbkgrnd: int wgetbkgrnd(WINDOW *, cchar_t *);
+[SUSv2] maybe_define function wgetch: int wgetch(WINDOW *);
+[SUSv2] maybe_define function wgetnstr: int wgetnstr(WINDOW *, char *, int);
+[SUSv2] maybe_define function wgetn_wstr: int wgetn_wstr(WINDOW *, wint_t *, int);
+[SUSv2] maybe_define function wgetstr: int wgetstr(WINDOW *, char *);
+[SUSv2] maybe_define function wget_wch: int wget_wch(WINDOW *, wint_t *);
+[SUSv2] maybe_define function wget_wstr: int wget_wstr(WINDOW *, wint_t *);
+[SUSv2] maybe_define function whline: int whline(WINDOW *, chtype, int);
+[SUSv2] maybe_define function whline_set: int whline_set(WINDOW *, const cchar_t *, int);
+[SUSv2] maybe_define function winch: chtype winch(WINDOW *);
+[SUSv2] maybe_define function winchnstr: int winchnstr(WINDOW *, chtype *, int);
+[SUSv2] maybe_define function winchstr: int winchstr(WINDOW *, chtype *);
+[SUSv2] maybe_define function winnstr: int winnstr(WINDOW *, char *, int);
+[SUSv2] maybe_define function winnwstr: int winnwstr(WINDOW *, wchar_t *, int);
+[SUSv2] maybe_define function winsch: int winsch(WINDOW *, chtype);
+[SUSv2] maybe_define function winsdelln: int winsdelln(WINDOW *, int);
+[SUSv2] maybe_define function winsertln: int winsertln(WINDOW *);
+[SUSv2] maybe_define function winsnstr: int winsnstr(WINDOW *, const char *, int);
+[SUSv2] maybe_define function wins_nwstr: int wins_nwstr(WINDOW *, const wchar_t *, int);
+[SUSv2] maybe_define function winsstr: int winsstr(WINDOW *, const char *);
+[SUSv2] maybe_define function winstr: int winstr(WINDOW *, char *);
+[SUSv2] maybe_define function wins_wch: int wins_wch(WINDOW *, const cchar_t *);
+[SUSv2] maybe_define function wins_wstr: int wins_wstr(WINDOW *, const wchar_t *);
+[SUSv2] maybe_define function win_wch: int win_wch(WINDOW *, cchar_t *);
+[SUSv2] maybe_define function win_wchnstr: int win_wchnstr(WINDOW *, cchar_t *, int);
+[SUSv2] maybe_define function win_wchstr: int win_wchstr(WINDOW *, cchar_t *);
+[SUSv2] maybe_define function winwstr: int winwstr(WINDOW *, wchar_t *);
+[SUSv2] maybe_define function wmove: int wmove(WINDOW *, int, int);
+[SUSv2] maybe_define function wnoutrefresh: int wnoutrefresh(WINDOW *);
+[XCurses7] maybe_define function wprintw: int wprintw(WINDOW *, const char *, ...);
+[SUSv2] maybe_define function wredrawln: int wredrawln(WINDOW *, int, int);
+[SUSv2] maybe_define function wrefresh: int wrefresh(WINDOW *);
+[XCurses7] maybe_define function wscanw: int wscanw(WINDOW *, const char *, ...);
+[SUSv2] maybe_define function wscrl: int wscrl(WINDOW *, int);
+[SUSv2] maybe_define function wsetscrreg: int wsetscrreg(WINDOW *, int, int);
+[SUSv2] maybe_define function wstandend: int wstandend(WINDOW *);
+[SUSv2] maybe_define function wstandout: int wstandout(WINDOW *);
+[SUSv2] maybe_define function wsyncup: void wsyncup(WINDOW *);
+[SUSv2] maybe_define function wsyncdown: void wsyncdown(WINDOW *);
+[SUSv2] maybe_define function wtimeout: void wtimeout(WINDOW *, int);
+[SUSv2] maybe_define function wtouchln: int wtouchln(WINDOW *, int, int, int);
+[SUSv2] maybe_define function wunctrl: wchar_t *wunctrl(cchar_t *);
+[SUSv2] maybe_define function wvline: int wvline(WINDOW *, chtype, int);
+[SUSv2] maybe_define function wvline_set: int wvline_set(WINDOW *, const cchar_t *, int);

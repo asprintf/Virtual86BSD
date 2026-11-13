@@ -1,0 +1,4 @@
+#include <unctrl.h>
+# X/Open Curses, Issue 4, Version 2 (SUSv2): the <unctrl.h> page.
+[SUSv2] typedef chtype
+[SUSv2] maybe_define function unctrl: char *unctrl(chtype);

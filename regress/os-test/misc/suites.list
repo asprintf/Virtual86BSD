@@ -14,3 +14,4 @@ stdio
 udp
 legacy-include
 legacy-basic
+xcurses-include

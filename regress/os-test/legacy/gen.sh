@@ -29,15 +29,17 @@
 
 # gen.sh - make legacy-include from legacy/*.api, with posix-parse's test
 # templates:  cd regress/os-test && sh legacy/gen.sh
+# (sh legacy/gen.sh xcurses xcurses-include: the same from xcurses/*.api)
 # Lines: "#include <h.h>" first; "[EDITION] [optional] KIND NAME[: DECL];"
 # with KIND as in os-test's .api files, plus "lvalue" (a modifiable lvalue
 # that may be a macro); "% text" goes before the #include of every test;
 # other "#" lines are comments.
 
+src=${1:-legacy} suite=${2:-legacy-include}
 cd "$(dirname "$0")/.." || exit 1
-rm -rf legacy-include/*/
-for api in legacy/*.api; do
-	dir=legacy-include/$(basename "$api" .api)
+rm -rf "$suite"/*/
+for api in "$src"/*.api; do
+	dir=$suite/$(basename "$api" .api)
 	mkdir -p "$dir" || exit 1
 	awk -v dir="$dir" -v api="$api" '
 	function fail(m) { printf "%s:%d: %s\n", api, NR, m > "/dev/stderr"; bad = 1; exit 1 }

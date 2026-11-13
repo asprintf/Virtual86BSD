@@ -78,7 +78,7 @@ count_tests() {
 	p=$1; shift
 	total=0 done_n=0
 	for s do
-		[ "$p" = run ] && case $s in include|namespace|legacy-include) continue ;; esac
+		[ "$p" = run ] && case $s in include|namespace|legacy-include|xcurses-include) continue ;; esac
 		total=$((total + $(cd "$s" 2>/dev/null && tests | wc -l)))
 	done
 }
@@ -94,9 +94,10 @@ build_suite() {
 	s=$1 out=$top/out/$os/$1
 	cd "$top/$s" || return
 	case $s in
-	include|legacy-include)
+	include|legacy-include|xcurses-include)
 		tc=../misc/try-compile.sh
 		[ $s = legacy-include ] && tc=../misc/try-compile-legacy.sh
+		[ $s = xcurses-include ] && tc=../misc/try-compile-xcurses.sh
 		for t in $(tests); do
 			progress "$s" "$t"
 			[ -f "$out/$t.out" ] && continue
@@ -144,7 +145,7 @@ build_suite() {
 
 run_suite() {
 	s=$1 out=$top/out/$os/$1
-	case $s in include|namespace|legacy-include) return ;; esac
+	case $s in include|namespace|legacy-include|xcurses-include) return ;; esac
 	cd "$top/$s" || return
 	for t in $(tests); do
 		progress "$s" "$t"

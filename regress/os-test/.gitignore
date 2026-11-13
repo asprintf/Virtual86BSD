@@ -19,6 +19,8 @@ basic/*/*
 !legacy/*
 !legacy-include/*
 !legacy-basic/*
+!xcurses/*
+!xcurses-include/*
 legacy-basic/*/*
 !legacy-basic/*/*.c
 susv*

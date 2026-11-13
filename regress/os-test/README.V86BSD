@@ -23,10 +23,18 @@ beside other systems' results:
   misc/try-compile-legacy.sh
                    misc/try-compile.sh for legacy-include: -D_XOPEN_SOURCE
                    =500 in place of the 2024 macros
+  xcurses/         the declarations of X/Open Curses, Issue 4, Version 2
+                   (SUSv2's curses), one .api file per header, made with
+                   "sh legacy/gen.sh xcurses xcurses-include"
+  xcurses-include/ a suite like legacy-include for <curses.h>, <term.h>
+                   and <unctrl.h>
+  misc/try-compile-xcurses.sh
+                   misc/try-compile-legacy.sh for xcurses-include, with
+                   -D_XOPEN_SOURCE_EXTENDED=1 and -lcurses
 
 What else was changed in os-test's own files: misc/suites.list has the
-new suites at its end, and .gitignore lets git see legacy/ and
-legacy-include/.  Nothing else.
+new suites at its end, and .gitignore lets git see legacy/,
+legacy-include/, xcurses/ and xcurses-include/.  Nothing else.
 
 On another system (glibc on Linux, say) the legacy suites run as the
 others do: "make" in the suite's directory, or the whole of os-test with

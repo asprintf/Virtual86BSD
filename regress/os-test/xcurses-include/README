@@ -1,0 +1,13 @@
+This suite tests whether <curses.h>, <term.h> and <unctrl.h> have the
+declarations of X/Open Curses, Issue 4, Version 2, the curses of the
+Single UNIX Specification, Version 2.
+
+It is V86BSD's, not os-test's (see ../README.V86BSD).  The tests are made
+by "sh ../legacy/gen.sh xcurses xcurses-include" from the .api files in
+../xcurses, which were written from the text of SUSv2's XCURSES pages
+(the headers' pages, and the capabilities' table of the Terminfo Source
+Format page for <term.h>); where X/Open Curses, Issue 7 (2009) changed a
+declaration, the test is Issue 7's and marked so.  They are compiled with
+-D_XOPEN_SOURCE=500
+-D_XOPEN_SOURCE_EXTENDED=1 and linked with -lcurses
+(../misc/try-compile-xcurses.sh).
