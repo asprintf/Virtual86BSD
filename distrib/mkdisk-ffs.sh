@@ -38,7 +38,8 @@
 # system needs (/dev, /proc, /tmp; /sbin/init is in the root), and written
 # with makefs (usr.sbin/makefs, MAKEFS=path names another; by default the one
 # the build made in obj/) into a file, which goes to the partition.  Files
-# are owned by root.  Run from the top of the tree (distrib/mkdisk.sh does):
+# are owned by root, and the file system has an inode for each 8 KiB, as
+# newfs makes it.  Run from the top of the tree (distrib/mkdisk.sh does):
 # the kernel's test programs are taken from there.
 set -e
 root=$1
@@ -79,7 +80,10 @@ rm -f "$img"
 fsfile=$img.fs
 makefs=${MAKEFS:-obj/stage2/root/usr/bin/makefs}
 [ -x "$makefs" ] || { echo "mkdisk: no makefs ($makefs): run make buildworld, or give MAKEFS" >&2; exit 1; }
-"$makefs" -U -s "$((size - 1))m" -o label=v86bsd "$fsfile" "$stage" > /dev/null
+# density=8192: one inode for each 8 KiB, as newfs makes them (makefs alone
+# gives a tree only 25% more inodes than it has files, whatever the size, and
+# a disk made so is full after a few thousand new files)
+"$makefs" -U -s "$((size - 1))m" -o label=v86bsd,density=8192 "$fsfile" "$stage" > /dev/null
 rm -rf "$stage"
 # the partition table: sector 0 of the disk, one entry, the file system
 # 1 MiB in (the usual alignment), all the rest of the disk
