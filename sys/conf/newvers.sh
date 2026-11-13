@@ -34,7 +34,7 @@
 #
 # The banner names who built the kernel, as OpenBSD's does:
 #
-#   Virtual/86 BSD 0.9.1 (GENERIC) #1: Tue Nov 10 00:00:00 UTC 2026
+#   Virtual/86 BSD 1.0 (GENERIC) #1: Tue Nov 10 00:00:00 UTC 2026
 #       user@host:/usr/src/sys/arch/amd64/compile/GENERIC
 #
 # user@host is that of the machine building ($(id -un)@$(uname -n)); BUILDER
@@ -47,7 +47,7 @@
 
 fullname="Virtual/86 BSD"
 ost=V86BSD
-osr=0.9.1
+osr=1.0
 build=1
 machine=amd64
 

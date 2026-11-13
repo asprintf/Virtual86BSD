@@ -561,7 +561,7 @@ emulation, exec sets it.
   session gets SIGHUP and loses it, and a later open is live.  Mapped memory
   and a descriptor in a socket's queue are not revoked.  The match is the
   device number, so `tty00` and `cua00` are one.  `uname` says what `sys/conf/newvers.sh` writes into
-  `vers.c`: `V86BSD`, release `0.9.1`, version `GENERIC#1`, machine `amd64`.
+  `vers.c`: `V86BSD`, release `1.0`, version `GENERIC#1`, machine `amd64`.
 * **Linux:** `compat/linux/syscalls.master`, the 224 of Linux's x86-64
   system calls the kernel has, among them every one the C library uses
   (generated into `linux_syscall.h`, `linux_syscallargs.h`, `linux_sysent.c`).
@@ -576,7 +576,7 @@ The generated files are in the tree; `sh kern/makesyscalls.sh .` (from
 
 The kernel prints its banner first, as OpenBSD's does:
 
-    Virtual/86 BSD 0.9.1 (GENERIC) #1: Tue Nov 10 00:00:00 UTC 2026
+    Virtual/86 BSD 1.0 (GENERIC) #1: Tue Nov 10 00:00:00 UTC 2026
         user@host:/usr/src/sys/arch/amd64/compile/GENERIC
 
 `user@host` is the machine that built the kernel (`BUILDER=user@host`

@@ -10,11 +10,14 @@ compiles, assembles and links -- the kernel too; make, ar, yacc, lex and
 sh do the rest.  On a Linux host it makes a small system you can chroot
 into, or boot in QEMU with its own kernel.
 
-This is version 0.9.1 (November 2026; `osrelease` in `sys/conf/newvers.sh`), a preview: complete in
-what POSIX asks of the interfaces and utilities, but young as a kernel
-(see "Where things stand").  0.9.1 fixes what the external test suites
-showed after 0.9 (`share/doc/conformance.md`).  1.0 is the BSD file system: the root is FFS2 now (`newfs`, `fsck`, `makefs` are there; ext2 stays for
-reading other disks) with `tunefs` and a reload of a root that `fsck` changed still to come.
+This is version 1.0 (November 2026; `osrelease` in `sys/conf/newvers.sh`): complete in
+what POSIX asks of the interfaces and utilities, and with the BSD file system
+for a root, but still young as a kernel (see "Where things stand").  The root
+is FFS2 now (`newfs`, `fsck`, `tunefs`, `makefs`, and a reload of a root that
+`fsck` changed; ext2 stays for reading other disks); the FFS driver is new,
+written for this system from the BSD code, and has had power-cut testing but
+not the years of use the BSDs' has.  Shall 0.9.1, which this system forked from, fixed
+what the external test suites showed after 0.9 (`share/doc/conformance.md`).
 
 Shall, the system this one comes from, was made by Joost Orchidee Winter with Claude, Anthropic's AI model,
 which wrote most of the code from the text of the standard (POSIX.1-2024,
