@@ -35,5 +35,11 @@
 __BEGIN_DECLS
 char *basename(char *);
 char *dirname(char *);
+#if __XSI_OB5
+/* SUSv2 (LEGACY); removed in SUSv3 */
+extern char *__loc1;
+char *regcmp(const char *, ...);
+char *regex(const char *, const char *, ...);
+#endif
 __END_DECLS
 #endif

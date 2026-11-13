@@ -81,7 +81,9 @@ HDRS = \
 	../../include/poll.h \
 	../../include/pthread.h \
 	../../include/pwd.h \
+	../../include/re_comp.h \
 	../../include/regex.h \
+	../../include/regexp.h \
 	../../include/sched.h \
 	../../include/search.h \
 	../../include/semaphore.h \
@@ -96,12 +98,14 @@ HDRS = \
 	../../include/stdnoreturn.h \
 	../../include/string.h \
 	../../include/strings.h \
+	../../include/sys/cdefs.h \
 	../../include/sys/ioctl.h \
 	../../include/sys/ipc.h \
 	../../include/sys/mman.h \
 	../../include/sys/mount.h \
 	../../include/sys/msg.h \
 	../../include/sys/param.h \
+	../../include/sys/queue.h \
 	../../include/sys/reboot.h \
 	../../include/sys/resource.h \
 	../../include/sys/select.h \
@@ -114,6 +118,7 @@ HDRS = \
 	../../include/sys/sysctl.h \
 	../../include/sys/sysmacros.h \
 	../../include/sys/time.h \
+	../../include/sys/timeb.h \
 	../../include/sys/times.h \
 	../../include/sys/types.h \
 	../../include/sys/uio.h \
@@ -127,11 +132,14 @@ HDRS = \
 	../../include/threads.h \
 	../../include/time.h \
 	../../include/uchar.h \
+	../../include/ucontext.h \
 	../../include/ufs/ffs/ffs_extern.h \
 	../../include/ufs/ffs/fs.h \
 	../../include/ufs/ufs/dinode.h \
 	../../include/ufs/ufs/dir.h \
+	../../include/ulimit.h \
 	../../include/unistd.h \
+	../../include/utime.h \
 	../../include/utmpx.h \
 	../../include/wchar.h \
 	../../include/wctype.h \
@@ -190,6 +198,8 @@ OBJS = \
 	$(B)/obj/arch/x86_64/syscall.o \
 	$(B)/obj/arch/x86_64/thread.o \
 	$(B)/obj/arch/x86_64/tzdata.o \
+	$(B)/obj/arch/x86_64/ucontext.o \
+	$(B)/obj/arch/x86_64/vfork.o \
 	$(B)/obj/arch/x86_64/weak.o \
 	$(B)/obj/arch/x86_64/x87.o \
 	$(B)/obj/c11/mtx.o \
@@ -210,6 +220,7 @@ OBJS = \
 	$(B)/obj/crypt/encrypt.o \
 	$(B)/obj/crypt/hash.o \
 	$(B)/obj/ctype/__wctype.o \
+	$(B)/obj/ctype/ascii.o \
 	$(B)/obj/ctype/ctype.o \
 	$(B)/obj/ctype/ctype_l.o \
 	$(B)/obj/ctype/wctype.o \
@@ -246,6 +257,7 @@ OBJS = \
 	$(B)/obj/ipc/ipc.o \
 	$(B)/obj/ldso/selfsym.o \
 	$(B)/obj/libgen/libgen.o \
+	$(B)/obj/libgen/regcmp.o \
 	$(B)/obj/locale/c_locale.o \
 	$(B)/obj/locale/charset.o \
 	$(B)/obj/locale/collate.o \
@@ -285,6 +297,7 @@ OBJS = \
 	$(B)/obj/math/lgamma.o \
 	$(B)/obj/math/log.o \
 	$(B)/obj/math/log1p.o \
+	$(B)/obj/math/math_ob.o \
 	$(B)/obj/math/modf.o \
 	$(B)/obj/math/nan.o \
 	$(B)/obj/math/nextafter.o \
@@ -319,6 +332,7 @@ OBJS = \
 	$(B)/obj/misc/time_ops.o \
 	$(B)/obj/misc/tty.o \
 	$(B)/obj/misc/typed_mem.o \
+	$(B)/obj/misc/ulimit.o \
 	$(B)/obj/misc/uname.o \
 	$(B)/obj/misc/usleep.o \
 	$(B)/obj/monetary/strfmon.o \
@@ -331,11 +345,13 @@ OBJS = \
 	$(B)/obj/network/byteorder.o \
 	$(B)/obj/network/dns.o \
 	$(B)/obj/network/getaddrinfo.o \
+	$(B)/obj/network/gethostby.o \
 	$(B)/obj/network/getnameinfo.o \
 	$(B)/obj/network/if.o \
 	$(B)/obj/network/ifaddrs.o \
 	$(B)/obj/network/in6addr.o \
 	$(B)/obj/network/inet.o \
+	$(B)/obj/network/inet_ob.o \
 	$(B)/obj/network/netdb_ent.o \
 	$(B)/obj/network/netdb_files.o \
 	$(B)/obj/network/socket.o \
@@ -353,10 +369,13 @@ OBJS = \
 	$(B)/obj/process/fork.o \
 	$(B)/obj/process/pid.o \
 	$(B)/obj/process/wait.o \
+	$(B)/obj/process/wait3.o \
+	$(B)/obj/regex/re_comp.o \
 	$(B)/obj/regex/re_mb.o \
 	$(B)/obj/regex/regcomp.o \
 	$(B)/obj/regex/regerror.o \
 	$(B)/obj/regex/regexec.o \
+	$(B)/obj/regex/sre.o \
 	$(B)/obj/sched/sched.o \
 	$(B)/obj/search/hsearch.o \
 	$(B)/obj/search/lsearch.o \
@@ -364,6 +383,7 @@ OBJS = \
 	$(B)/obj/semaphore/sem.o \
 	$(B)/obj/semaphore/sem_open.o \
 	$(B)/obj/signal/__sigaction.o \
+	$(B)/obj/signal/makecontext.o \
 	$(B)/obj/signal/psignal.o \
 	$(B)/obj/signal/raise.o \
 	$(B)/obj/signal/sig2str.o \
@@ -372,6 +392,7 @@ OBJS = \
 	$(B)/obj/signal/sigignore.o \
 	$(B)/obj/signal/siginterrupt.o \
 	$(B)/obj/signal/signal.o \
+	$(B)/obj/signal/signal_ob.o \
 	$(B)/obj/signal/sigops.o \
 	$(B)/obj/signal/sigpause.o \
 	$(B)/obj/signal/sigrelse.o \
@@ -384,6 +405,7 @@ OBJS = \
 	$(B)/obj/stat/mode.o \
 	$(B)/obj/stat/stat.o \
 	$(B)/obj/stat/statvfs.o \
+	$(B)/obj/stat/utime.o \
 	$(B)/obj/stat/utimens.o \
 	$(B)/obj/stdio/__fdopen.o \
 	$(B)/obj/stdio/__stdio_ops.o \
@@ -413,6 +435,7 @@ OBJS = \
 	$(B)/obj/stdio/seeko.o \
 	$(B)/obj/stdio/shgetc.o \
 	$(B)/obj/stdio/stdfiles.o \
+	$(B)/obj/stdio/stdio_ob.o \
 	$(B)/obj/stdio/tmpfile.o \
 	$(B)/obj/stdio/vfprintf.o \
 	$(B)/obj/stdio/vfscanf.o \
@@ -421,6 +444,7 @@ OBJS = \
 	$(B)/obj/stdlib/abs.o \
 	$(B)/obj/stdlib/arc4random.o \
 	$(B)/obj/stdlib/bsearch.o \
+	$(B)/obj/stdlib/cvt.o \
 	$(B)/obj/stdlib/getenv.o \
 	$(B)/obj/stdlib/getsubopt.o \
 	$(B)/obj/stdlib/mb.o \
@@ -433,12 +457,14 @@ OBJS = \
 	$(B)/obj/stdlib/random.o \
 	$(B)/obj/stdlib/realpath.o \
 	$(B)/obj/stdlib/secure_getenv.o \
+	$(B)/obj/stdlib/stdlib_ob.o \
 	$(B)/obj/stdlib/strtod.o \
 	$(B)/obj/stdlib/strtol.o \
 	$(B)/obj/stdlib/strtonum.o \
 	$(B)/obj/stdlib/system.o \
 	$(B)/obj/string/__strdup_internal.o \
 	$(B)/obj/string/__strtok_r.o \
+	$(B)/obj/string/bstring.o \
 	$(B)/obj/string/ffs.o \
 	$(B)/obj/string/memccpy.o \
 	$(B)/obj/string/memchr.o \
@@ -482,6 +508,7 @@ OBJS = \
 	$(B)/obj/thread/pthread_attr.o \
 	$(B)/obj/thread/pthread_barrier.o \
 	$(B)/obj/thread/pthread_cancel.o \
+	$(B)/obj/thread/pthread_concurrency.o \
 	$(B)/obj/thread/pthread_cond.o \
 	$(B)/obj/thread/pthread_condattr.o \
 	$(B)/obj/thread/pthread_create.o \
@@ -500,6 +527,7 @@ OBJS = \
 	$(B)/obj/time/clock.o \
 	$(B)/obj/time/clock_posix.o \
 	$(B)/obj/time/era.o \
+	$(B)/obj/time/ftime.o \
 	$(B)/obj/time/getdate.o \
 	$(B)/obj/time/localtime.o \
 	$(B)/obj/time/localtime_r.o \
@@ -507,6 +535,7 @@ OBJS = \
 	$(B)/obj/time/strftime.o \
 	$(B)/obj/time/strftime_l.o \
 	$(B)/obj/time/strptime.o \
+	$(B)/obj/time/time_ob.o \
 	$(B)/obj/time/timer.o \
 	$(B)/obj/time/tz.o \
 	$(B)/obj/time/tzset.o \
@@ -519,10 +548,13 @@ OBJS = \
 	$(B)/obj/unistd/pipe.o \
 	$(B)/obj/unistd/rw.o \
 	$(B)/obj/unistd/setgroups.o \
+	$(B)/obj/unistd/unistd_ob.o \
 	$(B)/obj/utmpx/getlogin.o \
+	$(B)/obj/utmpx/ttyslot.o \
 	$(B)/obj/utmpx/utxent.o \
 	$(B)/obj/utmpx/utxrec.o \
 	$(B)/obj/wstring/wcstol.o \
+	$(B)/obj/wstring/wcswcs.o \
 	$(B)/obj/wstring/wstring.o \
 	$(B)/obj/wstring/wstring_posix.o
 STATIC_OBJS = \
@@ -606,6 +638,10 @@ $(B)/obj/crypt/hash.o: crypt/hash.c $(HDRS)
 $(B)/obj/ctype/__wctype.o: ctype/__wctype.c $(HDRS)
 	mkdir -p $(B)/obj/ctype
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ ctype/__wctype.c
+
+$(B)/obj/ctype/ascii.o: ctype/ascii.c $(HDRS)
+	mkdir -p $(B)/obj/ctype
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ ctype/ascii.c
 
 $(B)/obj/ctype/ctype.o: ctype/ctype.c $(HDRS)
 	mkdir -p $(B)/obj/ctype
@@ -758,6 +794,10 @@ $(B)/obj/ldso/selfsym.o: ldso/selfsym.c $(HDRS)
 $(B)/obj/libgen/libgen.o: libgen/libgen.c $(HDRS)
 	mkdir -p $(B)/obj/libgen
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ libgen/libgen.c
+
+$(B)/obj/libgen/regcmp.o: libgen/regcmp.c $(HDRS)
+	mkdir -p $(B)/obj/libgen
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ libgen/regcmp.c
 
 $(B)/obj/locale/c_locale.o: locale/c_locale.c $(HDRS)
 	mkdir -p $(B)/obj/locale
@@ -915,6 +955,10 @@ $(B)/obj/math/log1p.o: math/log1p.c $(HDRS)
 	mkdir -p $(B)/obj/math
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ math/log1p.c
 
+$(B)/obj/math/math_ob.o: math/math_ob.c $(HDRS)
+	mkdir -p $(B)/obj/math
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ math/math_ob.c
+
 $(B)/obj/math/modf.o: math/modf.c $(HDRS)
 	mkdir -p $(B)/obj/math
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ math/modf.c
@@ -1051,6 +1095,10 @@ $(B)/obj/misc/typed_mem.o: misc/typed_mem.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/typed_mem.c
 
+$(B)/obj/misc/ulimit.o: misc/ulimit.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/ulimit.c
+
 $(B)/obj/misc/uname.o: misc/uname.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/uname.c
@@ -1099,6 +1147,10 @@ $(B)/obj/network/getaddrinfo.o: network/getaddrinfo.c $(HDRS)
 	mkdir -p $(B)/obj/network
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/getaddrinfo.c
 
+$(B)/obj/network/gethostby.o: network/gethostby.c $(HDRS)
+	mkdir -p $(B)/obj/network
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/gethostby.c
+
 $(B)/obj/network/getnameinfo.o: network/getnameinfo.c $(HDRS)
 	mkdir -p $(B)/obj/network
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/getnameinfo.c
@@ -1118,6 +1170,10 @@ $(B)/obj/network/in6addr.o: network/in6addr.c $(HDRS)
 $(B)/obj/network/inet.o: network/inet.c $(HDRS)
 	mkdir -p $(B)/obj/network
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/inet.c
+
+$(B)/obj/network/inet_ob.o: network/inet_ob.c $(HDRS)
+	mkdir -p $(B)/obj/network
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/inet_ob.c
 
 $(B)/obj/network/netdb_ent.o: network/netdb_ent.c $(HDRS)
 	mkdir -p $(B)/obj/network
@@ -1187,6 +1243,14 @@ $(B)/obj/process/wait.o: process/wait.c $(HDRS)
 	mkdir -p $(B)/obj/process
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ process/wait.c
 
+$(B)/obj/process/wait3.o: process/wait3.c $(HDRS)
+	mkdir -p $(B)/obj/process
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ process/wait3.c
+
+$(B)/obj/regex/re_comp.o: regex/re_comp.c $(HDRS)
+	mkdir -p $(B)/obj/regex
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ regex/re_comp.c
+
 $(B)/obj/regex/re_mb.o: regex/re_mb.c $(HDRS)
 	mkdir -p $(B)/obj/regex
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ regex/re_mb.c
@@ -1202,6 +1266,10 @@ $(B)/obj/regex/regerror.o: regex/regerror.c $(HDRS)
 $(B)/obj/regex/regexec.o: regex/regexec.c $(HDRS)
 	mkdir -p $(B)/obj/regex
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ regex/regexec.c
+
+$(B)/obj/regex/sre.o: regex/sre.c $(HDRS)
+	mkdir -p $(B)/obj/regex
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ regex/sre.c
 
 $(B)/obj/sched/sched.o: sched/sched.c $(HDRS)
 	mkdir -p $(B)/obj/sched
@@ -1230,6 +1298,10 @@ $(B)/obj/semaphore/sem_open.o: semaphore/sem_open.c $(HDRS)
 $(B)/obj/signal/__sigaction.o: signal/__sigaction.c $(HDRS)
 	mkdir -p $(B)/obj/signal
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/__sigaction.c
+
+$(B)/obj/signal/makecontext.o: signal/makecontext.c $(HDRS)
+	mkdir -p $(B)/obj/signal
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/makecontext.c
 
 $(B)/obj/signal/psignal.o: signal/psignal.c $(HDRS)
 	mkdir -p $(B)/obj/signal
@@ -1262,6 +1334,10 @@ $(B)/obj/signal/siginterrupt.o: signal/siginterrupt.c $(HDRS)
 $(B)/obj/signal/signal.o: signal/signal.c $(HDRS)
 	mkdir -p $(B)/obj/signal
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/signal.c
+
+$(B)/obj/signal/signal_ob.o: signal/signal_ob.c $(HDRS)
+	mkdir -p $(B)/obj/signal
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ signal/signal_ob.c
 
 $(B)/obj/signal/sigops.o: signal/sigops.c $(HDRS)
 	mkdir -p $(B)/obj/signal
@@ -1310,6 +1386,10 @@ $(B)/obj/stat/stat.o: stat/stat.c $(HDRS)
 $(B)/obj/stat/statvfs.o: stat/statvfs.c $(HDRS)
 	mkdir -p $(B)/obj/stat
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stat/statvfs.c
+
+$(B)/obj/stat/utime.o: stat/utime.c $(HDRS)
+	mkdir -p $(B)/obj/stat
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stat/utime.c
 
 $(B)/obj/stat/utimens.o: stat/utimens.c $(HDRS)
 	mkdir -p $(B)/obj/stat
@@ -1427,6 +1507,10 @@ $(B)/obj/stdio/stdfiles.o: stdio/stdfiles.c $(HDRS)
 	mkdir -p $(B)/obj/stdio
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdio/stdfiles.c
 
+$(B)/obj/stdio/stdio_ob.o: stdio/stdio_ob.c $(HDRS)
+	mkdir -p $(B)/obj/stdio
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdio/stdio_ob.c
+
 $(B)/obj/stdio/tmpfile.o: stdio/tmpfile.c $(HDRS)
 	mkdir -p $(B)/obj/stdio
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdio/tmpfile.c
@@ -1458,6 +1542,10 @@ $(B)/obj/stdlib/arc4random.o: stdlib/arc4random.c $(HDRS)
 $(B)/obj/stdlib/bsearch.o: stdlib/bsearch.c $(HDRS)
 	mkdir -p $(B)/obj/stdlib
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdlib/bsearch.c
+
+$(B)/obj/stdlib/cvt.o: stdlib/cvt.c $(HDRS)
+	mkdir -p $(B)/obj/stdlib
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdlib/cvt.c
 
 $(B)/obj/stdlib/getenv.o: stdlib/getenv.c $(HDRS)
 	mkdir -p $(B)/obj/stdlib
@@ -1507,6 +1595,10 @@ $(B)/obj/stdlib/secure_getenv.o: stdlib/secure_getenv.c $(HDRS)
 	mkdir -p $(B)/obj/stdlib
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdlib/secure_getenv.c
 
+$(B)/obj/stdlib/stdlib_ob.o: stdlib/stdlib_ob.c $(HDRS)
+	mkdir -p $(B)/obj/stdlib
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdlib/stdlib_ob.c
+
 $(B)/obj/stdlib/strtod.o: stdlib/strtod.c $(HDRS)
 	mkdir -p $(B)/obj/stdlib
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdlib/strtod.c
@@ -1530,6 +1622,10 @@ $(B)/obj/string/__strdup_internal.o: string/__strdup_internal.c $(HDRS)
 $(B)/obj/string/__strtok_r.o: string/__strtok_r.c $(HDRS)
 	mkdir -p $(B)/obj/string
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ string/__strtok_r.c
+
+$(B)/obj/string/bstring.o: string/bstring.c $(HDRS)
+	mkdir -p $(B)/obj/string
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ string/bstring.c
 
 $(B)/obj/string/ffs.o: string/ffs.c $(HDRS)
 	mkdir -p $(B)/obj/string
@@ -1703,6 +1799,10 @@ $(B)/obj/thread/pthread_cancel.o: thread/pthread_cancel.c $(HDRS)
 	mkdir -p $(B)/obj/thread
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ thread/pthread_cancel.c
 
+$(B)/obj/thread/pthread_concurrency.o: thread/pthread_concurrency.c $(HDRS)
+	mkdir -p $(B)/obj/thread
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ thread/pthread_concurrency.c
+
 $(B)/obj/thread/pthread_cond.o: thread/pthread_cond.c $(HDRS)
 	mkdir -p $(B)/obj/thread
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ thread/pthread_cond.c
@@ -1775,6 +1875,10 @@ $(B)/obj/time/era.o: time/era.c $(HDRS)
 	mkdir -p $(B)/obj/time
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ time/era.c
 
+$(B)/obj/time/ftime.o: time/ftime.c $(HDRS)
+	mkdir -p $(B)/obj/time
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ time/ftime.c
+
 $(B)/obj/time/getdate.o: time/getdate.c $(HDRS)
 	mkdir -p $(B)/obj/time
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ time/getdate.c
@@ -1802,6 +1906,10 @@ $(B)/obj/time/strftime_l.o: time/strftime_l.c $(HDRS)
 $(B)/obj/time/strptime.o: time/strptime.c $(HDRS)
 	mkdir -p $(B)/obj/time
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ time/strptime.c
+
+$(B)/obj/time/time_ob.o: time/time_ob.c $(HDRS)
+	mkdir -p $(B)/obj/time
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ time/time_ob.c
 
 $(B)/obj/time/timer.o: time/timer.c $(HDRS)
 	mkdir -p $(B)/obj/time
@@ -1851,9 +1959,17 @@ $(B)/obj/unistd/setgroups.o: unistd/setgroups.c $(HDRS)
 	mkdir -p $(B)/obj/unistd
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ unistd/setgroups.c
 
+$(B)/obj/unistd/unistd_ob.o: unistd/unistd_ob.c $(HDRS)
+	mkdir -p $(B)/obj/unistd
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ unistd/unistd_ob.c
+
 $(B)/obj/utmpx/getlogin.o: utmpx/getlogin.c $(HDRS)
 	mkdir -p $(B)/obj/utmpx
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ utmpx/getlogin.c
+
+$(B)/obj/utmpx/ttyslot.o: utmpx/ttyslot.c $(HDRS)
+	mkdir -p $(B)/obj/utmpx
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ utmpx/ttyslot.c
 
 $(B)/obj/utmpx/utxent.o: utmpx/utxent.c $(HDRS)
 	mkdir -p $(B)/obj/utmpx
@@ -1866,6 +1982,10 @@ $(B)/obj/utmpx/utxrec.o: utmpx/utxrec.c $(HDRS)
 $(B)/obj/wstring/wcstol.o: wstring/wcstol.c $(HDRS)
 	mkdir -p $(B)/obj/wstring
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ wstring/wcstol.c
+
+$(B)/obj/wstring/wcswcs.o: wstring/wcswcs.c $(HDRS)
+	mkdir -p $(B)/obj/wstring
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ wstring/wcswcs.c
 
 $(B)/obj/wstring/wstring.o: wstring/wstring.c $(HDRS)
 	mkdir -p $(B)/obj/wstring
@@ -1936,6 +2056,16 @@ $(B)/obj/arch/x86_64/thread.o: $(B)/abi/nr.sed arch/x86_64/thread.s
 $(B)/obj/arch/x86_64/tzdata.o: arch/x86_64/tzdata.s
 	mkdir -p $(B)/obj/arch/x86_64
 	$(AS) -o $@ arch/x86_64/tzdata.s
+
+$(B)/obj/arch/x86_64/ucontext.o: $(B)/abi/nr.sed arch/x86_64/ucontext.s
+	mkdir -p $(B)/obj/arch/x86_64 $(B)/abi
+	sed -f $(B)/abi/nr.sed arch/x86_64/ucontext.s > $(B)/abi/ucontext.s
+	$(AS) -o $@ $(B)/abi/ucontext.s
+
+$(B)/obj/arch/x86_64/vfork.o: $(B)/abi/nr.sed arch/x86_64/vfork.s
+	mkdir -p $(B)/obj/arch/x86_64 $(B)/abi
+	sed -f $(B)/abi/nr.sed arch/x86_64/vfork.s > $(B)/abi/vfork.s
+	$(AS) -o $@ $(B)/abi/vfork.s
 
 $(B)/obj/arch/x86_64/weak.o: arch/x86_64/weak.s
 	mkdir -p $(B)/obj/arch/x86_64
