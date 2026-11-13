@@ -122,11 +122,13 @@ release:
 boot:
 	sh distrib/boot.sh -k '$(IMGROOT)/bsd' $(BOOTFLAGS) '$(IMAGE)'
 
+# regress-sys is last: its k_klog fills the kernel's log, and the boot's
+# messages (dmesg, rc's dmesg.boot) are gone after it
 regress:
 	@st=0; \
 	$(MAKE) regress-utils || st=1; \
-	$(MAKE) regress-sys || st=1; \
 	$(MAKE) regress-etc || st=1; \
+	$(MAKE) regress-sys || st=1; \
 	exit $$st
 
 regress-utils:
