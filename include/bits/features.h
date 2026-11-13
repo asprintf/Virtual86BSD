@@ -107,9 +107,18 @@
  *             getitimer, setitimer, sighold, sigrelse, sigignore, sigpause,
  *             sigset, siginterrupt, setpgrp (removed in Issue 8, 2024)
  *   __XSI_OB6 SUSv2 and SUSv3 (500, 600): usleep (removed in Issue 7, 2008)
+ *   __XSI_OB5 SUSv2 alone (500): the LEGACY interfaces (removed in Issue 6,
+ *             2001)
+ * Interfaces that were in POSIX itself, not only in the XSI option, are
+ * also visible with _POSIX_C_SOURCE of the editions that had them:
+ *   __POSIX_RANGE(lo, hi)  _POSIX_C_SOURCE (or what _XOPEN_SOURCE implies)
+ *             at least lo and below hi, e.g. __POSIX_RANGE(199506L,
+ *             202405L) for asctime_r() (POSIX.1c 1995 to POSIX.1-2008)
  * The editions' texts decide the windows (share/doc/legacy.md). */
 #define __XSI_OB  (__EXT_VISIBLE || (__XSI_VISIBLE >= 500 && __XSI_VISIBLE < 800))
 #define __XSI_OB6 (__EXT_VISIBLE || (__XSI_VISIBLE >= 500 && __XSI_VISIBLE < 700))
+#define __XSI_OB5 (__EXT_VISIBLE || __XSI_VISIBLE == 500)
+#define __POSIX_RANGE(lo, hi) (__EXT_VISIBLE || (__POSIX_VISIBLE >= (lo) && __POSIX_VISIBLE < (hi)))
 
 /* Portable spellings of a few qualifiers. */
 #if defined(__cplusplus)
