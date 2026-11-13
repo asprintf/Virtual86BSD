@@ -26,7 +26,14 @@ for t in k_*; do
     else
         args=
     fi
+    # /dev/klog has one read position for all: k_klog needs it to itself, so
+    # syslogd, which reads it in a booted system, stops for the test
+    resume=
+    if [ "$t" = k_klog ] && [ -x /etc/rc.d/syslogd ] && /etc/rc.d/syslogd check > /dev/null 2>&1; then
+        /etc/rc.d/syslogd stop > /dev/null 2>&1 && resume=yes
+    fi
     timeout 600 ./$t $args > $t.txt 2>&1 < /dev/null; st=$?
+    [ -z "$resume" ] || /etc/rc.d/syslogd start > /dev/null 2>&1
     if [ $st = 0 ] && ! grep -q FAIL $t.txt; then
         echo "$t: ok"; pass=$((pass + 1))
     else
