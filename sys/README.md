@@ -225,6 +225,18 @@ halted.`; a trap in the kernel is `kernel: ... trap, code=...`; a reboot says
 `syncing disks... done` and then `rebooting...`, `powering off...` or the
 halt line.
 
+A panic says what failed, which process was running, and a stack trace (the
+return addresses of the frames; `addr2line -e bsd.elf ADDRESS` gives the
+names).  It writes `1` to I/O port 0x505, QEMU's pvpanic device (with no such
+device nothing happens), does not sync the disks (the state that failed may be
+the buffers'; `fsck -p` repairs at the next boot), and restarts the system after
+`kern.panic_reboot_wait_time` seconds (default 60; only root may set it, from
+-1 to 86400).  -1 halts and stays halted.  To have the host told: start QEMU
+with `-device pvpanic`; QEMU's own action then is to pause the guest, so the
+restart never comes: add `-action panic=none` to let it run on (and a program
+that watches QMP sees the event), or `-action panic=exit-failure` to have QEMU
+exit with a failure status, which suits a test run.
+
 ### Devices, names and partitions
 
 * The network card is `em0` (Intel e1000) or `vio0` (virtio-net, QEMU's
