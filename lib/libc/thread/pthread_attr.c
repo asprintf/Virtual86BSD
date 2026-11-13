@@ -69,7 +69,7 @@ int pthread_attr_getstacksize(const pthread_attr_t *__RESTRICT a, size_t *__REST
 int pthread_attr_setstacksize(pthread_attr_t *a, size_t s)
 {
 	if (s < PTHREAD_STACK_MIN || s > SIZE_MAX / 4) return EINVAL;
-	a->_a_stackaddr = 0;
+	/* a set address stays: it is the lowest byte */
 	a->_a_stacksize = (long)s;
 	return 0;
 }
