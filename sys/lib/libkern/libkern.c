@@ -161,7 +161,7 @@ int vsnprintf(char *buf, size_t n, const char *fmt, va_list ap) {
       continue;
     }
     fmt++;
-    int left = 0, zero = 0, plus = 0, space = 0, width = 0, prec = -1, lng = 0;
+    int left = 0, zero = 0, plus = 0, space = 0, alt = 0, width = 0, prec = -1, lng = 0;
     for (;; fmt++) {
       if (*fmt == '-')
         left = 1;
@@ -171,6 +171,8 @@ int vsnprintf(char *buf, size_t n, const char *fmt, va_list ap) {
         plus = 1;
       else if (*fmt == ' ')
         space = 1;
+      else if (*fmt == '#')
+        alt = 1;
       else
         break;
     }
@@ -217,7 +219,7 @@ int vsnprintf(char *buf, size_t n, const char *fmt, va_list ap) {
     case 'X':
     case 'o':
     case 'p': {
-      uint64_t v;
+      uint64_t v, v0;
       int base = 10;
       if (*fmt == 'p') {
         v = (uint64_t)va_arg(ap, void *);
@@ -234,6 +236,7 @@ int vsnprintf(char *buf, size_t n, const char *fmt, va_list ap) {
         v = lng ? va_arg(ap, unsigned long) : va_arg(ap, unsigned int);
         base = *fmt == 'o' ? 8 : *fmt == 'u' ? 10 : 16;
       }
+      v0 = v;
       const char *dig = *fmt == 'X' ? "0123456789ABCDEF" : "0123456789abcdef";
       char *e = tmp + sizeof(tmp);
       char *p = e;
@@ -241,10 +244,11 @@ int vsnprintf(char *buf, size_t n, const char *fmt, va_list ap) {
         *--p = dig[v % base];
         v /= base;
       } while (v);
-      if (*fmt == 'p') {
-        *--p = 'x';
+      if (*fmt == 'p' || (alt && v0 && (*fmt == 'x' || *fmt == 'X'))) {
+        *--p = *fmt == 'X' ? 'X' : 'x';
         *--p = '0';
-      }
+      } else if (alt && *fmt == 'o' && *p != '0')
+        *--p = '0';
       s = p;
       slen = (int)(e - p);
       break;
