@@ -79,8 +79,10 @@ if [ ! -f "$img" ]; then
 		(cd "$pts" && tar cf - .) | (cd "$work/root/root/pts" && tar xf -) &&
 		cat > "$work/root/etc/rc" <<RC &&
 . /etc/profile
+mount -uw /
 cd /root
 sh /usr/src/lib/libc/tools/pts.sh /root/pts /root/pts-out c17 $tmo
+(cd /root && pax -w -x ustar -f /dev/rdisk1 pts-out)
 echo PTS DONE
 RC
 		sh mkdisk.sh -s "$size" "$work/root" "$img"
@@ -90,7 +92,12 @@ fi
 
 echo "ptsrun: booting ($mem), log $log"
 cd "$top" || exit 1
-sh boot.sh -k "$work/root/bsd" -m "$mem" "$img" < /dev/null > "$log" 2>&1 &
+# the results go to a second disk, a tar archive (the root is FFS, which the
+# host cannot read)
+res=$work/results.img
+rm -f "$res" && : > "$res" && dd if=/dev/null of="$res" bs=1M seek=512 2>/dev/null
+sh boot.sh -k "$work/root/bsd" -m "$mem" "$img" -- \
+	-drive "file=$res,format=raw,if=virtio" < /dev/null > "$log" 2>&1 &
 vm=$!
 trap 'kill $vm 2>/dev/null; echo; echo "ptsrun: stopped; run again to continue"; exit 130' 2 15
 
@@ -126,14 +133,9 @@ if ! tr -d '\r' < "$log" | grep -q '^PTS DONE'; then
 fi
 echo "ptsrun: done after $(( ($(date +%s) - start) / 60 )) minutes"
 
-# the results out of the image (with its partition table the file system is
-# at 1 MiB)
-fs=$img
-[ "$(dd if="$img" bs=1 skip=510 count=2 2>/dev/null | od -An -tx1 | tr -d ' \n')" = 55aa ] &&
-	fs="$img?offset=1048576"
-e2fsck -p "$fs" > /dev/null || [ $? -eq 1 ] || { echo "ptsrun: e2fsck failed" >&2; exit 1; }
+# the results: the archive the VM wrote to the second disk
 rm -rf "$work/results" "$work/tmp.x"; mkdir "$work/tmp.x" || exit 1
-debugfs -c -R "rdump /root/pts-out $work/tmp.x" "$fs" > /dev/null 2>&1
+tar xf "$res" -C "$work/tmp.x" 2> /dev/null
 [ -f "$work/tmp.x/pts-out/results" ] || { echo "ptsrun: no results in the image" >&2; exit 1; }
 mv "$work/tmp.x/pts-out" "$work/results" && rmdir "$work/tmp.x"
 awk '{ c[$2]++ } END { for (s in c) printf "%-12s %5d\n", s, c[s] }' "$work/results/results" | sort | tee "$work/summary.txt"

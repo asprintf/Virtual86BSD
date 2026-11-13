@@ -83,11 +83,13 @@ if [ ! -f "$img" ]; then
 		mkdir -p "$work/root/root" && cp -R "$work/os-test" "$work/root/root/os-test" &&
 		cat > "$work/root/etc/rc" <<RC &&
 . /etc/profile
+mount -uw /
 cd /root/os-test
 TIMEOUT=$tmo
 export TIMEOUT
 sh /usr/src/lib/libc/tools/ost/ost.sh build
 sh /usr/src/lib/libc/tools/ost/ost.sh run
+(cd /root/os-test/out && pax -w -x ustar -f /dev/rdisk1 v86bsd)
 echo OST DONE
 RC
 		sh mkdisk.sh -s "$size" "$work/root" "$img"
@@ -97,7 +99,12 @@ fi
 
 echo "vmrun: booting ($mem), log $log"
 cd "$top" || exit 1
-sh boot.sh -k "$work/root/bsd" -m "$mem" "$img" < /dev/null > "$log" 2>&1 &
+# the results go to a second disk, a tar archive (the root is FFS, which the
+# host cannot read)
+res=$work/results.img
+rm -f "$res" && : > "$res" && dd if=/dev/null of="$res" bs=1M seek=512 2>/dev/null
+sh boot.sh -k "$work/root/bsd" -m "$mem" "$img" -- \
+	-drive "file=$res,format=raw,if=virtio" < /dev/null > "$log" 2>&1 &
 vm=$!
 trap 'kill $vm 2>/dev/null; echo; echo "vmrun: stopped; run again to continue"; exit 130' 2 15
 
@@ -137,4 +144,4 @@ if ! tr -d '\r' < "$log" | grep -q '^OST DONE'; then
 	exit 1
 fi
 echo "vmrun: done after $(( ($(date +%s) - start) / 60 )) minutes; the report:"
-sh "$top/lib/libc/tools/ost/report.sh" "$img" "$work/os-test"
+sh "$top/lib/libc/tools/ost/report.sh" "$res" "$work/os-test"

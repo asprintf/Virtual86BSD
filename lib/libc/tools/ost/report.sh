@@ -38,29 +38,20 @@
 # The results go to OSTEST/out/v86bsd (replacing what was there); the
 # report is OSTEST/html/index.html and OSTEST/os-test.json.  Other
 # systems' results in OSTEST/out (out/linux from os-test's own "make
-# test" on Linux, say) are put beside V86BSD's.  Needs e2fsprogs (e2fsck,
-# debugfs) and a C compiler (CC, default cc) for misc/html.
-img=$1 ost=$2 dir=${3:-/root/os-test}
+# test" on Linux, say) are put beside V86BSD's.  Needs tar and a C compiler
+# (CC, default cc) for misc/html.  IMAGE is the results disk vmrun.sh gave
+# the VM: a tar archive of out/v86bsd, written by the VM's rc.
+img=$1 ost=$2
 if [ ! -f "$img" ] || [ ! -f "$ost/misc/html.c" ]; then
-	echo "usage: sh report.sh IMAGE OSTEST [DIR]" >&2
+	echo "usage: sh report.sh RESULTS-DISK OSTEST" >&2
 	exit 2
 fi
 
-# an image with a partition table (boot.sh, mkdisk.sh since the disklabel
-# came) holds the file system at 1 MiB; a bare ext2 image starts at 0
-fs=$img
-[ "$(dd if="$img" bs=1 skip=510 count=2 2>/dev/null | od -An -tx1 | tr -d ' \n')" = 55aa ] &&
-	fs="$img?offset=1048576"
-
-# the image must be clean before debugfs reads it (1: errors corrected)
-e2fsck -p "$fs" > /dev/null || [ $? -eq 1 ] || {
-	echo "report.sh: e2fsck failed on $img" >&2; exit 1; }
-
 tmp=${TMPDIR:-/tmp}/ost-report.$$
 mkdir "$tmp" || exit 1
-debugfs -c -R "rdump $dir/out/v86bsd $tmp" "$fs" > /dev/null 2>&1
+tar xf "$img" -C "$tmp" 2> /dev/null
 if [ ! -d "$tmp/v86bsd" ]; then
-	echo "report.sh: no $dir/out/v86bsd in $img" >&2
+	echo "report.sh: no v86bsd directory in the archive $img" >&2
 	rm -rf "$tmp"
 	exit 1
 fi
