@@ -88,10 +88,11 @@
 /* the number of elements of an array (NetBSD) */
 #define __arraycount(a)		(sizeof(a) / sizeof((a)[0]))
 
-/* identification strings: not kept in the objects */
-#define __RCSID(s)
-#define __KERNEL_RCSID(n, s)
-#define __COPYRIGHT(s)
-#define __SCCSID(s)
+/* identification strings: not kept in the objects; a declaration, as in
+ * FreeBSD, for the ';' that follows them */
+#define __RCSID(s)		struct __hack
+#define __KERNEL_RCSID(n, s)	struct __hack
+#define __COPYRIGHT(s)		struct __hack
+#define __SCCSID(s)		struct __hack
 
 #endif
