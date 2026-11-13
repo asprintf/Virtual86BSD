@@ -72,6 +72,47 @@ strict ISO C compilation.
 * `gethostbyname`, `gethostbyaddr`: on `getaddrinfo` and `getnameinfo`.
 * `gets()` is not there: C11 removed it.
 
+## X/Open Curses
+
+SUSv2 includes X/Open Curses, Issue 4, Version 2 (XCURSES): `<curses.h>`,
+`<term.h>`, `<unctrl.h>`, the curses and terminfo functions, and the
+terminfo source format. `lib/libcurses` is NetBSD's libcurses and
+libterminfo made to follow those texts (`share/doc/credits.md` lists
+what was changed); `-l curses` links it (`-l terminfo` and `-l termcap`
+too), and `tic` (`usr.bin/tic`) compiles terminal descriptions. ncurses
+stays a port (`ports/ncurses`, in `/usr/local`).
+
+* The terminal database is NetBSD's format, a cdb file:
+  `/usr/share/misc/terminfo.cdb`, compiled at build time from
+  `share/terminfo/terminfo` (ncurses' terminfo.src as NetBSD has it), so
+  it does not depend on the build host. `TERMINFO` names another database
+  file (or holds a description), `TERMINFO_DIRS` a list of them, and
+  `~/.terminfo.cdb` is read first; ansi, dumb, vt100, vt220 and xterm are
+  also built into the library. `/usr/share/terminfo` (the host's
+  ncurses-format tree) is still what `tput`, `tabs` and `talk` read.
+* Where X/Open Curses, Issue 7 (2009) changed a declaration (`const`
+  formats and names, `va_list` for `va_list *`, `COLOR_PAIR` and
+  `PAIR_NUMBER` macros), the declaration is Issue 7's. Where Issue 7 kept
+  SUSv2's or withdrew the interface, it is SUSv2's, without the `const`
+  NetBSD and ncurses add: `setupterm`, `restartterm`, `tgetflag`,
+  `tgetnum`, `tgetstr`, `tgoto`, `vwprintw`, `vwscanw`.
+* `innstr`, `inchnstr`, `getnstr` (and their wide forms) store at most
+  `n` bytes or elements, the terminating null included (ncurses stores
+  `n` and the null).
+* In the POSIX locale a terminal without `acsc` draws lines with the
+  characters of the `<curses.h>` table (`+`, `-`, `|` ...); the library
+  never sets the locale itself.
+* `vid_attr` and `vid_puts` with an `opts` that is not null: `ERR`.
+  `prefresh` and `pnoutrefresh` with a screen rectangle that is not on the
+  screen: `ERR` (the pad's rectangle is cut to the pad).
+* `scr_dump` writes the virtual screen as `putwin` writes a window;
+  `scr_init` does nothing (`OK`) when the terminal has `rmcup` and
+  `nrrmc`.
+* `restartterm` changes the current terminal's description in place, so
+  that the screens of curses keep pointing to it.
+* After `start_color`, pair 0 is the terminal's own colours, taken to be
+  white on black, as the text assumes a black background.
+
 ## Not done yet
 
 * XTI (`<xti.h>`, the `t_*` functions of SUSv2's Networking Services) and
@@ -91,3 +132,9 @@ strict ISO C compilation.
 * `regress/os-test/legacy-basic`: what each function does.
 * `regress/lib/libc/legacy.sh`: every interface under every feature-test
   macro, visible exactly in its window.
+* `regress/os-test/xcurses-include`: every declaration of `<curses.h>`,
+  `<term.h>` and `<unctrl.h>`, with `_XOPEN_SOURCE=500` and
+  `_XOPEN_SOURCE_EXTENDED=1`, linked with `-l curses` (made from
+  `regress/os-test/xcurses/*.api`).
+* `regress/lib/libcurses`: what curses draws, on a pseudo-terminal of a
+  test type that `vtscreen.c` emulates, and what the functions return.
