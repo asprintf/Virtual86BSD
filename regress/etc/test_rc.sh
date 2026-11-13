@@ -51,6 +51,11 @@ setup() {
 }
 runrc() { out=$(sh "$RC" 2>&1); st=$?; }
 
+# the daemons of the boot that is running this test would stay (rc leaves a running
+# one alone, and has cleared its pid file): stop them first
+stopd() { for p in $(ps -A -o pid= -o comm= | awk '$2 == "crond" || $2 == "atd" || $2 == "syslogd" { print $1 }'); do kill $p 2>/dev/null; done; sleep 1; }
+stopd
+
 # a boot from a read-only / (the kernel may be told so): rc makes it writable
 setup
 mount -ur /
@@ -77,7 +82,6 @@ ok "a message reached /var/log/messages" sh -c 'grep " rctest: message from the 
 ok "so did the kernel's (the start of the boot)" sh -c 'grep " /bsd: root on " /var/log/messages > /dev/null'
 ok "and syslogd's own start" sh -c 'grep " syslogd: start$" /var/log/messages > /dev/null'
 # stop what it started
-stopd() { for p in $(ps -A -o pid= -o comm= | awk '$2 == "crond" || $2 == "atd" || $2 == "syslogd" { print $1 }'); do kill $p 2>/dev/null; done; sleep 1; }
 stopd
 
 # fsck: rc runs `fsck -p' first (the real one ran above, on the fstab with
