@@ -46,7 +46,9 @@ OTHER=nobody
 [ "$TALK_ME" = nobody ] && OTHER=root
 printf 'USER %s pts/0 a 1 -10\nUSER %s pts/1 b 2 -10\nUSER %s pts/2 c 3 -10\n' "$TALK_ME" "$TALK_ME" "$OTHER" | ./mkutx > u
 # s SCENARIO [ARG...]: its output, the terminals emptied first
-s() { : > dev/pts/0; : > dev/pts/1; : > dev/pts/2; chmod 620 dev/pts/0 dev/pts/1 dev/pts/2; "$TLBIN" "$TD/talkdrv.tl" "$U" "$@" 2>&1; }
+# (talk rings the terminal of the user that was used last, by access time: pts/0
+# is, the others are old; what an earlier scenario read is no business of this one)
+s() { : > dev/pts/0; : > dev/pts/1; : > dev/pts/2; chmod 620 dev/pts/0 dev/pts/1 dev/pts/2; touch -a -t 200001010000 dev/pts/1 dev/pts/2; touch -a dev/pts/0; "$TLBIN" "$TD/talkdrv.tl" "$U" "$@" 2>&1; }
 
 t "the call: rings the callee's terminal" "status: [Waiting for your party to respond]
 first line empty: yes
