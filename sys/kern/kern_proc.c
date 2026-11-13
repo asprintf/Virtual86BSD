@@ -204,7 +204,7 @@ void proc_init_first(void) {
 #define CLONE_PARENT_SETTID 0x100000
 #define CLONE_CHILD_CLEARTID 0x200000
 #define CLONE_CHILD_SETTID 0x1000000
-#define CLONE_UNSUPPORTED 0x7e02e000UL /* namespaces, ptrace, io, pidfd... */
+#define CLONE_UNSUPPORTED 0x7e02a000UL /* namespaces, ptrace, io, pidfd... */
 
 static void setup_child_stack(struct task *t, struct regs *r) {
   *t->regs = *r;
