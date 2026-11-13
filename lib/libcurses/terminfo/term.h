@@ -30,9 +30,9 @@
 /*
  * Adapted for V86BSD from NetBSD lib/libterminfo/term.h (revision 1.26).
  * Changes: setupterm() takes char *, and restartterm() (X/Open Curses);
- * the names X/Open Curses gives seven capabilities (down_half_line,
- * enter_near_letter_quality, hue_lightness_saturation, lpi_changes_res,
- * prtr_non, prtr_off, prtr_on) beside NetBSD's.
+ * <stdbool.h> for bool; the names X/Open Curses gives seven capabilities
+ * (down_half_line, enter_near_letter_quality, hue_lightness_saturation,
+ * lpi_changes_res, prtr_non, prtr_off, prtr_on) beside NetBSD's.
  */
 
 #ifndef _TERM_H_
@@ -1956,6 +1956,7 @@ typedef struct {
 #endif
 
 #include <sys/cdefs.h>
+#include <stdbool.h>	/* bool, as X/Open Curses has <term.h> define it */
 
 __BEGIN_DECLS
 
