@@ -81,6 +81,8 @@ static long rd_string(void *oldp, size_t *oldlenp, void *newp, const char *s) {
   return rd_bytes(oldp, oldlenp, newp, s, strlen(s) + 1);
 }
 
+static long rw_int(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int *var, int min, int max);
+
 /* a string that can be set (the new one is newlen bytes without its NUL;
    maxlen counts the NUL).  A buffer that is too small gets the string cut
    short, as long as there is room for the NUL (an empty one is ENOMEM). */
@@ -171,6 +173,9 @@ static long kern_sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp
     struct clockinfo ci = {HZ, 1000000 / HZ, HZ, HZ};
     return rd_bytes(oldp, oldlenp, newp, &ci, sizeof ci);
   }
+  case KERN_PANIC_REBOOT_WAIT_TIME:
+    /* (-1: never; a day at most: the wait counts the time stamp counter) */
+    return rw_int(oldp, oldlenp, newp, newlen, &panic_reboot_wait_time, -1, 86400);
   case KERN_MAXPROC:
     return rd_int(oldp, oldlenp, newp, maxproc);
   case KERN_MAXFILES:

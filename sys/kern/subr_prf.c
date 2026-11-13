@@ -145,14 +145,82 @@ void printf(const char *fmt, ...) {
   irq_restore(f);
 }
 
+/* ---- panic ----
+   A panic says what failed and where (the process, a stack trace), tells the
+   host that runs the virtual machine (QEMU's pvpanic device), and then
+   restarts the system after kern.panic_reboot_wait_time seconds, or halts
+   if that is negative.  The disks are not synced: the state that failed may
+   be the buffers', and a file system that was not unmounted is what fsck -p
+   is for. */
+
+int panic_reboot_wait_time = 60; /* seconds; -1: halt and stay halted */
+
+extern char _kernel_end[];
+int kstack_order(void); /* kern/kern_sched.c */
+#define KTEXT_START 0xffffffff80100000UL
+
+/* the return addresses of the frames above this one (the kernel is compiled
+   with frame pointers), kept inside the kernel's stack and text: a fault in
+   here would be another panic.  The names: addr2line -e bsd.elf ADDRESS */
+static void panic_trace(void) {
+  uint64_t *fp = __builtin_frame_address(0);
+  uint64_t lo = (uint64_t)fp, hi;
+  if (current && current->kstack && lo >= (uint64_t)current->kstack &&
+      lo < (uint64_t)current->kstack + (PAGE_SIZE << kstack_order()))
+    hi = (uint64_t)current->kstack + (PAGE_SIZE << kstack_order());
+  else
+    hi = lo + 8192; /* (the boot stack, or a stack not known: a little way up) */
+  printf("stack trace (addr2line -e bsd.elf):\n");
+  for (int i = 0; i < 32; i++) {
+    if ((uint64_t)fp < lo || (uint64_t)fp + 16 > hi || ((uint64_t)fp & 7))
+      break;
+    uint64_t ra = fp[1];
+    if (ra < KTEXT_START || ra >= (uint64_t)_kernel_end)
+      break;
+    printf("  %016lx\n", ra);
+    uint64_t *next = (uint64_t *)fp[0];
+    if (next <= fp)
+      break;
+    lo = (uint64_t)next;
+    fp = next;
+  }
+}
+
 void panic(const char *fmt, ...) {
+  static bool panicking;
   char buf[512];
   cli();
+  bool again = panicking;
+  panicking = true;
   va_list ap;
   va_start(ap, fmt);
   vsnprintf(buf, sizeof(buf), fmt, ap);
   va_end(ap);
-  printf("\npanic: %s\nThe operating system has halted.\n", buf);
+  printf("\npanic: %s\n", buf);
+  if (again) {
+    printf("(a panic while panicking: no more is said)\n");
+  } else {
+    if (current && current->proc)
+      printf("cpu0 pid %d (%s), up %lu s\n", (int)current->proc->pid, current->proc->comm,
+             (unsigned long)(monotonic_ns() / 1000000000UL));
+    panic_trace();
+    outb(0x505, 1); /* QEMU's pvpanic: bit 0, the guest panicked (nothing there: nothing happens) */
+  }
+  int secs = panic_reboot_wait_time;
+  if (secs < 0) {
+    printf("The operating system has halted.\n");
+    for (;;)
+      hlt();
+  }
+  printf("Automatic reboot in %d seconds (kern.panic_reboot_wait_time; -1 halts)\n", secs);
+  uint64_t hz = tsc_frequency();
+  if (!hz)
+    hz = 1000000000UL; /* (not known yet: early in the boot) */
+  uint64_t end = rdtsc64() + (uint64_t)secs * hz;
+  while (rdtsc64() < end)
+    cpu_pause();
+  printf("rebooting...\n");
+  outb(0x64, 0xfe); /* keyboard controller reset */
   for (;;)
     hlt();
 }

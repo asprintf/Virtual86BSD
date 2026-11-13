@@ -64,6 +64,7 @@ extern char cpu_model[64]; /* the processor's brand string, set by cpu_attach */
 extern int maxproc, maxfiles, argmax; /* kern_proc.c, kern_descrip.c, kern_exec.c */
 void loadavg_init(void);
 NORETURN void panic(const char *fmt, ...);
+extern int panic_reboot_wait_time; /* kern.panic_reboot_wait_time */
 
 /* assertions, on with "option DIAGNOSTIC" (-DDIAGNOSTIC); KDASSERT is the
    expensive kind, on with "option DEBUG" */

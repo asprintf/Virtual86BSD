@@ -178,7 +178,8 @@ struct ctlname {
 #define KERN_VIDEO             89 /* struct */
 #define KERN_CLOCKINTR         90 /* node */
 #define KERN_AUTOCONF_SERIAL   91 /* int */
-#define KERN_MAXID             92
+#define KERN_PANIC_REBOOT_WAIT_TIME 92 /* int: seconds before a panic restarts the system (read, write); -1: never */
+#define KERN_MAXID             93
 
 #define CTL_KERN_NAMES { \
 	{ 0, 0 }, \
@@ -273,6 +274,7 @@ struct ctlname {
 	{ "video", CTLTYPE_STRUCT }, \
 	{ "clockintr", CTLTYPE_NODE }, \
 	{ "autoconf_serial", CTLTYPE_INT }, \
+	{ "panic_reboot_wait_time", CTLTYPE_INT }, \
 }
 
 /* kern.clockrate */
