@@ -72,7 +72,8 @@
 #
 #   stage 1  Those tools build everything: the C library (lib/libc/, with c17
 #            and make: libc.a, and libc.so, which is also the dynamic
-#            linker), then every utility against it (c17 among them),
+#            linker), libcurses (lib/libcurses/: libcurses.a), then every
+#            utility against them (c17 among them),
 #            installed into objdir/stage1/root/usr (all of them in usr/bin:
 #            the programs of these stages run on the host, linked statically,
 #            and find one another there).  From here on no program of the host
@@ -101,6 +102,9 @@
 #            as stage 1's).
 #
 #   init     /sbin/init, the first process, statically linked.
+#
+#   terminfo /usr/share/misc/terminfo.cdb, libcurses' terminal database,
+#            compiled from share/terminfo/terminfo by tic of stage 2.
 #
 #   kernel   config of stage 2 reads sys/arch/amd64/conf/GENERIC (the file
 #            named by -c) and writes the compile directory: Makefile, ioconf.c
@@ -286,6 +290,16 @@ stage() {
 		"$tools/make" CCNAME=c17 TARGET_ABI=$abi SYSCALL_H="$SRC/sys/sys/syscall.h" &&
 		"$tools/make" CCNAME=c17 TARGET_ABI=$abi SYSCALL_H="$SRC/sys/sys/syscall.h" PREFIX=/usr DESTDIR="$to" install
 	) >> "$log" 2>&1 || fail "stage $n: the C library"
+	say "stage $n: libcurses (X/Open Curses, terminfo, termcap)"
+	copy lib/libcurses "$S/lib/libcurses"
+	(
+		PATH=$tools:$PATH
+		C17_LIBDIR=$c17dir
+		C17_LIBC=$to/usr
+		export PATH C17_LIBDIR C17_LIBC
+		cd "$S/lib/libcurses" &&
+		"$tools/make" CC=c17 PREFIX=/usr DESTDIR="$to" install
+	) >> "$log" 2>&1 || fail "stage $n: libcurses"
 	say "stage $n: the utilities, with c17 on V86BSD's C library ($how)"
 	copy bin "$S/bin"
 	copy sbin "$S/sbin"
@@ -387,6 +401,15 @@ do_world() {
 		cd "$obj/stage3/sbin/init" &&
 		"$R2/usr/bin/make" C17="c17 -B static" DESTDIR="$W" install
 	) >> "$log" 2>&1 || fail "init"
+
+	# ------------------------------------------------------------ terminfo
+	# the terminal database of libcurses, compiled by tic of stage 2 (which
+	# runs here); its source beside it
+	say "terminfo: /usr/share/misc/terminfo.cdb, with tic of stage 2"
+	mkdir -p "$W/usr/share/misc" &&
+	cp "$SRC/share/terminfo/terminfo" "$W/usr/share/misc/terminfo" &&
+	"$R2/usr/bin/tic" -ax -o "$W/usr/share/misc/terminfo.cdb" "$W/usr/share/misc/terminfo" >> "$log" 2>&1 ||
+		fail "terminfo"
 
 	end=$(date +%s 2>/dev/null)
 	say "world: $W ($(ls "$W/bin" | wc -l | tr -d ' ') programs in /bin, $(ls "$W/sbin" | wc -l | tr -d ' ') in /sbin, $(ls "$W/usr/bin" | wc -l | tr -d ' ') in /usr/bin)${start:+, $(( (end - start) / 60 )) minutes}"
