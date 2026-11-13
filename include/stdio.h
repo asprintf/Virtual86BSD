@@ -150,6 +150,9 @@ int    renameat(int, const char *, int, const char *);
 int    vasprintf(char **__RESTRICT, const char *__RESTRICT, va_list);
 int    vdprintf(int, const char *__RESTRICT, va_list);
 #endif
+#if __EXT_VISIBLE
+int    fpurge(FILE *);
+#endif
 #if __XSI_OB
 /* SUSv2 to SUSv4 (obsolescent there); removed in POSIX.1-2024 */
 char  *tempnam(const char *, const char *);

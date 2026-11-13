@@ -419,6 +419,7 @@ OBJS = \
 	$(B)/obj/stdio/flockfile.o \
 	$(B)/obj/stdio/fmemopen.o \
 	$(B)/obj/stdio/fopen.o \
+	$(B)/obj/stdio/fpurge.o \
 	$(B)/obj/stdio/freopen.o \
 	$(B)/obj/stdio/getdelim.o \
 	$(B)/obj/stdio/intscan.o \
@@ -1442,6 +1443,10 @@ $(B)/obj/stdio/fmemopen.o: stdio/fmemopen.c $(HDRS)
 $(B)/obj/stdio/fopen.o: stdio/fopen.c $(HDRS)
 	mkdir -p $(B)/obj/stdio
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdio/fopen.c
+
+$(B)/obj/stdio/fpurge.o: stdio/fpurge.c $(HDRS)
+	mkdir -p $(B)/obj/stdio
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stdio/fpurge.c
 
 $(B)/obj/stdio/freopen.o: stdio/freopen.c $(HDRS)
 	mkdir -p $(B)/obj/stdio
