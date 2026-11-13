@@ -150,17 +150,17 @@ through two stages of its own, in a directory that ../chroot.sh enters
 | [xgettext](xgettext/) | extract gettext call strings from C-language source files | 891 | 33 |
 | [yacc](yacc/) | yet another compiler compiler (with liby.a) | 3693 | 20 |
 
-Beyond POSIX, one more program of this collection is a part of the
-system:
+Beyond POSIX, two more programs are a part of the system:
 
 | directory | program | lines | tests |
 |-----------|---------|------:|------:|
+| [tic](tic/) | the terminfo compiler of libcurses (X/Open Curses), NetBSD's (see ../share/doc/credits.md) | 776 | 17 |
 | [tl](tl/) | tl, the test language: a scripting language in the style of C, with POSIX and pseudo-terminals as its library | 6725 | 98 |
 
-It is the language the tests of the other utilities are written in where
+tl is the language the tests of the other utilities are written in where
 the shell is not enough (below), installed in `/usr/bin` so that tests
 like them can be written for anything else on the system; `man tl` and
-`tl/tl.md` describe it.  It is not counted in the totals below.
+`tl/tl.md` describe it.  Neither is counted in the totals below.
 
 Lines: C, yacc and lex sources, without generated files and tests; the
 sources in `lib/` (9254 lines) are counted once, in the total only
