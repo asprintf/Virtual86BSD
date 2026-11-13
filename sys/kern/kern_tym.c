@@ -124,7 +124,10 @@ static int tym_mmap(struct file *f, struct vma *v, uint64_t off, uint64_t len) {
         if (page_free(p, i))
           o->page[got++] = p->base + ((uint64_t)i << 12);
     if (got < n) {
-      shmobj_put(o); /* (no pages taken yet) */
+      /* (no page was taken yet: o->page holds only candidates, and
+         shmobj_put would page_put each of them) */
+      memset(o->page, 0, n * sizeof(uint64_t));
+      shmobj_put(o);
       kfree(m);
       return -ENOMEM;
     }
