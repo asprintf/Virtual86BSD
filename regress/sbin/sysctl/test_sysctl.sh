@@ -93,6 +93,8 @@ t "a bad option: status 1, nothing on stdout" "" 1 "$U" -x
 ok "a bad option: the usage line" sh -c '"$1" -x 2>&1 | grep "^usage: sysctl \[-Aanq\]" > /dev/null' sh "$U"
 ok "an error does not stop the other names" sh -c 'out=$("$1" kern.nosuch hw.machine 2>/dev/null); [ "$out" = "hw.machine=amd64" ]' sh "$U"
 
+ok "the panic wait is readable by anyone" sh -c 'v=$("$1" -n kern.panic_reboot_wait_time) && [ "$v" -ge -1 ] && [ "$v" -le 86400 ]' sh "$U"
+
 if $root; then
     old=$("$U" -n kern.hostname)
     te "set the host name" "kern.hostname: $old -> sysctl-test" 0 "$U" kern.hostname=sysctl-test
@@ -129,8 +131,19 @@ kern.hostname: from-file -> after-error" 1 "$U" -f "$T/conf2"
     t "errppslimit back" "net.inet.icmp.errppslimit: -1 -> 100" 0 "$U" net.inet.icmp.errppslimit=100
     t "rstppslimit" "net.inet.tcp.rstppslimit: 100 -> 400" 0 "$U" net.inet.tcp.rstppslimit=400
     t "rstppslimit back" "net.inet.tcp.rstppslimit: 400 -> 100" 0 "$U" net.inet.tcp.rstppslimit=100
+    # the wait before a panic restarts the system: -1 (halt) to a day
+    pw=$("$U" -n kern.panic_reboot_wait_time)
+    t "set the panic wait" "kern.panic_reboot_wait_time: $pw -> 5" 0 "$U" kern.panic_reboot_wait_time=5
+    t "it is set" "kern.panic_reboot_wait_time=5" 0 "$U" kern.panic_reboot_wait_time
+    t "-1: halt" "kern.panic_reboot_wait_time: 5 -> -1" 0 "$U" kern.panic_reboot_wait_time=-1
+    t "a day" "kern.panic_reboot_wait_time: -1 -> 86400" 0 "$U" kern.panic_reboot_wait_time=86400
+    te "under -1" "sysctl: kern.panic_reboot_wait_time: Invalid argument" 1 "$U" kern.panic_reboot_wait_time=-2
+    te "over a day" "sysctl: kern.panic_reboot_wait_time: Invalid argument" 1 "$U" kern.panic_reboot_wait_time=86401
+    t "and nothing changed" "86400" 0 "$U" -n kern.panic_reboot_wait_time
+    t "back" "kern.panic_reboot_wait_time: 86400 -> $pw" 0 "$U" kern.panic_reboot_wait_time=$pw
 else
     te "not root: set is refused" "sysctl: kern.hostname: Operation not permitted" 1 "$U" kern.hostname=evil
     te "not root: nor a network knob" "sysctl: net.inet.icmp.bmcastecho: Operation not permitted" 1 "$U" net.inet.icmp.bmcastecho=1
+    te "not root: nor the panic wait" "sysctl: kern.panic_reboot_wait_time: Operation not permitted" 1 "$U" kern.panic_reboot_wait_time=5
 fi
 done_tests sysctl
