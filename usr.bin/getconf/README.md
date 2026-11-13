@@ -22,6 +22,11 @@ C with no dependencies beyond libc.
   (fixed by the standard), the earlier POSIX2_ names, and the path variables
   of pathconf().
 * A name the system's headers do not have is valid and "undefined".
+* The names of SUSv2 to SUSv4 that POSIX.1-2024 removed: `_XBS5_*` and
+  `XBS5_*` (with `-v XBS5_*`), `_POSIX_V6_*`, `POSIX_V6_*`, `V6_ENV` (with
+  `-v POSIX_V6_*`), `_POSIX2_PBS*`, `_POSIX_TRACE*`, `_XOPEN_STREAMS`,
+  `_XOPEN_LEGACY`, `_XOPEN_XCU_VERSION`, `_POSIX2_C_VERSION`,
+  `_POSIX2_FORT_DEV` (also `POSIX2_FORT_DEV`) and `PASS_MAX`.
 
 ## Choices where the standard leaves room
 

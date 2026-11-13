@@ -36,7 +36,7 @@ sed -n "/^static const struct var sysvars/,/^};/s/^    { \"\([A-Z0-9_]*\)\".*/sy
 /^static const struct var strvars/,/^};/s/^    { \"\([A-Z0-9_]*\)\".*/str \1/p
 /^static const struct var pathvars/,/^};/s/^    { \"\([A-Z0-9_]*\)\".*/path \1/p" "$src" | sort -u | awk '
 BEGIN {
-    print "#define _XOPEN_SOURCE 800"
+    print "#define _DEFAULT_SOURCE"
     print "#include <errno.h>"
     print "#include <stdio.h>"
     print "#include <stdlib.h>"
@@ -120,6 +120,26 @@ t "one of the V8 environments is supported" "yes" 0 sh -c 'for e in ILP32_OFF32 
 t "-v with a supported environment" "$("$U" PAGESIZE)" 0 sh -c 'for e in ILP32_OFF32 ILP32_OFFBIG LP64_OFF64 LPBIG_OFFBIG; do v=$("$1" _POSIX_V8_$e); case $v in -1|undefined) ;; *) exec "$1" -v POSIX_V8_$e PAGESIZE;; esac; done' sh "$U"
 t "-v with a specification that is none" "" 1 "$U" -v POSIX_V8_NONE PAGESIZE
 t "-v with an empty specification" "" 1 "$U" -v "" PAGESIZE
+# the names of SUSv2 to SUSv4
+t "_XBS5_LP64_OFF64" "1" 0 "$U" _XBS5_LP64_OFF64
+t "_XBS5_ILP32_OFF32: not supported" "undefined" 0 "$U" _XBS5_ILP32_OFF32
+t "XBS5_LP64_OFF64_CFLAGS: nothing to add" "" 0 "$U" XBS5_LP64_OFF64_CFLAGS
+t "-v XBS5_LP64_OFF64" "$("$U" PAGESIZE)" 0 "$U" -v XBS5_LP64_OFF64 PAGESIZE
+t "-v XBS5_ILP32_OFF32: not this environment" "" 1 "$U" -v XBS5_ILP32_OFF32 PAGESIZE
+t "_POSIX_V6_LP64_OFF64" "1" 0 "$U" _POSIX_V6_LP64_OFF64
+t "_POSIX_V6_ILP32_OFFBIG: not supported" "undefined" 0 "$U" _POSIX_V6_ILP32_OFFBIG
+t "POSIX_V6_WIDTH_RESTRICTED_ENVS" "POSIX_V6_LP64_OFF64${nl}POSIX_V6_LPBIG_OFFBIG" 0 "$U" POSIX_V6_WIDTH_RESTRICTED_ENVS
+t "V6_ENV" "" 0 "$U" V6_ENV
+t "-v POSIX_V6_LPBIG_OFFBIG" "$("$U" PAGESIZE)" 0 "$U" -v POSIX_V6_LPBIG_OFFBIG PAGESIZE
+t "_POSIX2_C_VERSION" "199209" 0 "$U" _POSIX2_C_VERSION
+t "_XOPEN_XCU_VERSION" "5" 0 "$U" _XOPEN_XCU_VERSION
+t "_XOPEN_LEGACY" "1" 0 "$U" _XOPEN_LEGACY
+t "PASS_MAX" "128" 0 "$U" PASS_MAX
+t "POSIX2_FORT_DEV is _POSIX2_FORT_DEV" "undefined" 0 "$U" POSIX2_FORT_DEV
+t "_POSIX2_PBS: not supported" "undefined" 0 "$U" _POSIX2_PBS
+t "_POSIX_TRACE: not supported" "undefined" 0 "$U" _POSIX_TRACE
+t "_POSIX_TRACE_SYS_MAX: no trace" "undefined" 0 "$U" _POSIX_TRACE_SYS_MAX
+t "_XOPEN_STREAMS: not supported" "undefined" 0 "$U" _XOPEN_STREAMS
 # errors: nothing on the standard output
 t "an unknown variable" "" 1 "$U" NO_SUCH_VARIABLE
 t "an unknown variable: a diagnostic" "" 0 sh -c '"$1" NO_SUCH_VARIABLE 2>&1 | grep -q .' sh "$U"

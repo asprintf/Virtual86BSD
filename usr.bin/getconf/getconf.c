@@ -42,6 +42,7 @@
  * The earlier names POSIX2_C_BIND ... POSIX2_VERSION and POSIX2_BC_BASE_MAX
  * ... POSIX2_RE_DUP_MAX are those with a leading underscore.  The values
  * are written with "%ld\n" (strings with "%s\n"), or "undefined\n".
+ * The names of SUSv2 to SUSv4 that POSIX.1-2024 removed are kept.
  *
  * Choices where the standard leaves room:
  *  - A variable whose function returns -1 without setting errno or with
@@ -53,16 +54,15 @@
  *    for has the value of the V7 one: the environments are the same.
  *  - -v takes the names of the compilation environments of c17,
  *    POSIX_V8_ILP32_OFF32, POSIX_V8_ILP32_OFFBIG, POSIX_V8_LP64_OFF64 and
- *    POSIX_V8_LPBIG_OFFBIG (and those of V7).  The values are those of the
- *    environment getconf was compiled in; for another one it cannot
- *    determine them, and that is an error (status 1).
+ *    POSIX_V8_LPBIG_OFFBIG (and those of V7, V6 and XBS5).  The values
+ *    are those of the environment getconf was compiled in; for another
+ *    one it cannot determine them, and that is an error (status 1).
  *  - A system_var with a pathname, a path_var without one, and an unknown
  *    name are errors (status 1, nothing written); usage errors have
  *    status 2.
  */
 
-#define _POSIX_C_SOURCE 202405L
-#define _XOPEN_SOURCE 800
+#define _DEFAULT_SOURCE         /* the names of SUSv2 to SUSv4 too */
 
 #include <errno.h>
 #include <limits.h>
@@ -633,6 +633,147 @@ static const struct var sysvars[] = {
 #else
     { "_XOPEN_VERSION", NONE },
 #endif
+    /* of SUSv2 to SUSv4 */
+#ifdef _SC_2_C_VERSION
+    { "_POSIX2_C_VERSION", _SC_2_C_VERSION },
+#else
+    { "_POSIX2_C_VERSION", NONE },
+#endif
+#ifdef _SC_2_FORT_DEV
+    { "_POSIX2_FORT_DEV", _SC_2_FORT_DEV },
+#else
+    { "_POSIX2_FORT_DEV", NONE },
+#endif
+#ifdef _SC_PASS_MAX
+    { "PASS_MAX", _SC_PASS_MAX },
+#else
+    { "PASS_MAX", NONE },
+#endif
+#ifdef _SC_XOPEN_XCU_VERSION
+    { "_XOPEN_XCU_VERSION", _SC_XOPEN_XCU_VERSION },
+#else
+    { "_XOPEN_XCU_VERSION", NONE },
+#endif
+#ifdef _SC_XOPEN_LEGACY
+    { "_XOPEN_LEGACY", _SC_XOPEN_LEGACY },
+#else
+    { "_XOPEN_LEGACY", NONE },
+#endif
+#ifdef _SC_XBS5_ILP32_OFF32
+    { "_XBS5_ILP32_OFF32", _SC_XBS5_ILP32_OFF32 },
+#else
+    { "_XBS5_ILP32_OFF32", NONE },
+#endif
+#ifdef _SC_XBS5_ILP32_OFFBIG
+    { "_XBS5_ILP32_OFFBIG", _SC_XBS5_ILP32_OFFBIG },
+#else
+    { "_XBS5_ILP32_OFFBIG", NONE },
+#endif
+#ifdef _SC_XBS5_LP64_OFF64
+    { "_XBS5_LP64_OFF64", _SC_XBS5_LP64_OFF64 },
+#else
+    { "_XBS5_LP64_OFF64", NONE },
+#endif
+#ifdef _SC_XBS5_LPBIG_OFFBIG
+    { "_XBS5_LPBIG_OFFBIG", _SC_XBS5_LPBIG_OFFBIG },
+#else
+    { "_XBS5_LPBIG_OFFBIG", NONE },
+#endif
+#ifdef _SC_V6_ILP32_OFF32
+    { "_POSIX_V6_ILP32_OFF32", _SC_V6_ILP32_OFF32 },
+#else
+    { "_POSIX_V6_ILP32_OFF32", NONE },
+#endif
+#ifdef _SC_V6_ILP32_OFFBIG
+    { "_POSIX_V6_ILP32_OFFBIG", _SC_V6_ILP32_OFFBIG },
+#else
+    { "_POSIX_V6_ILP32_OFFBIG", NONE },
+#endif
+#ifdef _SC_V6_LP64_OFF64
+    { "_POSIX_V6_LP64_OFF64", _SC_V6_LP64_OFF64 },
+#else
+    { "_POSIX_V6_LP64_OFF64", NONE },
+#endif
+#ifdef _SC_V6_LPBIG_OFFBIG
+    { "_POSIX_V6_LPBIG_OFFBIG", _SC_V6_LPBIG_OFFBIG },
+#else
+    { "_POSIX_V6_LPBIG_OFFBIG", NONE },
+#endif
+#ifdef _SC_2_PBS
+    { "_POSIX2_PBS", _SC_2_PBS },
+#else
+    { "_POSIX2_PBS", NONE },
+#endif
+#ifdef _SC_2_PBS_ACCOUNTING
+    { "_POSIX2_PBS_ACCOUNTING", _SC_2_PBS_ACCOUNTING },
+#else
+    { "_POSIX2_PBS_ACCOUNTING", NONE },
+#endif
+#ifdef _SC_2_PBS_CHECKPOINT
+    { "_POSIX2_PBS_CHECKPOINT", _SC_2_PBS_CHECKPOINT },
+#else
+    { "_POSIX2_PBS_CHECKPOINT", NONE },
+#endif
+#ifdef _SC_2_PBS_LOCATE
+    { "_POSIX2_PBS_LOCATE", _SC_2_PBS_LOCATE },
+#else
+    { "_POSIX2_PBS_LOCATE", NONE },
+#endif
+#ifdef _SC_2_PBS_MESSAGE
+    { "_POSIX2_PBS_MESSAGE", _SC_2_PBS_MESSAGE },
+#else
+    { "_POSIX2_PBS_MESSAGE", NONE },
+#endif
+#ifdef _SC_2_PBS_TRACK
+    { "_POSIX2_PBS_TRACK", _SC_2_PBS_TRACK },
+#else
+    { "_POSIX2_PBS_TRACK", NONE },
+#endif
+#ifdef _SC_TRACE
+    { "_POSIX_TRACE", _SC_TRACE },
+#else
+    { "_POSIX_TRACE", NONE },
+#endif
+#ifdef _SC_TRACE_EVENT_FILTER
+    { "_POSIX_TRACE_EVENT_FILTER", _SC_TRACE_EVENT_FILTER },
+#else
+    { "_POSIX_TRACE_EVENT_FILTER", NONE },
+#endif
+#ifdef _SC_TRACE_EVENT_NAME_MAX
+    { "_POSIX_TRACE_EVENT_NAME_MAX", _SC_TRACE_EVENT_NAME_MAX },
+#else
+    { "_POSIX_TRACE_EVENT_NAME_MAX", NONE },
+#endif
+#ifdef _SC_TRACE_INHERIT
+    { "_POSIX_TRACE_INHERIT", _SC_TRACE_INHERIT },
+#else
+    { "_POSIX_TRACE_INHERIT", NONE },
+#endif
+#ifdef _SC_TRACE_LOG
+    { "_POSIX_TRACE_LOG", _SC_TRACE_LOG },
+#else
+    { "_POSIX_TRACE_LOG", NONE },
+#endif
+#ifdef _SC_TRACE_NAME_MAX
+    { "_POSIX_TRACE_NAME_MAX", _SC_TRACE_NAME_MAX },
+#else
+    { "_POSIX_TRACE_NAME_MAX", NONE },
+#endif
+#ifdef _SC_TRACE_SYS_MAX
+    { "_POSIX_TRACE_SYS_MAX", _SC_TRACE_SYS_MAX },
+#else
+    { "_POSIX_TRACE_SYS_MAX", NONE },
+#endif
+#ifdef _SC_TRACE_USER_EVENT_MAX
+    { "_POSIX_TRACE_USER_EVENT_MAX", _SC_TRACE_USER_EVENT_MAX },
+#else
+    { "_POSIX_TRACE_USER_EVENT_MAX", NONE },
+#endif
+#ifdef _SC_XOPEN_STREAMS
+    { "_XOPEN_STREAMS", _SC_XOPEN_STREAMS },
+#else
+    { "_XOPEN_STREAMS", NONE },
+#endif
 };
 
 /* the path variables: pathconf() */
@@ -921,6 +1062,157 @@ static const struct var strvars[] = {
 #else
     { "V8_ENV", NONE },
 #endif
+    /* of SUSv2 to SUSv4 */
+#ifdef _CS_XBS5_ILP32_OFF32_CFLAGS
+    { "XBS5_ILP32_OFF32_CFLAGS", _CS_XBS5_ILP32_OFF32_CFLAGS },
+#else
+    { "XBS5_ILP32_OFF32_CFLAGS", NONE },
+#endif
+#ifdef _CS_XBS5_ILP32_OFF32_LDFLAGS
+    { "XBS5_ILP32_OFF32_LDFLAGS", _CS_XBS5_ILP32_OFF32_LDFLAGS },
+#else
+    { "XBS5_ILP32_OFF32_LDFLAGS", NONE },
+#endif
+#ifdef _CS_XBS5_ILP32_OFF32_LIBS
+    { "XBS5_ILP32_OFF32_LIBS", _CS_XBS5_ILP32_OFF32_LIBS },
+#else
+    { "XBS5_ILP32_OFF32_LIBS", NONE },
+#endif
+#ifdef _CS_XBS5_ILP32_OFF32_LINTFLAGS
+    { "XBS5_ILP32_OFF32_LINTFLAGS", _CS_XBS5_ILP32_OFF32_LINTFLAGS },
+#else
+    { "XBS5_ILP32_OFF32_LINTFLAGS", NONE },
+#endif
+#ifdef _CS_XBS5_ILP32_OFFBIG_CFLAGS
+    { "XBS5_ILP32_OFFBIG_CFLAGS", _CS_XBS5_ILP32_OFFBIG_CFLAGS },
+#else
+    { "XBS5_ILP32_OFFBIG_CFLAGS", NONE },
+#endif
+#ifdef _CS_XBS5_ILP32_OFFBIG_LDFLAGS
+    { "XBS5_ILP32_OFFBIG_LDFLAGS", _CS_XBS5_ILP32_OFFBIG_LDFLAGS },
+#else
+    { "XBS5_ILP32_OFFBIG_LDFLAGS", NONE },
+#endif
+#ifdef _CS_XBS5_ILP32_OFFBIG_LIBS
+    { "XBS5_ILP32_OFFBIG_LIBS", _CS_XBS5_ILP32_OFFBIG_LIBS },
+#else
+    { "XBS5_ILP32_OFFBIG_LIBS", NONE },
+#endif
+#ifdef _CS_XBS5_ILP32_OFFBIG_LINTFLAGS
+    { "XBS5_ILP32_OFFBIG_LINTFLAGS", _CS_XBS5_ILP32_OFFBIG_LINTFLAGS },
+#else
+    { "XBS5_ILP32_OFFBIG_LINTFLAGS", NONE },
+#endif
+#ifdef _CS_XBS5_LP64_OFF64_CFLAGS
+    { "XBS5_LP64_OFF64_CFLAGS", _CS_XBS5_LP64_OFF64_CFLAGS },
+#else
+    { "XBS5_LP64_OFF64_CFLAGS", NONE },
+#endif
+#ifdef _CS_XBS5_LP64_OFF64_LDFLAGS
+    { "XBS5_LP64_OFF64_LDFLAGS", _CS_XBS5_LP64_OFF64_LDFLAGS },
+#else
+    { "XBS5_LP64_OFF64_LDFLAGS", NONE },
+#endif
+#ifdef _CS_XBS5_LP64_OFF64_LIBS
+    { "XBS5_LP64_OFF64_LIBS", _CS_XBS5_LP64_OFF64_LIBS },
+#else
+    { "XBS5_LP64_OFF64_LIBS", NONE },
+#endif
+#ifdef _CS_XBS5_LP64_OFF64_LINTFLAGS
+    { "XBS5_LP64_OFF64_LINTFLAGS", _CS_XBS5_LP64_OFF64_LINTFLAGS },
+#else
+    { "XBS5_LP64_OFF64_LINTFLAGS", NONE },
+#endif
+#ifdef _CS_XBS5_LPBIG_OFFBIG_CFLAGS
+    { "XBS5_LPBIG_OFFBIG_CFLAGS", _CS_XBS5_LPBIG_OFFBIG_CFLAGS },
+#else
+    { "XBS5_LPBIG_OFFBIG_CFLAGS", NONE },
+#endif
+#ifdef _CS_XBS5_LPBIG_OFFBIG_LDFLAGS
+    { "XBS5_LPBIG_OFFBIG_LDFLAGS", _CS_XBS5_LPBIG_OFFBIG_LDFLAGS },
+#else
+    { "XBS5_LPBIG_OFFBIG_LDFLAGS", NONE },
+#endif
+#ifdef _CS_XBS5_LPBIG_OFFBIG_LIBS
+    { "XBS5_LPBIG_OFFBIG_LIBS", _CS_XBS5_LPBIG_OFFBIG_LIBS },
+#else
+    { "XBS5_LPBIG_OFFBIG_LIBS", NONE },
+#endif
+#ifdef _CS_XBS5_LPBIG_OFFBIG_LINTFLAGS
+    { "XBS5_LPBIG_OFFBIG_LINTFLAGS", _CS_XBS5_LPBIG_OFFBIG_LINTFLAGS },
+#else
+    { "XBS5_LPBIG_OFFBIG_LINTFLAGS", NONE },
+#endif
+#ifdef _CS_POSIX_V6_ILP32_OFF32_CFLAGS
+    { "POSIX_V6_ILP32_OFF32_CFLAGS", _CS_POSIX_V6_ILP32_OFF32_CFLAGS },
+#else
+    { "POSIX_V6_ILP32_OFF32_CFLAGS", NONE },
+#endif
+#ifdef _CS_POSIX_V6_ILP32_OFF32_LDFLAGS
+    { "POSIX_V6_ILP32_OFF32_LDFLAGS", _CS_POSIX_V6_ILP32_OFF32_LDFLAGS },
+#else
+    { "POSIX_V6_ILP32_OFF32_LDFLAGS", NONE },
+#endif
+#ifdef _CS_POSIX_V6_ILP32_OFF32_LIBS
+    { "POSIX_V6_ILP32_OFF32_LIBS", _CS_POSIX_V6_ILP32_OFF32_LIBS },
+#else
+    { "POSIX_V6_ILP32_OFF32_LIBS", NONE },
+#endif
+#ifdef _CS_POSIX_V6_ILP32_OFFBIG_CFLAGS
+    { "POSIX_V6_ILP32_OFFBIG_CFLAGS", _CS_POSIX_V6_ILP32_OFFBIG_CFLAGS },
+#else
+    { "POSIX_V6_ILP32_OFFBIG_CFLAGS", NONE },
+#endif
+#ifdef _CS_POSIX_V6_ILP32_OFFBIG_LDFLAGS
+    { "POSIX_V6_ILP32_OFFBIG_LDFLAGS", _CS_POSIX_V6_ILP32_OFFBIG_LDFLAGS },
+#else
+    { "POSIX_V6_ILP32_OFFBIG_LDFLAGS", NONE },
+#endif
+#ifdef _CS_POSIX_V6_ILP32_OFFBIG_LIBS
+    { "POSIX_V6_ILP32_OFFBIG_LIBS", _CS_POSIX_V6_ILP32_OFFBIG_LIBS },
+#else
+    { "POSIX_V6_ILP32_OFFBIG_LIBS", NONE },
+#endif
+#ifdef _CS_POSIX_V6_LP64_OFF64_CFLAGS
+    { "POSIX_V6_LP64_OFF64_CFLAGS", _CS_POSIX_V6_LP64_OFF64_CFLAGS },
+#else
+    { "POSIX_V6_LP64_OFF64_CFLAGS", NONE },
+#endif
+#ifdef _CS_POSIX_V6_LP64_OFF64_LDFLAGS
+    { "POSIX_V6_LP64_OFF64_LDFLAGS", _CS_POSIX_V6_LP64_OFF64_LDFLAGS },
+#else
+    { "POSIX_V6_LP64_OFF64_LDFLAGS", NONE },
+#endif
+#ifdef _CS_POSIX_V6_LP64_OFF64_LIBS
+    { "POSIX_V6_LP64_OFF64_LIBS", _CS_POSIX_V6_LP64_OFF64_LIBS },
+#else
+    { "POSIX_V6_LP64_OFF64_LIBS", NONE },
+#endif
+#ifdef _CS_POSIX_V6_LPBIG_OFFBIG_CFLAGS
+    { "POSIX_V6_LPBIG_OFFBIG_CFLAGS", _CS_POSIX_V6_LPBIG_OFFBIG_CFLAGS },
+#else
+    { "POSIX_V6_LPBIG_OFFBIG_CFLAGS", NONE },
+#endif
+#ifdef _CS_POSIX_V6_LPBIG_OFFBIG_LDFLAGS
+    { "POSIX_V6_LPBIG_OFFBIG_LDFLAGS", _CS_POSIX_V6_LPBIG_OFFBIG_LDFLAGS },
+#else
+    { "POSIX_V6_LPBIG_OFFBIG_LDFLAGS", NONE },
+#endif
+#ifdef _CS_POSIX_V6_LPBIG_OFFBIG_LIBS
+    { "POSIX_V6_LPBIG_OFFBIG_LIBS", _CS_POSIX_V6_LPBIG_OFFBIG_LIBS },
+#else
+    { "POSIX_V6_LPBIG_OFFBIG_LIBS", NONE },
+#endif
+#ifdef _CS_POSIX_V6_WIDTH_RESTRICTED_ENVS
+    { "POSIX_V6_WIDTH_RESTRICTED_ENVS", _CS_POSIX_V6_WIDTH_RESTRICTED_ENVS },
+#else
+    { "POSIX_V6_WIDTH_RESTRICTED_ENVS", NONE },
+#endif
+#ifdef _CS_V6_ENV
+    { "V6_ENV", _CS_V6_ENV },
+#else
+    { "V6_ENV", NONE },
+#endif
 };
 
 /* the maximum and minimum values of <limits.h>, which the standard fixes */
@@ -985,7 +1277,7 @@ static const struct var *find(const struct var *t, size_t n, const char *name)
 
 /* the earlier names, which are those with an underscore before them */
 static const char *const compat[] = {
-    "POSIX2_C_BIND", "POSIX2_C_DEV", "POSIX2_CHAR_TERM", "POSIX2_FORT_RUN",
+    "POSIX2_C_BIND", "POSIX2_C_DEV", "POSIX2_CHAR_TERM", "POSIX2_FORT_DEV", "POSIX2_FORT_RUN",
     "POSIX2_LOCALEDEF", "POSIX2_SW_DEV", "POSIX2_UPE", "POSIX2_VERSION",
     "POSIX2_BC_BASE_MAX", "POSIX2_BC_DIM_MAX", "POSIX2_BC_SCALE_MAX",
     "POSIX2_BC_STRING_MAX", "POSIX2_COLL_WEIGHTS_MAX", "POSIX2_EXPR_NEST_MAX",
@@ -996,8 +1288,11 @@ static const char *const compat[] = {
 static int check_spec(const char *spec)
 {
     const char *e;
-    if (strncmp(spec, "POSIX_V8_", 9) == 0 || strncmp(spec, "POSIX_V7_", 9) == 0)
+    if (strncmp(spec, "POSIX_V8_", 9) == 0 || strncmp(spec, "POSIX_V7_", 9) == 0 ||
+        strncmp(spec, "POSIX_V6_", 9) == 0)
         e = spec + 9;
+    else if (strncmp(spec, "XBS5_", 5) == 0)
+        e = spec + 5;
     else
         return -1;
     int lbits = (int)(sizeof(long) * CHAR_BIT), pbits = (int)(sizeof(void *) * CHAR_BIT);
