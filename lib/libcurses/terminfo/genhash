@@ -1,0 +1,114 @@
+#!/bin/sh
+# $NetBSD: genhash,v 1.9 2017/01/11 20:53:52 roy Exp $
+
+# Copyright (c) 2009, 2011 The NetBSD Foundation, Inc.
+#
+# This code is derived from software contributed to The NetBSD Foundation
+# by Roy Marples.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions
+# are met:
+# 1. Redistributions of source code must retain the above copyright
+#    notice, this list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright
+#    notice, this list of conditions and the following disclaimer in the
+#    documentation and/or other materials provided with the distribution.
+#
+# THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+# IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+# OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+# IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
+# INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+# NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+# DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+# THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+# Adapted for V86BSD from NetBSD lib/libterminfo/genhash (revision 1.9).
+# Changes: a binary search over an index sorted by name instead of the
+# perfect hash of nbperf(1), which V86BSD does not have.
+
+# Generate string tables for our terminfo strings in term.h, and a sorted
+# index of them for the lookups.
+
+set -e
+: ${TOOL_AWK:=awk}
+: ${TOOL_SED:=sed}
+: ${TOOL_SORT:=sort}
+
+TERMH=${1:-term.h}
+
+genent()
+{
+	name=$1 NAME=$2
+
+	# Calculate the maximum word length plus terminator
+	len=$($TOOL_SED -e "1,/enum TI${NAME}/d" -e '/};/,$d' \
+            -e 's/.*TICODE_\([^,]*\).*/\1X/' $TERMH | \
+	    $TOOL_AWK \
+	    'BEGIN {L=0} {if (length($1)>L) L=length($1)} END {print L}')
+
+	echo
+	echo "static const char _ti_${name}ids[][${len}] = {"
+	$TOOL_SED -e "1,/enum TI${NAME}/d" -e '/};/,$d' \
+            -e 's/.*TICODE_\([^,]*\).*/	"\1",/' $TERMH
+	echo "};"
+	echo
+	echo "static const unsigned short _ti_${name}sorted[] = {"
+	$TOOL_SED -e "1,/enum TI${NAME}/d" -e '/};/,$d' \
+	    -e 's/.*TICODE_\([^,]*\).*/\1/' $TERMH | \
+	    $TOOL_AWK '{ print $1, NR - 1 }' | LC_ALL=C $TOOL_SORT -k 1,1 | \
+	    $TOOL_AWK '{ print "\t" $2 "," }'
+	echo "};"
+
+	cat <<EOF2
+
+const char *
+_ti_${name}id(ssize_t idx)
+{
+
+	if ((size_t)idx >= __arraycount(_ti_${name}ids))
+		return NULL;
+	return _ti_${name}ids[idx];
+}
+
+ssize_t
+_ti_${name}index(const char *key)
+{
+	size_t lo, hi, mid;
+	int c;
+
+	lo = 0;
+	hi = __arraycount(_ti_${name}sorted);
+	while (lo < hi) {
+		mid = lo + (hi - lo) / 2;
+		c = strcmp(key, _ti_${name}ids[_ti_${name}sorted[mid]]);
+		if (c == 0)
+			return _ti_${name}sorted[mid];
+		if (c < 0)
+			hi = mid;
+		else
+			lo = mid + 1;
+	}
+	return -1;
+}
+EOF2
+}
+
+cat <<EOF2
+/* DO NOT EDIT
+ * Automatically generated from term.h */
+
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <term_private.h>
+#include <term.h>
+EOF2
+
+genent flag FLAG
+genent num NUM
+genent str STR
