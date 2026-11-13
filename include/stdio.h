@@ -64,6 +64,12 @@ typedef union { char __opaque[16]; long long __align; } fpos_t;
 #if __POSIX_VISIBLE
 #define L_ctermid 20
 #endif
+#if __XSI_OB5
+#define L_cuserid 256           /* LOGIN_NAME_MAX: SUSv2 (LEGACY) */
+#endif
+#if __XSI_OB
+#define P_tmpdir "/tmp"         /* SUSv2 to SUSv4 */
+#endif
 
 extern FILE *const stdin;
 extern FILE *const stdout;
@@ -143,6 +149,19 @@ int    putchar_unlocked(int);
 int    renameat(int, const char *, int, const char *);
 int    vasprintf(char **__RESTRICT, const char *__RESTRICT, va_list);
 int    vdprintf(int, const char *__RESTRICT, va_list);
+#endif
+#if __XSI_OB
+/* SUSv2 to SUSv4 (obsolescent there); removed in POSIX.1-2024 */
+char  *tempnam(const char *, const char *);
+#endif
+#if __XSI_OB5
+/* SUSv2 (LEGACY) */
+char  *cuserid(char *);
+int    getopt(int, char *const [], const char *);
+extern char *optarg;
+extern int opterr, optind, optopt;
+int    getw(FILE *);
+int    putw(int, FILE *);
 #endif
 __END_DECLS
 #endif

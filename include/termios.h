@@ -86,8 +86,14 @@ struct termios {
 #define IXOFF   0010000
 #define IMAXBEL 0020000
 #define IUTF8   0040000
+#if __XSI_OB5
+#define IUCLC   0001000         /* SUSv2 (LEGACY): upper to lower case */
+#endif
 
 #define OPOST  0000001
+#if __XSI_OB5
+#define OLCUC  0000002          /* SUSv2 (LEGACY): lower to upper case */
+#endif
 #if __XSI_VISIBLE
 #define ONLCR  0000004
 #define OCRNL  0000010
@@ -166,6 +172,9 @@ struct termios {
 #define ECHOKE  0004000
 #endif
 #define IEXTEN  0100000
+#if __XSI_OB5
+#define XCASE   0000004         /* SUSv2 (LEGACY): canonical upper/lower case */
+#endif
 
 #define TCSANOW   0
 #define TCSADRAIN 1

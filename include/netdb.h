@@ -114,6 +114,17 @@ struct addrinfo {
 #define EAI_ADDRFAMILY -9
 #endif
 
+/* SUSv2 (XNS) and POSIX.1-2001; removed in POSIX.1-2008 */
+#if __POSIX_RANGE(200112L, 200809L) || __XSI_OB6
+#define __NETDB_HOSTBY 1
+#define HOST_NOT_FOUND 1
+#define TRY_AGAIN      2
+#define NO_RECOVERY    3
+#define NO_DATA        4
+#else
+#define __NETDB_HOSTBY 0
+#endif
+
 __BEGIN_DECLS
 void endhostent(void);
 void endnetent(void);
@@ -124,6 +135,11 @@ const char *gai_strerror(int);
 int getaddrinfo(const char *__RESTRICT, const char *__RESTRICT, const struct addrinfo *__RESTRICT,
                 struct addrinfo **__RESTRICT);
 struct hostent *gethostent(void);
+#if __NETDB_HOSTBY
+extern int h_errno;
+struct hostent *gethostbyaddr(const void *, socklen_t, int);
+struct hostent *gethostbyname(const char *);
+#endif
 int getnameinfo(const struct sockaddr *__RESTRICT, socklen_t, char *__RESTRICT, socklen_t,
                 char *__RESTRICT, socklen_t, int);
 struct netent *getnetbyaddr(uint32_t, int);

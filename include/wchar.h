@@ -42,6 +42,9 @@
 #define __NEED_va_list
 #define __NEED_locale_t
 #endif
+#if __XSI_OB
+#define __NEED_wctype_t
+#endif
 #include <bits/alltypes.h>
 
 #define WCHAR_MIN (-1 - 0x7fffffff)
@@ -131,6 +134,28 @@ size_t   wcsxfrm_l(wchar_t *__RESTRICT, const wchar_t *__RESTRICT, size_t, local
 #if __XSI_VISIBLE
 int      wcswidth(const wchar_t *, size_t);
 int      wcwidth(wchar_t);
+#endif
+#if __XSI_OB
+/* SUSv2 to SUSv4 */
+int      iswalnum(wint_t);
+int      iswalpha(wint_t);
+int      iswcntrl(wint_t);
+int      iswctype(wint_t, wctype_t);
+int      iswdigit(wint_t);
+int      iswgraph(wint_t);
+int      iswlower(wint_t);
+int      iswprint(wint_t);
+int      iswpunct(wint_t);
+int      iswspace(wint_t);
+int      iswupper(wint_t);
+int      iswxdigit(wint_t);
+wint_t   towlower(wint_t);
+wint_t   towupper(wint_t);
+wctype_t wctype(const char *);
+#endif
+#if __XSI_OB6
+/* SUSv2, SUSv3 (LEGACY there); removed in POSIX.1-2008 */
+wchar_t *wcswcs(const wchar_t *, const wchar_t *);
 #endif
 __END_DECLS
 #endif

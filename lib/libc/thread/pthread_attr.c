@@ -82,6 +82,19 @@ int pthread_attr_getstack(const pthread_attr_t *__RESTRICT a, void **__RESTRICT 
 	return 0;
 }
 
+/* SUSv2, SUSv3; stackaddr is the lowest address, as in FreeBSD and NetBSD */
+int pthread_attr_getstackaddr(const pthread_attr_t *__RESTRICT a, void **__RESTRICT addr)
+{
+	*addr = (void *)a->_a_stackaddr;
+	return 0;
+}
+
+int pthread_attr_setstackaddr(pthread_attr_t *a, void *addr)
+{
+	a->_a_stackaddr = (long)addr;
+	return 0;
+}
+
 int pthread_attr_setstack(pthread_attr_t *a, void *addr, size_t s)
 {
 	if (s < PTHREAD_STACK_MIN || s > SIZE_MAX / 4) return EINVAL;

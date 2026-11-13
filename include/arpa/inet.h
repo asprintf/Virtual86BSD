@@ -40,6 +40,13 @@ uint32_t ntohl(uint32_t);
 uint16_t ntohs(uint16_t);
 in_addr_t inet_addr(const char *);
 char *inet_ntoa(struct in_addr);
+#if __XSI_OB5
+/* SUSv2 (Networking Services); removed in SUSv3 */
+in_addr_t inet_lnaof(struct in_addr);
+struct in_addr inet_makeaddr(in_addr_t, in_addr_t);
+in_addr_t inet_netof(struct in_addr);
+in_addr_t inet_network(const char *);
+#endif
 const char *inet_ntop(int, const void *__RESTRICT, char *__RESTRICT, socklen_t);
 int inet_pton(int, const char *__RESTRICT, void *__RESTRICT);
 __END_DECLS

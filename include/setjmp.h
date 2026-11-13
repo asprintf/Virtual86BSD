@@ -56,6 +56,11 @@ __NORETURN void longjmp(jmp_buf, int);
 int sigsetjmp(sigjmp_buf, int) __RETURNS_TWICE;
 __NORETURN void siglongjmp(sigjmp_buf, int);
 #endif
+#if __XSI_OB
+/* SUSv2 to SUSv4 (obsolescent there); removed in POSIX.1-2024 */
+int _setjmp(jmp_buf) __RETURNS_TWICE;
+__NORETURN void _longjmp(jmp_buf, int);
+#endif
 __END_DECLS
 #define setjmp setjmp
 #endif

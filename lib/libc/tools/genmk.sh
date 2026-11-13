@@ -82,7 +82,7 @@ objs() {   # objs NAME FILTER: the object list of the sources the filter passes
 		# what depends on the ABI (tools/mkabi.sh) is put before the source:
 		# the system call numbers, and the brand of the native start files
 		case $n in
-		syscall|sigsetjmp|thread) pre='$(B)/abi/nr.sed' ;;
+		syscall|sigsetjmp|thread|vfork|ucontext) pre='$(B)/abi/nr.sed' ;;
 		crt1|Scrt1|rcrt1) pre='$(B)/abi/note.s' ;;
 		*) pre= ;;
 		esac

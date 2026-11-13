@@ -45,5 +45,13 @@ int strcasecmp(const char *, const char *);
 int strcasecmp_l(const char *, const char *, locale_t);
 int strncasecmp(const char *, const char *, size_t);
 int strncasecmp_l(const char *, const char *, size_t, locale_t);
+#if __XSI_OB6
+/* SUSv2, SUSv3 (LEGACY there); removed in POSIX.1-2008 */
+int bcmp(const void *, const void *, size_t);
+void bcopy(const void *, void *, size_t);
+void bzero(void *, size_t);
+char *index(const char *, int);
+char *rindex(const char *, int);
+#endif
 __END_DECLS
 #endif

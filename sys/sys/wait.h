@@ -44,5 +44,10 @@ __BEGIN_DECLS
 pid_t wait(int *);
 int   waitid(idtype_t, id_t, siginfo_t *, int);
 pid_t waitpid(pid_t, int *, int);
+#if __XSI_OB5
+/* SUSv2 (LEGACY): the rusage structure is <sys/resource.h>'s */
+struct rusage;
+pid_t wait3(int *, int, struct rusage *);
+#endif
 __END_DECLS
 #endif

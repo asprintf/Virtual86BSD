@@ -117,8 +117,8 @@
 #define ABALTMON_11  0x20091
 #define ABALTMON_12  0x20092
 
-/* Not POSIX: also in other systems. */
-#if __EXT_VISIBLE
+/* SUSv2 (LEGACY), removed in SUSv3; also in other systems */
+#if __XSI_OB5
 #define YESSTR       0x50002
 #define NOSTR        0x50003
 #endif

@@ -58,7 +58,7 @@ if [ "$abi" = native ]; then echo "#define __V86BSD_NATIVE_ABI 1"; else echo "/*
 # the C header is the table itself (the same bytes, from its one source)
 put syscall_nr.h < "$nr"
 # only what the assembly uses
-for n in rt_sigreturn rt_sigprocmask clone exit munmap; do
+for n in rt_sigreturn rt_sigprocmask clone exit munmap vfork sigaltstack; do
 	awk -v n="SYS_$n" '$1 == "#define" && $2 == n { print "s/\\$" n ",/$" $3 ",/g" }' "$nr"
 done | put nr.sed
 if [ "$abi" = native ]; then put note.s < config/note_native.s; else : | put note.s; fi

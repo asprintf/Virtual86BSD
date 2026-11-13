@@ -28,6 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define _DEFAULT_SOURCE
 #include <unistd.h>
 #include <limits.h>
 #include <signal.h>
@@ -92,6 +93,11 @@ static const long values[] = {
 	[_SC_XOPEN_CRYPT] = 1, [_SC_XOPEN_ENH_I18N] = 1, [_SC_XOPEN_REALTIME] = 1,
 	[_SC_XOPEN_REALTIME_THREADS] = 1, [_SC_XOPEN_SHM] = 1, [_SC_XOPEN_UNIX] = 1,
 	[_SC_XOPEN_UUCP] = 1, [_SC_XOPEN_VERSION] = 800,
+	/* of older editions (share/doc/legacy.md) */
+	[_SC_2_C_VERSION] = 199209L, [_SC_PASS_MAX] = PASS_MAX,
+	[_SC_XOPEN_XCU_VERSION] = 5, [_SC_XBS5_ILP32_OFF32] = -1,
+	[_SC_XBS5_ILP32_OFFBIG] = -1, [_SC_XBS5_LP64_OFF64] = 1,
+	[_SC_XBS5_LPBIG_OFFBIG] = 1, [_SC_XOPEN_LEGACY] = 1, [_SC_2_FORT_DEV] = -1,
 };
 
 /* Count the CPUs in a kernel cpu mask. */

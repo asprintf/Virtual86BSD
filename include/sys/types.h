@@ -51,6 +51,9 @@
 #define __NEED_size_t
 #define __NEED_ssize_t
 #define __NEED_suseconds_t
+#if __XSI_OB6
+#define __NEED_useconds_t      /* SUSv2, SUSv3 (for usleep(), ualarm()) */
+#endif
 #define __NEED_time_t
 #define __NEED_timer_t
 #define __NEED_uid_t

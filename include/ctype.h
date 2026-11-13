@@ -67,7 +67,19 @@ int isxdigit_l(int, locale_t);
 int tolower_l(int, locale_t);
 int toupper_l(int, locale_t);
 #endif
+#if __XSI_OB
+/* SUSv2 to SUSv4 (obsolescent in SUSv4); removed in POSIX.1-2024 */
+int isascii(int);
+int toascii(int);
+int _toupper(int);
+int _tolower(int);
+#endif
 __END_DECLS
+
+#if __XSI_OB && !defined(__cplusplus)
+#define _toupper(c) toupper(c)
+#define _tolower(c) tolower(c)
+#endif
 
 /* The digits are the same in every locale. (The other classes are not:
    bytes 0x80-0xff have classes in single-byte locales.) */

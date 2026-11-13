@@ -200,6 +200,16 @@ int pthread_spin_lock(pthread_spinlock_t *);
 int pthread_spin_trylock(pthread_spinlock_t *);
 int pthread_spin_unlock(pthread_spinlock_t *);
 void pthread_testcancel(void);
+#if __POSIX_RANGE(199506L, 200809L)
+/* POSIX.1c to SUSv3; removed in POSIX.1-2008 */
+int pthread_attr_getstackaddr(const pthread_attr_t *__RESTRICT, void **__RESTRICT);
+int pthread_attr_setstackaddr(pthread_attr_t *, void *);
+#endif
+#if __XSI_OB
+/* SUSv2 to SUSv4; removed in POSIX.1-2024 */
+int pthread_getconcurrency(void);
+int pthread_setconcurrency(int);
+#endif
 __END_DECLS
 
 #endif

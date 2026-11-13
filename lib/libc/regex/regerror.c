@@ -47,6 +47,7 @@ static const char *const msgs[] = {
 	"Invalid range end",
 	"Memory exhausted",
 	"Invalid preceding regular expression",
+	"Function not implemented",	/* REG_ENOSYS: POSIX.2 to SUSv3 */
 };
 
 size_t regerror(int e, const regex_t *__RESTRICT re, char *__RESTRICT buf, size_t size)

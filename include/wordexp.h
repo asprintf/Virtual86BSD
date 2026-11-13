@@ -52,6 +52,10 @@ typedef struct {
 #define WRDE_CMDSUB  3
 #define WRDE_NOSPACE 4
 #define WRDE_SYNTAX  5
+#if __POSIX_RANGE(1L, 200809L)
+/* POSIX.2 to SUSv3; never returned */
+#define WRDE_NOSYS   6
+#endif
 
 __BEGIN_DECLS
 int  wordexp(const char *__RESTRICT, wordexp_t *__RESTRICT, int);

@@ -113,6 +113,15 @@ int        timer_settime(timer_t, int, const struct itimerspec *__RESTRICT, stru
 void       tzset(void);
 extern char *tzname[2];
 #endif
+#if __POSIX_RANGE(199506L, 202405L)
+/* POSIX.1c to POSIX.1-2008 (obsolescent there); removed in POSIX.1-2024 */
+char      *asctime_r(const struct tm *__RESTRICT, char *__RESTRICT);
+char      *ctime_r(const time_t *, char *);
+#endif
+#if __POSIX_RANGE(1L, 200112L)
+/* POSIX.1-1990 and SUSv2; sysconf(_SC_CLK_TCK) */
+#define CLK_TCK ((clock_t)100)
+#endif
 #if __XSI_VISIBLE
 struct tm *getdate(const char *);
 char      *strptime(const char *__RESTRICT, const char *__RESTRICT, struct tm *__RESTRICT);

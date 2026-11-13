@@ -28,10 +28,15 @@
 
 # int setjmp(jmp_buf), void longjmp(jmp_buf, int)
 # jmp_buf: rbx, rbp, r12, r13, r14, r15, rsp, rip (as glibc's layout).
+# setjmp keeps no signal mask, so it is also _setjmp, and longjmp _longjmp
+# (SUSv2 to SUSv4).
 	.text
 	.globl	setjmp
 	.type	setjmp,@function
+	.globl	_setjmp
+	.type	_setjmp,@function
 setjmp:
+_setjmp:
 	mov	%rbx,(%rdi)
 	mov	%rbp,8(%rdi)
 	mov	%r12,16(%rdi)
@@ -45,10 +50,14 @@ setjmp:
 	xor	%eax,%eax
 	ret
 	.size	setjmp,.-setjmp
+	.size	_setjmp,.-_setjmp
 
 	.globl	longjmp
 	.type	longjmp,@function
+	.globl	_longjmp
+	.type	_longjmp,@function
 longjmp:
+_longjmp:
 	xor	%eax,%eax
 	cmp	$1,%esi
 	adc	%esi,%eax
@@ -61,4 +70,5 @@ longjmp:
 	mov	48(%rdi),%rsp
 	jmp	*56(%rdi)
 	.size	longjmp,.-longjmp
+	.size	_longjmp,.-_longjmp
 	.section .note.GNU-stack,"",@progbits

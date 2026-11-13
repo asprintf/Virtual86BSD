@@ -136,6 +136,22 @@ int        unlockpt(int);
 #if __XSI_VISIBLE
 void       setkey(const char *);
 #endif
+#if __XSI_OB6
+/* SUSv2, SUSv3 (LEGACY there); removed in POSIX.1-2008 */
+char      *ecvt(double, int, int *, int *);
+char      *fcvt(double, int, int *, int *);
+char      *gcvt(double, int, char *);
+char      *mktemp(char *);
+#endif
+#if __POSIX_RANGE(199506L, 202405L)
+/* POSIX.1c to POSIX.1-2008 (obsolescent there); removed in POSIX.1-2024 */
+int        rand_r(unsigned *);
+#endif
+#if __XSI_OB5
+/* SUSv2 (LEGACY); removed in SUSv3 */
+int        ttyslot(void);
+void      *valloc(size_t);
+#endif
 #if __EXT_VISIBLE
 int        getloadavg(double [], int);
 uint32_t   arc4random(void);

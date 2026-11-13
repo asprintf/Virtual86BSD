@@ -38,6 +38,10 @@
 #define FNM_PERIOD     0x04
 #define FNM_CASEFOLD   0x10
 #define FNM_IGNORECASE FNM_CASEFOLD
+#if __POSIX_RANGE(1L, 200809L)
+/* POSIX.2 to SUSv3; never returned */
+#define FNM_NOSYS      (-1)
+#endif
 
 __BEGIN_DECLS
 int fnmatch(const char *, const char *, int);

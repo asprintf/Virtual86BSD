@@ -73,6 +73,10 @@ typedef struct {
 #define REG_ERANGE   11
 #define REG_ESPACE   12
 #define REG_BADRPT   13
+#if __POSIX_RANGE(1L, 200809L)
+/* POSIX.2 to SUSv3; never returned */
+#define REG_ENOSYS   14
+#endif
 
 __BEGIN_DECLS
 int    regcomp(regex_t *__RESTRICT, const char *__RESTRICT, int);

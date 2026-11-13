@@ -173,6 +173,32 @@
 #define NL_LANGMAX     32
 #define NZERO          20
 #endif
+
+/* ---- Of older editions (share/doc/legacy.md) ---- */
+#if __XSI_OB
+/* SUSv2 to SUSv4; the same tokens as c17's <float.h> */
+#ifndef DBL_DIG
+#define DBL_DIG        15
+#endif
+#ifndef DBL_MAX
+#define DBL_MAX        0x1.fffffffffffffp+1023
+#endif
+#ifndef FLT_DIG
+#define FLT_DIG        6
+#endif
+#ifndef FLT_MAX
+#define FLT_MAX        0x1.fffffep+127F
+#endif
+#endif
+#if __XSI_OB6
+#define NL_NMAX        255      /* a collating element's bytes: a length byte */
+#endif
+#if __XSI_OB5
+#define PASS_MAX       128      /* what getpass() keeps */
+#ifndef TMP_MAX
+#define TMP_MAX        308915776 /* as <stdio.h> */
+#endif
+#endif
 #endif /* __POSIX_VISIBLE */
 
 #endif

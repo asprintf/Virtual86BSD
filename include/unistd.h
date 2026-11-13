@@ -121,6 +121,27 @@
 /* the UUCP Utilities option: [UU], not XSI */
 #define _XOPEN_UUCP                     1
 
+/* ---- Constants of older editions (share/doc/legacy.md) ---- */
+#if __POSIX_RANGE(1L, 200112L)
+#define _POSIX2_C_VERSION               199209L /* POSIX.2's C binding */
+#endif
+#if __POSIX_RANGE(1L, 202405L)
+#define _POSIX2_FORT_DEV                (-1)    /* no FORTRAN compiler */
+#endif
+#if __XSI_OB5
+#define _XOPEN_XCU_VERSION              5       /* SUSv2's XCU: Issue 5 */
+#define _XOPEN_XPG2                     1
+#define _XOPEN_XPG3                     1
+#define _XOPEN_XPG4                     1
+#endif
+#if __XSI_OB6
+#define _XOPEN_LEGACY                   1       /* the Legacy Feature Group */
+#define _XBS5_ILP32_OFF32               (-1)
+#define _XBS5_ILP32_OFFBIG              (-1)
+#define _XBS5_LP64_OFF64                1
+#define _XBS5_LPBIG_OFFBIG              1       /* the same as LP64_OFF64 */
+#endif
+
 /* ---- Execution-time constants ---- */
 #define _POSIX_ASYNC_IO  1
 #define _POSIX_PRIO_IO   1
@@ -189,6 +210,24 @@
 #define _CS_POSIX_V7_THREADS_LDFLAGS          30
 #define _CS_POSIX_V7_WIDTH_RESTRICTED_ENVS    31
 #define _CS_V7_ENV                            32
+#if __XSI_OB6
+#define _CS_XBS5_ILP32_OFF32_CFLAGS           33
+#define _CS_XBS5_ILP32_OFF32_LDFLAGS          34
+#define _CS_XBS5_ILP32_OFF32_LIBS             35
+#define _CS_XBS5_ILP32_OFF32_LINTFLAGS        36
+#define _CS_XBS5_ILP32_OFFBIG_CFLAGS          37
+#define _CS_XBS5_ILP32_OFFBIG_LDFLAGS         38
+#define _CS_XBS5_ILP32_OFFBIG_LIBS            39
+#define _CS_XBS5_ILP32_OFFBIG_LINTFLAGS       40
+#define _CS_XBS5_LP64_OFF64_CFLAGS            41
+#define _CS_XBS5_LP64_OFF64_LDFLAGS           42
+#define _CS_XBS5_LP64_OFF64_LIBS              43
+#define _CS_XBS5_LP64_OFF64_LINTFLAGS         44
+#define _CS_XBS5_LPBIG_OFFBIG_CFLAGS          45
+#define _CS_XBS5_LPBIG_OFFBIG_LDFLAGS         46
+#define _CS_XBS5_LPBIG_OFFBIG_LIBS            47
+#define _CS_XBS5_LPBIG_OFFBIG_LINTFLAGS       48
+#endif
 
 #define _PC_2_SYMLINKS             0
 #define _PC_ALLOC_SIZE_MIN         1
@@ -327,6 +366,23 @@
 #define _SC_XOPEN_UNIX                  109
 #define _SC_XOPEN_UUCP                  110
 #define _SC_XOPEN_VERSION               111
+#if __POSIX_RANGE(1L, 200112L)
+#define _SC_2_C_VERSION                 112
+#endif
+#if __XSI_OB5
+#define _SC_PASS_MAX                    113
+#define _SC_XOPEN_XCU_VERSION           114
+#endif
+#if __XSI_OB6
+#define _SC_XBS5_ILP32_OFF32            115
+#define _SC_XBS5_ILP32_OFFBIG           116
+#define _SC_XBS5_LP64_OFF64             117
+#define _SC_XBS5_LPBIG_OFFBIG           118
+#define _SC_XOPEN_LEGACY                119
+#endif
+#if __POSIX_RANGE(1L, 202405L)
+#define _SC_2_FORT_DEV                  120
+#endif
 
 __BEGIN_DECLS
 int          access(const char *, int);
@@ -429,12 +485,26 @@ void         encrypt(char [64], int);
 pid_t        setpgrp(void);                /* SUSv2-SUSv4, not POSIX.1-2024 */
 #endif
 #if __XSI_OB6
-int          usleep(useconds_t);           /* SUSv2, SUSv3 only */
+/* SUSv2, SUSv3 only (LEGACY or obsolescent there) */
+char        *getwd(char *);
+useconds_t   ualarm(useconds_t, useconds_t);
+int          usleep(useconds_t);
+pid_t        vfork(void);
+#endif
+#if __XSI_OB5
+/* SUSv2 only (LEGACY) */
+int          brk(void *);
+void        *sbrk(intptr_t);
+int          chroot(const char *);
+char        *ctermid(char *);
+char        *cuserid(char *);
+int          getdtablesize(void);
+int          getpagesize(void);
+char        *getpass(const char *);
 #endif
 #if __EXT_VISIBLE
 int          revoke(const char *);
 int          sethostname(const char *, size_t);
-char        *getpass(const char *);
 #endif
 
 extern char *optarg;

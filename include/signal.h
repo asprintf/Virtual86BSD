@@ -146,6 +146,14 @@ typedef struct {
 	size_t ss_size;
 } stack_t;
 
+#if __XSI_OB5
+/* SUSv2 (LEGACY): sigstack()'s, members in glibc's order */
+struct sigstack {
+	void *ss_sp;
+	int ss_onstack;
+};
+#endif
+
 #if __XSI_VISIBLE
 #define SS_ONSTACK  1
 #define SS_DISABLE  2
@@ -263,6 +271,14 @@ int  siginterrupt(int, int);
 int  sigpause(int);
 int  sigrelse(int);
 void (*sigset(int, void (*)(int)))(int);
+#endif
+#if __XSI_OB6
+/* SUSv2, SUSv3 (obsolescent there); removed in POSIX.1-2008 */
+void (*bsd_signal(int, void (*)(int)))(int);
+#endif
+#if __XSI_OB5
+/* SUSv2 (LEGACY) */
+int  sigstack(struct sigstack *, struct sigstack *);
 #endif
 #endif
 __END_DECLS

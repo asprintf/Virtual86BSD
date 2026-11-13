@@ -53,6 +53,10 @@ typedef struct {
 #define GLOB_NOSPACE  1
 #define GLOB_ABORTED  2
 #define GLOB_NOMATCH  3
+#if __POSIX_RANGE(1L, 200809L)
+/* POSIX.2 to SUSv3; never returned */
+#define GLOB_NOSYS    4
+#endif
 
 __BEGIN_DECLS
 int  glob(const char *__RESTRICT, int, int (*)(const char *, int), glob_t *__RESTRICT);

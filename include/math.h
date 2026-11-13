@@ -65,6 +65,10 @@ typedef double double_t;
 #define MATH_ERREXCEPT   2
 #define math_errhandling 3
 
+#if __XSI_OB
+#define MAXFLOAT 0x1.fffffep+127F       /* FLT_MAX: SUSv2 to SUSv4 */
+#endif
+
 #if __XSI_VISIBLE
 #define M_E          2.7182818284590452354
 #define M_EGAMMA     0.57721566490153286061
@@ -344,6 +348,14 @@ double y0(double);
 double y1(double);
 double yn(int, double);
 extern int signgam;
+#endif
+#if __XSI_OB6
+/* SUSv2, SUSv3 (obsolescent there); removed in POSIX.1-2008 */
+double scalb(double, double);
+#endif
+#if __XSI_OB5
+/* SUSv2 (LEGACY); removed in SUSv3 */
+double gamma(double);
 #endif
 __END_DECLS
 
