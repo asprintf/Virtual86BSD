@@ -19,7 +19,15 @@ for h in $(cd "$inc" && find -L . -name '*.h' ! -path './bits/*' | sed 's|^\./||
 	oldifs=$IFS; IFS=$IFS0; set -f
 	for mode in $modes; do
 		IFS=$oldifs
-		printf '#include <%s>\n#include <%s>\nint main(void){return 0;}\n' "$h" "$h" > "$tmp/t.c"
+		# <regexp.h> (SUSv2) defines compile() with macros the program
+		# must define before it includes the header
+		case $h in
+		regexp.h) printf '%s\n' '#define INIT char *sp = instring;' '#define GETC() (*sp++)' \
+			'#define PEEKC() (*sp)' '#define UNGETC(c) ((void) (c), (void) --sp)' \
+			'#define RETURN(c) return (c);' '#define ERROR(c) return (void) (c), (char *) 0;' ;;
+		*) : ;;
+		esac > "$tmp/t.c"
+		printf '#include <%s>\n#include <%s>\nint main(void){return 0;}\n' "$h" "$h" >> "$tmp/t.c"
 		if ! $cc $mode $wflags -c -o "$tmp/t.o" "$tmp/t.c" 2> "$tmp/err"; then
 			echo "FAIL: <$h> with $mode"; sed 's/^/    /' "$tmp/err" | head -5; fail=1
 		fi
