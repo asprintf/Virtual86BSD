@@ -1,0 +1,16 @@
+|dumped              |
+|  bold              |
+ ..1111..............
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+|             pw     |
+--- log
+scr_dump OK
+scr_restore OK
+scr_restore of nothing ERR
+putwin OK
+getwin ok
+--- [exit 0]

@@ -1,0 +1,20 @@
+|hello world         |
+|  BOLD              |
+ ..1111..............
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+--- log
+mvinstr OK [hello world         ]
+mvinstr at 15 OK [     ]
+mvinnstr 4 3 [wor]
+mvinnstr 1 ERR
+mvinnstr 64 20 [hello world         ]
+mvinstr below the screen ERR
+mvinchstr OK, 20 cells; [2] B bold 1, [6]   bold 0
+mvinchnstr 3 OK, 2 cells
+winch O bold 1
+--- [exit 0]

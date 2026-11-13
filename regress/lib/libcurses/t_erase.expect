@@ -1,0 +1,17 @@
+|0 abc               |
+|1 bcdefghij         |
+|2 Xabcdefghij       |
+|3 NEWabcdefghij     |
+|5 abcdefghij        |
+|inserted            |
+|6 ab                |
+|                    |
+--- log
+clrtoeol OK
+delch OK
+insch OK
+insstr OK
+deleteln OK
+insertln OK
+clrtobot OK
+--- [exit 0]

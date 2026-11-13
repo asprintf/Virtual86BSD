@@ -1,0 +1,22 @@
+|              over  |
+|  +--------+        |
+|  |win     |        |
+|  | sub    |        |
+|  |        |        |
+|  +--------+        |
+|                    |
+|                    |
+--- log
+newwin ok
+box OK
+subwin ok
+subwin getbegyx 3 4
+subwin getparyx 2 2
+derwin getbegyx 4 8
+derwin getmaxyx 1 3
+subwin too big NULL
+doupdate OK
+mvwin OK
+mvwin off the screen ERR
+delwin OK OK
+--- [exit 0]

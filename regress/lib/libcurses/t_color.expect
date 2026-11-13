@@ -1,0 +1,25 @@
+|red on blue n       |
+ 11111111111.........
+ 44444444444.........
+|green               |
+ 11111...............
+ 22222...............
+ ....................
+|set                 |
+ 111.................
+ 444.................
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+--- log
+has_colors 1
+start_color OK
+COLORS 8 COLOR_PAIRS 64
+can_change_color 0
+init_pair OK
+init_pair 2 OK
+pair_content 1 4
+PAIR_NUMBER 2
+--- [exit 0]

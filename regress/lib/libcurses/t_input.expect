@@ -1,0 +1,21 @@
+|ready               |
+|done                |
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+--- log
+getch 97 a
+getch 259 KEY_UP
+getch 260 KEY_LEFT
+getch 265 KEY_F(1)
+getch 263 KEY_BACKSPACE
+getch 13 ^M
+getch 98 b
+KEY_UP 1 KEY_LEFT 1 KEY_F(1) 1 KEY_BACKSPACE 1
+nodelay: getch ERR
+ungetch OK
+getch after ungetch z
+--- [exit 0]

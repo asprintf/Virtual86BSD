@@ -1,0 +1,22 @@
+|wide                |
+|w                   |
+ 1...................
+|                    |
+|ready               |
+|                    |
+|                    |
+|                    |
+|                    |
+--- log
+addwstr OK
+setcchar OK
+add_wch OK
+in_wch OK
+getcchar OK [w] bold 1 pair 0
+getcchar length 2
+inwstr OK [wide                ]
+get_wch OK x
+get_wch OK y
+get_wch KEY_CODE_YES key 1
+wunctrl ^A [^A]
+--- [exit 0]

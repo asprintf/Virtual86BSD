@@ -1,0 +1,16 @@
+|line 1              |
+|line 2              |
+|line 4              |
+|line 5              |
+|                    |
+|line 6              |
+|x                   |
+|                    |
+--- log
+scroll without scrollok ERR
+scroll OK
+scrl -1 OK
+setscrreg OK
+setscrreg out of range ERR
+scrl 1 in the region OK
+--- [exit 0]

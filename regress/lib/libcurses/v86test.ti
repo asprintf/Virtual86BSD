@@ -1,0 +1,14 @@
+# v86test: the terminal of libcurses' tests, which vtscreen.c emulates (no
+# automatic margins, no scrolling region, no insert or delete, no
+# alternate character set: what curses does without them)
+v86test|V86BSD curses test terminal,
+	cols#20, lines#8, it#8, colors#8, pairs#64,
+	bel=^G, cr=\r, cud1=\n, ind=\n, cub1=^H, cuf1=\E[C, cuu1=\E[A,
+	cub=\E[%p1%dD, cud=\E[%p1%dB, cuf=\E[%p1%dC, cuu=\E[%p1%dA,
+	cup=\E[%i%p1%d;%p2%dH, home=\E[H, clear=\E[H\E[J,
+	el=\E[K, ed=\E[J, ht=^I,
+	sgr0=\E[m, bold=\E[1m, dim=\E[2m, smul=\E[4m, rmul=\E[m,
+	blink=\E[5m, rev=\E[7m, invis=\E[8m, smso=\E[7m, rmso=\E[m,
+	setaf=\E[3%p1%dm, setab=\E[4%p1%dm, op=\E[39;49m,
+	kcuu1=\EOA, kcud1=\EOB, kcuf1=\EOC, kcub1=\EOD, khome=\EOH,
+	kf1=\EOP, kf2=\EOQ, kbs=^H,

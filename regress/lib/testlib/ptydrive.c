@@ -1,7 +1,7 @@
 /* ptydrive - run a command on a pseudo-terminal and talk to it like a
  * person at a keyboard (for tests of getty, login, passwd ...).
  *
- *   ptydrive [-T seconds] op ... -- command [argument ...]
+ *   ptydrive [-T seconds] [-o file] op ... -- command [argument ...]
  *
  * The command (looked up in PATH) is run in a new session with the pseudo-terminal as its
  * controlling terminal and its standard input, output and error.  Each op
@@ -18,7 +18,8 @@
  * "[exit N]" or "[signal N]" if the command has ended, else "[running]"
  * (and it is killed).  Status: 0; 2 a usage error; 3 if an e: or w: timed
  * out (the transcript is written, with "[timeout]"); 4 if an n: found its
- * text. */
+ * text.  -o: the terminal's output, as it came (with the carriage
+ * returns), is also written to file. */
 #define _POSIX_C_SOURCE 202405L
 #define _XOPEN_SOURCE 800
 #include <errno.h>
@@ -35,6 +36,7 @@
 static char buf[1 << 16];
 static size_t len, mark; /* the output so far; where the last e: ended */
 static int master = -1, timeout_s = 20;
+static const char *rawfile;
 static pid_t child;
 static int ended, status;
 
@@ -115,11 +117,15 @@ int main(int argc, char *argv[])
 		timeout_s = atoi(argv[i + 1]);
 		i += 2;
 	}
+	if (i + 1 < argc && !strcmp(argv[i], "-o")) {
+		rawfile = argv[i + 1];
+		i += 2;
+	}
 	opsend = i;
 	while (opsend < argc && strcmp(argv[opsend], "--"))
 		opsend++;
 	if (opsend >= argc - 1) {
-		fprintf(stderr, "usage: ptydrive [-T seconds] op ... -- command [argument ...]\n");
+		fprintf(stderr, "usage: ptydrive [-T seconds] [-o file] op ... -- command [argument ...]\n");
 		return 2;
 	}
 	master = posix_openpt(O_RDWR | O_NOCTTY);
@@ -199,6 +205,13 @@ int main(int argc, char *argv[])
 	for (k = 0; k < 5; k++)
 		pump(20);
 	reap(0);
+	if (rawfile != NULL) {
+		FILE *f = fopen(rawfile, "w");
+		if (f == NULL || fwrite(buf, 1, len, f) != len || fclose(f) == EOF) {
+			perror(rawfile);
+			exitcode = 2;
+		}
+	}
 	{
 		size_t o = 0;
 		for (k = 0; k < len; k++)

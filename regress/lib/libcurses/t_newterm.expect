@@ -1,0 +1,14 @@
+|newterm             |
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+--- log
+newterm ok
+newterm nosuchterminal NULL
+set_term ok
+LINES 8 COLS 20
+--- [exit 0]

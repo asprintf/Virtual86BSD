@@ -1,0 +1,14 @@
+|name? abc           |
+|                    |
+|two? right          |
+|                    |
+|three? tool         |
+|                    |
+|four? ok            |
+|                    |
+--- log
+getnstr OK [abc]
+getnstr OK [right]
+getnstr 5 OK [tool]
+getn_wstr OK [ok]
+--- [exit 0]

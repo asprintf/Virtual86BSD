@@ -1,0 +1,31 @@
+|terminfo            |
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+--- log
+setupterm nosuchterminal ERR errret 0
+setupterm $TERM OK errret 1
+tigetnum cols 20 lines 8
+tigetnum of a string -2, of nothing -2
+tigetflag am 0 bw 0, of a number -1
+tigetstr cup \E[%i%p1%d;%p2%dH
+tigetstr of a number (-1), of nothing (-1)
+tparm cup 2 3 \E[3;4H
+tparm setaf 4 \E[34m
+tputs clear OK \E[H\E[J
+vidputs bold underline OK \E[m\E[4m\E[1m
+vid_puts reverse OK \E[m\E[7m
+vid_puts with opts ERR
+tgetent 1
+tgetnum co 20 li 8
+tgetflag am 0
+tgetstr cm \E[%i%p1%d;%p2%dH, in the area 1
+tgoto col 3 line 2 \E[3;4H
+restartterm OK errret 1 cols 20
+putp OK
+del_curterm OK
+--- [exit 0]

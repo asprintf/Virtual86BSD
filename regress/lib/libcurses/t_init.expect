@@ -1,0 +1,24 @@
+|hello               |
+|                    |
+|   world            |
+|                    |
+|                    |
+|                    |
+|                    |
+|last                |
+--- log
+initscr: stdscr
+LINES 8 COLS 20
+curscr set
+addstr OK
+getyx 0 5
+mvaddstr OK
+mvaddstr below the screen ERR
+mvaddstr at the last line OK
+getmaxyx 8 20
+getbegyx 0 0
+refresh OK
+isendwin 0
+endwin OK
+isendwin 1
+--- [exit 0]

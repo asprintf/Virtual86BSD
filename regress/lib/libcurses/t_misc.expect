@@ -1,0 +1,23 @@
+bells: 2
+|misc                |
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+|                    |
+--- log
+_XOPEN_CURSES 1
+unctrl a [a] ^A [^A] DEL [^?] space [ ]
+unctrl of bold a [a]
+keyname a [a]
+keyname ^A [^A]
+keyname KEY_UP [KEY_UP]
+keyname KEY_F(1) [KEY_F(1)]
+erasechar 127 killchar 21
+has_ic 0 has_il 0
+beep OK
+flash OK
+curs_set -1
+--- [exit 0]
