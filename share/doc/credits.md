@@ -80,12 +80,20 @@ and the Shall code the fork started from (see `LICENSE`).
 | `usr.sbin/makefs/ufs/ufs/quota.h` | NetBSD `sys/ufs/ufs/quota.h` | 1.30 | BSD 3-clause |
 | `usr.sbin/makefs/ufs/ufs/ufs_bswap.h` | NetBSD `sys/ufs/ufs/ufs_bswap.h` | 1.23 | BSD 2-clause |
 
+## Test suites in the tree
+
+* `regress/os-test`: Sortix's os-test (https://gitlab.com/sortix/os-test),
+  git 8e790a4 (19 October 2026), ISC licence (`regress/os-test/LICENSE`),
+  copyright Jonas 'Sortie' Termansen and contributors. Imported unchanged;
+  what V86BSD added there (its own suites, a line in `misc/suites.list`) is
+  listed in `regress/os-test/README.V86BSD`.
+
 ## Licences in short
 
 * **BSD 3-clause / 2-clause**: redistribution with the notice kept in source
   and in the documentation of a binary distribution; the name of the
   authors may not be used to promote the product (three clauses).
-* **ISC** (`lib/libc/stdlib/strtonum.c`): permission to use, copy, modify
+* **ISC** (`lib/libc/stdlib/strtonum.c`, `regress/os-test`): permission to use, copy, modify
   and distribute with the notice kept.
 
 The notices themselves are in the files, and a binary distribution of this

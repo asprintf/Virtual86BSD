@@ -1,0 +1,64 @@
+This suite tests regular expressions.
+
+Each feature in POSIX regular expressions is tested in both BRE (Basic Regular
+Expression) mode and ERE (Extended Regular Expression) mode. BRE is not actually
+a regular expression language, despite the name, because it lacks alternations,
+and importantly because it has back references, which are mathematically
+impossible to implement efficiently (unless P=NP IIRC). ERE is the real fully
+feature POSIX regular expression language, which can be implemented efficiently
+due to the lack of back references. However, POSIX optionally allows BRE
+implementations to have all ERE features via a special backslash syntax.
+
+This suite is split into the strict base POSIX tests, which tests every sentence
+that is mandatory in POSIX; and the nonstandard tests, which tests all the
+optional behavior as well as common de facto extensions.
+
+Each regular expression feature is exhaustively combined with each other regular
+expression feature to ensure that the features work together. More complicated
+combinations are tested that involve three or more features in some interesting
+cases. Each flag to regcomp and regexec are tested as well with their relevant
+features.
+
+The POSIX requirements on how regular expressions choose their matches are very
+specific. They can be a little difficult to interpret at times and can be even
+more tricky to implement properly. See Chapter 9 in POSIX.1-2024 along with the
+description of regcomp+regexec for all the official rules. Many tests use a
+truth table approach where every possible reasonable input is given to each
+regular expression, so it's more likely that implementation bugs are discovered.
+
+The nonstandard tests check every extension I know of, along with UTF-8 and
+unicode support, including case sensitivity and the behavior on invalid UTF-8
+sequences. It's technically fine to disagree with the nonstandard tests, and
+they mostly exist to study the availability of extensions, and to make sure they
+are implemented properly in a common way. However, POSIX does mandate that if
+some nonstandard features like `\|` are implemented in BRE, then their semantics
+must match that of the ERE counterparts. If an implementation chooses to have
+those extensions, then some of the nonstandard tests must be complied with as
+well.
+
+Overall this test suite is very comprehensive and should provide a near
+exhaustive coverage of the regular expression features. I read every relevant
+sentence in POSIX and made sure a test case covered each sentence. The only
+exceptions are are as follows:
+
+The REG_MINIMAL flag and the `??`, `*?`, `+?`, and `{}?` ERE features are not
+tested because the POSIX.1-2024 specification appears to have been a rush job.
+The original proposal was fundamentally flawed, and the attempt to fix it does
+not appear to have been deliberated in detail. I was left with many questions
+after reading the text. No system implements those features yet, so I don't have
+any reference data to make test expectations with. The text is full of potential
+contradictions that I am unclear how to resolve. For instance, does `X??` prefer
+to match the empty string or `X`? The cited example of `.*?c` matching
+`abcabc` says that it prefers the `abc` match, but is that really how ungreedy
+matching works? It contradicts the longest overall match rule, and I believe
+instead usually ungreedy matching loses to over competing greedy matching
+expressions, but the overall longest match is preferred. Then there's `a*?`
+where `*` is usually required to match at least one thing, if at all possible,
+so on the input `aa` does this pattern prefer the empty string or `a`? There is
+also the curious case of `(X){1,1}?`, where it's unclear if the whole `X`
+subexpression itself becomes ungreedy? I don't really have enough information to
+implement the features, let alone test them.
+
+The test suite may miss more advanced implementation bugs that only appear on
+specifically complicated regular expressions. I had to stop somewhere with the
+combinatorial explosion of test cases.

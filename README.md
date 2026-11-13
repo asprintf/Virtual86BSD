@@ -54,7 +54,8 @@ Tests, the test suites of the ports).
     distrib/        the scripts behind all of that: build.sh (the stages),
                     mkdisk.sh, boot.sh, chroot.sh
     regress/        the tests: regress/{bin,sbin,usr.bin,usr.sbin}/<utility>, lib/libc
-                    (the C library), sys (the kernel), run_tests.sh
+                    (the C library), sys (the kernel), os-test (Sortix's
+                    suites, with V86BSD's legacy suites), run_tests.sh
     ports/          third-party software for it: ncurses, Rogue, Lua, SQLite,
                     sqllogictest, Mbed TLS, curl
                     (README.md; a HOWTO.md and a build.sh for each)
@@ -266,5 +267,6 @@ Data a system needs is copied from the host when `bootstrap.sh` builds
 it (time zones, terminfo, locale sources and charmaps, certificate
 authorities) and keeps its own licenses; the ports are fetched by
 `ports/get.sh` and keep theirs (only V86BSD's small diffs to them are
-here); the Open POSIX Test Suite (GPL), os-test (ISC) and the POSIX
-Shell Tests (GPL) are used from outside the tree.
+here); the Open POSIX Test Suite (GPL) and the POSIX Shell Tests (GPL)
+are used from outside the tree.  os-test (ISC) is in the tree, in
+`regress/os-test`, under its own licence (`regress/os-test/LICENSE`).

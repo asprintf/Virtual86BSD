@@ -1,0 +1,41 @@
+This suite tests fnmatch.
+
+Each feature in the POSIX fnmatch pattern syntax is tested.
+
+This suite is split into the strict base POSIX tests, which tests every sentence
+that is mandatory in POSIX; and the nonstandard tests, which tests all the
+optional behavior as well as common de facto extensions.
+
+Each fnmatch feature is exhaustively combined with each other fnmatch feature to
+ensure that the features work together. More complicated tests combine multiple
+features in interesting cases. Each flag to fnmatch is tested as well with the
+relevant features.
+
+The POSIX requirements on fnmatch can be tricky to understand. The POSIX.1-2024
+chapter 2.14 text could not be written to be more confusing, as well as the
+relevant implications on the chapter 9 bracket expression syntax that is shared
+with regular expressions, but with additional special rules. Many tests use a
+truth table approach where every possible reasonable input is given to each
+pattern, so it's more likely that implementation bugs are discovered.
+
+This suite has resolved the proper behaviors of as many unthinkably weird edge
+cases as possible. The backslash escaping rules have been an endless ride of
+curious questions about what happens if you put backslashes in unexpected places
+like [[:al\num:]], which the standard fails to consider explicitly, and we have
+to interpret what other language does apply to this case. POSIX.1-2024 changed a
+lot of the relevant language compared to the older POSIX.1-2008 in an effort to
+fix contradictions, and the resulting prose is endlessly difficult to interpret,
+and requires the rationale section to figure out what heck they even meant.
+Some patterns have unspecified behavior and are not tested.
+
+The nonstandard tests check every extension I know of, along with UTF-8 and
+unicode support, including case sensitivity and the behavior on invalid UTF-8
+sequences. It's technically fine to disagree with the nonstandard tests, and
+they mostly exist to study the availability of extensions, and to make sure they
+are implemented properly in a common way. There are very few extensions to the
+fnmatch pattern format, since POSIX is very strict unlike regular expressions,
+but POSIX does allow a few extensions like `[^` behaving the same as `[^`.
+
+Overall this test suite is very comprehensive and should provide a near
+exhaustive coverage of the fnmatch features. I read every relevant sentence in
+POSIX and made sure a test case covered each sentence.
