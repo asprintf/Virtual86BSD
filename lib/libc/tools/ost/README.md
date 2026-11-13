@@ -1,7 +1,7 @@
 # os-test on V86BSD
 
-[os-test](https://gitlab.com/sortix/os-test) (Sortix; ISC license; not in
-this tree) is a set of suites that compare POSIX systems: headers
+[os-test](https://gitlab.com/sortix/os-test) (Sortix; ISC license; in this
+tree as `regress/os-test`, see its `README.V86BSD`) is a set of suites that compare POSIX systems: headers
 (`include`, `namespace`), every function at a basic level (`basic`),
 `fnmatch`, `regex`, `limits`, `paths`, I/O, processes, signals,
 pseudoterminals, stdio and UDP.  Its makefiles need GNU or BSD make;
@@ -17,7 +17,8 @@ these files run it with POSIX sh and c17:
 * `report.sh` — on the host: takes the results out of V86BSD's disk image
   and makes os-test's report (`html/index.html`, `os-test.json`)
 
-`vmrun.sh` does all of it below for a built tree and an os-test checkout:
+`vmrun.sh` does all of it below for a built tree and an os-test directory:
+`sh vmrun.sh OBJDIR WORKDIR` (with `regress/os-test`) or
 `sh vmrun.sh OBJDIR OSTEST WORKDIR` makes the root and the image, boots
 V86BSD (with KVM where there is some), builds and runs the tests with a
 progress bar (`ost.sh` prints "ost: PHASE DONE/TOTAL SUITE/TEST" every

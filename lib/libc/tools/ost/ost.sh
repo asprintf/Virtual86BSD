@@ -28,7 +28,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # ost.sh - Sortix's os-test (https://gitlab.com/sortix/os-test; ISC
-# licensed, used from outside the tree) with POSIX sh alone: its
+# licensed, in the tree as regress/os-test) with POSIX sh alone: its
 # makefiles need GNU or BSD make.  It does what they do, with its own
 # misc/compile.sh, misc/try-compile.sh and misc/namespace.c:
 #   sh ost.sh build [suite...]   compile (include and namespace: the

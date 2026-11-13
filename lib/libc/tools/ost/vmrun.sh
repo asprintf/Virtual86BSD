@@ -30,10 +30,11 @@
 # vmrun.sh - on the host: run os-test in V86BSD, with a progress bar, and
 # make the report.  A wrapper round ost.sh and report.sh.
 #
-#   sh vmrun.sh [-m memory] [-s size] [-t seconds] OBJDIR OSTEST WORKDIR
+#   sh vmrun.sh [-m memory] [-s size] [-t seconds] [-S suites] OBJDIR [OSTEST] WORKDIR
 #
 # OBJDIR   what "make buildworld buildkernel OBJDIR=..." built
-# OSTEST   an os-test checkout on the host (it is copied, not changed)
+# OSTEST   an os-test directory on the host (it is copied, not changed);
+#          default regress/os-test, the copy in the tree
 # WORKDIR  an empty or new directory: root/ (the system, with os-test in
 #          /root/os-test), v86bsd.img, vm.log, and in the end
 #          os-test/ (the checkout with out/v86bsd, html/index.html and
@@ -41,6 +42,8 @@
 #   -m       the VM's memory (default 2G)
 #   -s       the image's size in MiB (default 3072)
 #   -t       seconds one test may take (default 120)
+#   -S       the suites to build and run, in quotes (default: all of
+#            misc/suites.list)
 #
 # V86BSD builds the tests itself (c17, its own C library), then runs them,
 # on KVM where there is some.  This script shows build, then run, as
@@ -50,20 +53,23 @@
 # the image is kept, and what is done is not done again.  Everything the
 # VM printed is in WORKDIR/vm.log.
 
-usage() { echo "usage: sh vmrun.sh [-m memory] [-s size] [-t seconds] OBJDIR OSTEST WORKDIR" >&2; exit 2; }
+usage() { echo "usage: sh vmrun.sh [-m memory] [-s size] [-t seconds] [-S suites] OBJDIR [OSTEST] WORKDIR" >&2; exit 2; }
 
-mem=2G size=3072 tmo=120
-while getopts m:s:t: opt; do
+mem=2G size=3072 tmo=120 suites=
+while getopts m:s:t:S: opt; do
 	case $opt in
-	m) mem=$OPTARG ;; s) size=$OPTARG ;; t) tmo=$OPTARG ;; *) usage ;;
+	m) mem=$OPTARG ;; s) size=$OPTARG ;; t) tmo=$OPTARG ;; S) suites=$OPTARG ;; *) usage ;;
 	esac
 done
 shift $((OPTIND - 1))
-[ $# -eq 3 ] || usage
 here=$(pwd)
 abs() { case $1 in /*) echo "$1" ;; *) echo "$here/$1" ;; esac; }
-obj=$(abs "$1") ost=$(abs "$2") work=$(abs "$3")
 top=$(cd "$(dirname "$0")/../../../.." && pwd)
+case $# in
+2) obj=$(abs "$1") ost=$top/regress/os-test work=$(abs "$2") ;;
+3) obj=$(abs "$1") ost=$(abs "$2") work=$(abs "$3") ;;
+*) usage ;;
+esac
 [ -f "$obj/sys/arch/amd64/compile/GENERIC/bsd" ] || [ -f "$obj/bsd" ] || {
 	echo "vmrun: no kernel built in $obj" >&2; exit 1; }
 [ -f "$ost/misc/html.c" ] || { echo "vmrun: $ost is not os-test" >&2; exit 1; }
@@ -87,8 +93,8 @@ mount -uw /
 cd /root/os-test
 TIMEOUT=$tmo
 export TIMEOUT
-sh /usr/src/lib/libc/tools/ost/ost.sh build
-sh /usr/src/lib/libc/tools/ost/ost.sh run
+sh /usr/src/lib/libc/tools/ost/ost.sh build $suites
+sh /usr/src/lib/libc/tools/ost/ost.sh run $suites
 (cd /root/os-test/out && pax -w -x ustar -f /dev/rdisk1 v86bsd)
 echo OST DONE
 RC
