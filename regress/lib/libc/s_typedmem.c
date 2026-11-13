@@ -105,6 +105,20 @@ int main(void)
 	/* too much */
 	errno = 0;
 	CHECK(mmap(0, total + 4096, PROT_READ, MAP_SHARED, fa, 0) == MAP_FAILED && errno == ENOMEM);
+	/* ... and again: the failed attempt must not give the pool's pages to the
+	   system (the first time they went to its free list, the second the
+	   kernel panicked), and the pool must still work */
+	errno = 0;
+	CHECK(mmap(0, total + 4096, PROT_READ, MAP_SHARED, fa, 0) == MAP_FAILED && errno == ENOMEM);
+	CHECK(avail(fa) == a0);
+	p = mmap(0, 64 * K, PROT_READ | PROT_WRITE, MAP_SHARED, fa, 0);
+	CHECK(p != MAP_FAILED);
+	if (p != MAP_FAILED) {
+		memset(p, 'z', 64 * K);
+		CHECK(p[64 * K - 1] == 'z');
+		munmap(p, 64 * K);
+	}
+	CHECK(avail(fa) == a0);
 	/* the other pool */
 	fd = posix_typed_mem_open("ram1", O_RDONLY, POSIX_TYPED_MEM_ALLOCATE);
 	CHECK(fd >= 0 && avail(fd) > 0 && avail(fd) < total);
