@@ -118,13 +118,13 @@ static void run_with_big_stack(void)
 {
     pthread_attr_t attr;
     pthread_t t;
-    size_t sizes[] = { (size_t)1 << 30, (size_t)512 << 20, (size_t)256 << 20, (size_t)64 << 20,
-                       (size_t)16 << 20 };
-    for (size_t i = 0; i < sizeof sizes / sizeof sizes[0]; i++) {
+    /* 512 MB: deep enough for 100000 calls, and the error comes before a
+       1 GB machine runs out of memory */
+    for (size_t size = (size_t)512 << 20; size >= (size_t)16 << 20; size /= 2) {
         if (pthread_attr_init(&attr))
             break;
-        thread_stack = sizes[i];
-        if (!pthread_attr_setstacksize(&attr, sizes[i]) && !pthread_create(&t, &attr, parse_thread, NULL)) {
+        thread_stack = size;
+        if (!pthread_attr_setstacksize(&attr, size) && !pthread_create(&t, &attr, parse_thread, NULL)) {
             pthread_attr_destroy(&attr);
             pthread_join(t, NULL);
             return;

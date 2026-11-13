@@ -81,7 +81,7 @@ conforming program):
   * length(x) for |x| < 1 is scale(x) (1 for 0), as in GNU bc.
   * An assignment in parentheses, "(a = 5)", prints its value.
   * Recursion: the program runs on a thread with a large stack (up to
-    1 GB, falling back to smaller sizes) and the stack use is checked,
+    512 MB, falling back to smaller sizes) and the stack use is checked,
     so very deep recursion (tens of thousands of calls) works and too
     deep recursion is a runtime error rather than a crash.
   * Errors: syntax errors skip to the end of the line; runtime errors
