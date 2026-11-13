@@ -1,0 +1,4 @@
+#include <math.h>
+[SUSv4] define MAXFLOAT;
+[SUSv2] maybe_define function gamma: double gamma(double);
+[SUSv3] maybe_define function scalb: double scalb(double, double);

@@ -1,0 +1,4 @@
+#include <time.h>
+[SUSv2] define CLK_TCK;
+[SUSv4] maybe_define function asctime_r: char *asctime_r(const struct tm *, char *);
+[SUSv4] maybe_define function ctime_r: char *ctime_r(const time_t *, char *);

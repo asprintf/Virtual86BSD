@@ -1,0 +1,2 @@
+#include <fnmatch.h>
+[SUSv3] define FNM_NOSYS;

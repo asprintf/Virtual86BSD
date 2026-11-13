@@ -1,0 +1,5 @@
+#include <utime.h>
+[SUSv4] struct utimbuf;
+[SUSv4] parent struct utimbuf struct_member actime: time_t actime;
+[SUSv4] parent struct utimbuf struct_member modtime: time_t modtime;
+[SUSv4] maybe_define function utime: int utime(const char *, const struct utimbuf *);

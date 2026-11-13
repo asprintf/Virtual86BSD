@@ -16,4 +16,9 @@ uname.out
 basic/*/*
 !basic/*/*.c
 !include/*
+!legacy/*
+!legacy-include/*
+!legacy-basic/*
+legacy-basic/*/*
+!legacy-basic/*/*.c
 susv*

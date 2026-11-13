@@ -1,0 +1,8 @@
+#include <netdb.h>
+[SUSv3] lvalue h_errno: int h_errno;
+[SUSv3] define HOST_NOT_FOUND;
+[SUSv3] define NO_DATA;
+[SUSv3] define NO_RECOVERY;
+[SUSv3] define TRY_AGAIN;
+[SUSv3] maybe_define function gethostbyaddr: struct hostent *gethostbyaddr(const void *, socklen_t, int);
+[SUSv3] maybe_define function gethostbyname: struct hostent *gethostbyname(const char *);

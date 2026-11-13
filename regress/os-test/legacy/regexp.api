@@ -1,0 +1,16 @@
+#include <regexp.h>
+# The program defines INIT, GETC(), PEEKC(), UNGETC(), RETURN() and
+# ERROR() before it includes <regexp.h> (SUSv2's regexp page); these are
+# its EXAMPLES section's, made quiet for -Wall -Wextra.
+% #define INIT char *sp = instring;
+% #define GETC() (*sp++)
+% #define PEEKC() (*sp)
+% #define UNGETC(c) ((void) (c), (void) --sp)
+% #define RETURN(c) return (c);
+% #define ERROR(c) return (void) (c), (char *) 0;
+[SUSv2] maybe_define function compile: char *compile(char *, char *, const char *, int);
+[SUSv2] maybe_define function advance: int advance(const char *, const char *);
+[SUSv2] maybe_define function step: int step(const char *, const char *);
+[SUSv2] external loc1: char *loc1;
+[SUSv2] external loc2: char *loc2;
+[SUSv2] external locs: char *locs;

@@ -1,0 +1,7 @@
+#include <sys/timeb.h>
+[SUSv3] struct timeb;
+[SUSv3] parent struct timeb struct_member time: time_t time;
+[SUSv3] parent struct timeb struct_member millitm: unsigned short millitm;
+[SUSv3] parent struct timeb struct_member timezone: short timezone;
+[SUSv3] parent struct timeb struct_member dstflag: short dstflag;
+[SUSv3] maybe_define function ftime: int ftime(struct timeb *);

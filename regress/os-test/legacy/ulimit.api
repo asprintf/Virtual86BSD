@@ -1,0 +1,4 @@
+#include <ulimit.h>
+[SUSv4] define UL_GETFSIZE;
+[SUSv4] define UL_SETFSIZE;
+[SUSv4] maybe_define function ulimit: long ulimit(int, ...);

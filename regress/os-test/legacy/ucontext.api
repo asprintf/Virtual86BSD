@@ -1,0 +1,13 @@
+#include <ucontext.h>
+[SUSv3] typedef mcontext_t;
+[SUSv3] typedef ucontext_t;
+[SUSv3] parent ucontext_t struct_member uc_link: ucontext_t *uc_link;
+[SUSv3] parent ucontext_t struct_member uc_sigmask: sigset_t uc_sigmask;
+[SUSv3] parent ucontext_t struct_member uc_stack: stack_t uc_stack;
+[SUSv3] parent ucontext_t struct_member uc_mcontext: mcontext_t uc_mcontext;
+[SUSv3] maybe_define function getcontext: int getcontext(ucontext_t *);
+[SUSv3] maybe_define function setcontext: int setcontext(const ucontext_t *);
+# SUSv2 writes the second parameter "(void *)()", which is not C; SUSv3
+# has void (*)(void)
+[SUSv3] maybe_define function makecontext: void makecontext(ucontext_t *, void (*)(void), int, ...);
+[SUSv3] maybe_define function swapcontext: int swapcontext(ucontext_t *, const ucontext_t *);

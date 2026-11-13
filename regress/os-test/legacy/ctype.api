@@ -1,0 +1,5 @@
+#include <ctype.h>
+[SUSv4] maybe_define function isascii: int isascii(int);
+[SUSv4] maybe_define function toascii: int toascii(int);
+[SUSv4] maybe_define function _toupper: int _toupper(int);
+[SUSv4] maybe_define function _tolower: int _tolower(int);

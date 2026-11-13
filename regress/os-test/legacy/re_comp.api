@@ -1,0 +1,3 @@
+#include <re_comp.h>
+[SUSv2] maybe_define function re_comp: char *re_comp(const char *);
+[SUSv2] maybe_define function re_exec: int re_exec(const char *);

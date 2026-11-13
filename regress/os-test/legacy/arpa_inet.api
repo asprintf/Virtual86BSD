@@ -1,0 +1,5 @@
+#include <arpa/inet.h>
+[SUSv2] maybe_define function inet_lnaof: in_addr_t inet_lnaof(struct in_addr);
+[SUSv2] maybe_define function inet_makeaddr: struct in_addr inet_makeaddr(in_addr_t, in_addr_t);
+[SUSv2] maybe_define function inet_netof: in_addr_t inet_netof(struct in_addr);
+[SUSv2] maybe_define function inet_network: in_addr_t inet_network(const char *);

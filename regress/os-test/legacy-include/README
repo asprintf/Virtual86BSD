@@ -1,0 +1,12 @@
+This suite tests whether headers have the declarations of the Single UNIX
+Specification, Version 2 (UNIX 98, _XOPEN_SOURCE 500) that later editions
+removed.
+
+It is V86BSD's, not os-test's (see ../README.V86BSD).  The tests are made
+by ../legacy/gen.sh from the .api files in ../legacy, which were written
+by hand from the text of the editions; each test is marked with the last
+edition that had the declaration (SUSv2, SUSv3 or SUSv4), and where the
+declaration changed between editions, it is the last one's.  They are
+compiled with -D_XOPEN_SOURCE=500 (../misc/try-compile-legacy.sh): a
+declaration that a system has only with its own feature macros
+(_DEFAULT_SOURCE, _GNU_SOURCE ...) is an "extension".

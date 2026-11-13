@@ -1,0 +1,1 @@
+include ../misc/GNUmakefile.suite

@@ -1,0 +1,8 @@
+#include <stdlib.h>
+[SUSv3] maybe_define function ecvt: char *ecvt(double, int, int *, int *);
+[SUSv3] maybe_define function fcvt: char *fcvt(double, int, int *, int *);
+[SUSv3] maybe_define function gcvt: char *gcvt(double, int, char *);
+[SUSv3] maybe_define function mktemp: char *mktemp(char *);
+[SUSv4] maybe_define function rand_r: int rand_r(unsigned int *);
+[SUSv2] maybe_define function ttyslot: int ttyslot(void);
+[SUSv2] maybe_define function valloc: void *valloc(size_t);

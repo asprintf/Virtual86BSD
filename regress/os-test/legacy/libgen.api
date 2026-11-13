@@ -1,0 +1,5 @@
+#include <libgen.h>
+# SUSv2: "(LEGACY)"; __loc1 is "(Used by regex() to report pattern location.)"
+[SUSv2] external __loc1: char *__loc1;
+[SUSv2] maybe_define function regcmp: char *regcmp(const char *, ...);
+[SUSv2] maybe_define function regex: char *regex(const char *, const char *, ...);

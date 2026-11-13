@@ -1,0 +1,3 @@
+#include <setjmp.h>
+[SUSv4] maybe_define function _longjmp: void _longjmp(jmp_buf, int);
+[SUSv4] maybe_define function _setjmp: int _setjmp(jmp_buf);

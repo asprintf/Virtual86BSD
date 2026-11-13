@@ -1,0 +1,2 @@
+#include <regex.h>
+[SUSv3] define REG_ENOSYS;

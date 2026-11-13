@@ -1,0 +1,8 @@
+#include <limits.h>
+[SUSv4] define DBL_DIG;
+[SUSv4] define DBL_MAX;
+[SUSv4] define FLT_DIG;
+[SUSv4] define FLT_MAX;
+[SUSv3] define NL_NMAX;
+[SUSv2] define PASS_MAX;
+[SUSv2] define TMP_MAX;

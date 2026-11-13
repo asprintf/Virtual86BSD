@@ -1,0 +1,2 @@
+#include <wordexp.h>
+[SUSv3] define WRDE_NOSYS;

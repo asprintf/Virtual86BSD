@@ -1,0 +1,8 @@
+This suite tests the behaviour of the interfaces of the Single UNIX
+Specification, Version 2 that later editions removed, in the form of the
+basic suite: one program per function, which exits with 0 when the
+function does what the text of the last edition that had it says.
+
+It is V86BSD's, not os-test's (see ../README.V86BSD).  Each test is marked
+with that edition (SUSv2, SUSv3 or SUSv4).  The declarations themselves
+are tested by the legacy-include suite.

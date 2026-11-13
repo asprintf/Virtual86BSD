@@ -1,0 +1,4 @@
+#include <termios.h>
+[SUSv2] define IUCLC;
+[SUSv2] define OLCUC;
+[SUSv2] define XCASE;

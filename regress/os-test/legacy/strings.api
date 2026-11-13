@@ -1,0 +1,6 @@
+#include <strings.h>
+[SUSv3] maybe_define function bcmp: int bcmp(const void *, const void *, size_t);
+[SUSv3] maybe_define function bcopy: void bcopy(const void *, void *, size_t);
+[SUSv3] maybe_define function bzero: void bzero(void *, size_t);
+[SUSv3] maybe_define function index: char *index(const char *, int);
+[SUSv3] maybe_define function rindex: char *rindex(const char *, int);

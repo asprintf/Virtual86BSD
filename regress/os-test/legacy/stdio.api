@@ -1,0 +1,14 @@
+#include <stdio.h>
+[SUSv2] define L_cuserid;
+[SUSv4] define P_tmpdir;
+[SUSv2] maybe_define function cuserid: char *cuserid(char *);
+# SUSv2's <stdio.h> page has "const char" for the last parameter: a typo,
+# its getopt() page and <unistd.h> have "const char *"
+[SUSv2] maybe_define function getopt: int getopt(int, char * const [], const char *);
+[SUSv2] external optarg: char *optarg;
+[SUSv2] external opterr: int opterr;
+[SUSv2] external optind: int optind;
+[SUSv2] external optopt: int optopt;
+[SUSv2] maybe_define function getw: int getw(FILE *);
+[SUSv2] maybe_define function putw: int putw(int, FILE *);
+[SUSv4] maybe_define function tempnam: char *tempnam(const char *, const char *);

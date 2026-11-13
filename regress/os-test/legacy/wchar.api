@@ -1,0 +1,18 @@
+#include <wchar.h>
+[SUSv4] typedef wctype_t;
+[SUSv4] maybe_define function iswalnum: int iswalnum(wint_t);
+[SUSv4] maybe_define function iswalpha: int iswalpha(wint_t);
+[SUSv4] maybe_define function iswcntrl: int iswcntrl(wint_t);
+[SUSv4] maybe_define function iswdigit: int iswdigit(wint_t);
+[SUSv4] maybe_define function iswgraph: int iswgraph(wint_t);
+[SUSv4] maybe_define function iswlower: int iswlower(wint_t);
+[SUSv4] maybe_define function iswprint: int iswprint(wint_t);
+[SUSv4] maybe_define function iswpunct: int iswpunct(wint_t);
+[SUSv4] maybe_define function iswspace: int iswspace(wint_t);
+[SUSv4] maybe_define function iswupper: int iswupper(wint_t);
+[SUSv4] maybe_define function iswxdigit: int iswxdigit(wint_t);
+[SUSv4] maybe_define function iswctype: int iswctype(wint_t, wctype_t);
+[SUSv4] maybe_define function towlower: wint_t towlower(wint_t);
+[SUSv4] maybe_define function towupper: wint_t towupper(wint_t);
+[SUSv4] maybe_define function wctype: wctype_t wctype(const char *);
+[SUSv3] maybe_define function wcswcs: wchar_t *wcswcs(const wchar_t *, const wchar_t *);

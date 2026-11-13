@@ -12,3 +12,5 @@ regex
 signal
 stdio
 udp
+legacy-include
+legacy-basic

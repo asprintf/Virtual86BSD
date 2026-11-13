@@ -1,0 +1,21 @@
+#include <signal.h>
+[SUSv4] define SIG_HOLD;
+[SUSv4] define SIGPOLL;
+[SUSv4] define SIGPROF;
+[SUSv4] define POLL_IN;
+[SUSv4] define POLL_OUT;
+[SUSv4] define POLL_MSG;
+[SUSv4] define POLL_ERR;
+[SUSv4] define POLL_PRI;
+[SUSv4] define POLL_HUP;
+[SUSv2] struct sigstack;
+[SUSv2] parent struct sigstack struct_member ss_onstack: int ss_onstack;
+[SUSv2] parent struct sigstack struct_member ss_sp: void *ss_sp;
+[SUSv3] maybe_define function bsd_signal: void (*bsd_signal(int, void (*)(int)))(int);
+[SUSv4] maybe_define function sighold: int sighold(int);
+[SUSv4] maybe_define function sigignore: int sigignore(int);
+[SUSv4] maybe_define function siginterrupt: int siginterrupt(int, int);
+[SUSv4] maybe_define function sigpause: int sigpause(int);
+[SUSv4] maybe_define function sigrelse: int sigrelse(int);
+[SUSv4] maybe_define function sigset: void (*sigset(int, void (*)(int)))(int);
+[SUSv2] maybe_define function sigstack: int sigstack(struct sigstack *, struct sigstack *);

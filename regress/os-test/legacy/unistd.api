@@ -1,0 +1,53 @@
+#include <unistd.h>
+# feature-test constants that SUSv2 lets an implementation leave undefined
+# ("If these are undefined, the sysconf() function can be used ...")
+[SUSv2] define _POSIX2_C_VERSION;
+[SUSv4] optional define _POSIX2_FORT_DEV;
+# _XOPEN_XCU_VERSION is in the prose of SUSv2's page, not in its lists
+[SUSv2] define _XOPEN_XCU_VERSION;
+[SUSv2] define _XOPEN_XPG2;
+[SUSv2] define _XOPEN_XPG3;
+[SUSv2] define _XOPEN_XPG4;
+[SUSv3] optional define _XOPEN_LEGACY;
+[SUSv3] optional define _XBS5_ILP32_OFF32;
+[SUSv3] optional define _XBS5_ILP32_OFFBIG;
+[SUSv3] optional define _XBS5_LP64_OFF64;
+[SUSv3] optional define _XBS5_LPBIG_OFFBIG;
+[SUSv3] define _CS_XBS5_ILP32_OFF32_CFLAGS;
+[SUSv3] define _CS_XBS5_ILP32_OFF32_LDFLAGS;
+[SUSv3] define _CS_XBS5_ILP32_OFF32_LIBS;
+[SUSv3] define _CS_XBS5_ILP32_OFF32_LINTFLAGS;
+[SUSv3] define _CS_XBS5_ILP32_OFFBIG_CFLAGS;
+[SUSv3] define _CS_XBS5_ILP32_OFFBIG_LDFLAGS;
+[SUSv3] define _CS_XBS5_ILP32_OFFBIG_LIBS;
+[SUSv3] define _CS_XBS5_ILP32_OFFBIG_LINTFLAGS;
+[SUSv3] define _CS_XBS5_LP64_OFF64_CFLAGS;
+[SUSv3] define _CS_XBS5_LP64_OFF64_LDFLAGS;
+[SUSv3] define _CS_XBS5_LP64_OFF64_LIBS;
+[SUSv3] define _CS_XBS5_LP64_OFF64_LINTFLAGS;
+[SUSv3] define _CS_XBS5_LPBIG_OFFBIG_CFLAGS;
+[SUSv3] define _CS_XBS5_LPBIG_OFFBIG_LDFLAGS;
+[SUSv3] define _CS_XBS5_LPBIG_OFFBIG_LIBS;
+[SUSv3] define _CS_XBS5_LPBIG_OFFBIG_LINTFLAGS;
+[SUSv2] define _SC_2_C_VERSION;
+[SUSv4] define _SC_2_FORT_DEV;
+[SUSv2] define _SC_PASS_MAX;
+[SUSv3] define _SC_XOPEN_LEGACY;
+[SUSv2] define _SC_XOPEN_XCU_VERSION;
+[SUSv3] define _SC_XBS5_ILP32_OFF32;
+[SUSv3] define _SC_XBS5_ILP32_OFFBIG;
+[SUSv3] define _SC_XBS5_LP64_OFF64;
+[SUSv3] define _SC_XBS5_LPBIG_OFFBIG;
+[SUSv2] maybe_define function brk: int brk(void *);
+[SUSv2] maybe_define function sbrk: void *sbrk(intptr_t);
+[SUSv2] maybe_define function chroot: int chroot(const char *);
+[SUSv2] maybe_define function ctermid: char *ctermid(char *);
+[SUSv2] maybe_define function cuserid: char *cuserid(char *);
+[SUSv2] maybe_define function getdtablesize: int getdtablesize(void);
+[SUSv2] maybe_define function getpagesize: int getpagesize(void);
+[SUSv2] maybe_define function getpass: char *getpass(const char *);
+[SUSv3] maybe_define function getwd: char *getwd(char *);
+[SUSv4] maybe_define function setpgrp: pid_t setpgrp(void);
+[SUSv3] maybe_define function ualarm: useconds_t ualarm(useconds_t, useconds_t);
+[SUSv3] maybe_define function usleep: int usleep(useconds_t);
+[SUSv3] maybe_define function vfork: pid_t vfork(void);

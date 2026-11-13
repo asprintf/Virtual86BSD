@@ -1,0 +1,5 @@
+#include <errno.h>
+[SUSv4] define ENODATA;
+[SUSv4] define ENOSR;
+[SUSv4] define ENOSTR;
+[SUSv4] define ETIME;

@@ -1,0 +1,10 @@
+#include <sys/time.h>
+[SUSv4] struct itimerval;
+[SUSv4] parent struct itimerval struct_member it_interval: struct timeval it_interval;
+[SUSv4] parent struct itimerval struct_member it_value: struct timeval it_value;
+[SUSv4] define ITIMER_REAL;
+[SUSv4] define ITIMER_VIRTUAL;
+[SUSv4] define ITIMER_PROF;
+[SUSv4] maybe_define function getitimer: int getitimer(int, struct itimerval *);
+[SUSv4] maybe_define function setitimer: int setitimer(int, const struct itimerval *, struct itimerval *);
+[SUSv4] maybe_define function gettimeofday: int gettimeofday(struct timeval *, void *);

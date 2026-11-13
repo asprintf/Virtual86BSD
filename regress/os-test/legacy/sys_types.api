@@ -1,0 +1,2 @@
+#include <sys/types.h>
+[SUSv3] typedef useconds_t;
