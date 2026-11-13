@@ -628,7 +628,7 @@ void do_signals(struct regs *r) {
   struct proc *p = cur_proc();
   for (;;) {
     if (p->group_exit || (current->pending.set & SIGBIT(SIGKILL)))
-      do_exit(p->group_exit ? p->group_status : SIGKILL);
+      do_group_exit(p->group_exit ? p->group_status : SIGKILL);
     if (p->stopped) {
       stop_here();
       continue;
