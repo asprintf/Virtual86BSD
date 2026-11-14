@@ -331,6 +331,7 @@ OBJS = \
 	$(B)/obj/misc/resource.o \
 	$(B)/obj/misc/revoke.o \
 	$(B)/obj/misc/select.o \
+	$(B)/obj/misc/sethostname.o \
 	$(B)/obj/misc/setpgrp.o \
 	$(B)/obj/misc/streams.o \
 	$(B)/obj/misc/sysctl.o \
@@ -1080,6 +1081,10 @@ $(B)/obj/misc/revoke.o: misc/revoke.c $(HDRS)
 $(B)/obj/misc/select.o: misc/select.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/select.c
+
+$(B)/obj/misc/sethostname.o: misc/sethostname.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/sethostname.c
 
 $(B)/obj/misc/setpgrp.o: misc/setpgrp.c $(HDRS)
 	mkdir -p $(B)/obj/misc

@@ -38,6 +38,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include "syscall.h"
 
 struct ifreq_min {               /* struct ifreq: name, then a union */
 	char name[IF_NAMESIZE];
@@ -54,7 +55,7 @@ unsigned if_nametoindex(const char *name)
 	strcpy(r.name, name);
 	if ((fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0)) < 0)
 		return 0;
-	ok = ioctl(fd, SIOCGIFINDEX, &r) == 0;
+	ok = __sys3(SYS_ioctl, fd, SIOCGIFINDEX, &r) == 0;
 	close(fd);
 	return ok ? (unsigned)r.u.index : 0;
 }
@@ -67,7 +68,7 @@ char *if_indextoname(unsigned index, char *name)
 	r.u.index = (int)index;
 	if ((fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0)) < 0)
 		return 0;
-	ok = ioctl(fd, SIOCGIFNAME, &r) == 0;
+	ok = __sys3(SYS_ioctl, fd, SIOCGIFNAME, &r) == 0;
 	close(fd);
 	if (!ok) {
 		if (errno == ENODEV)

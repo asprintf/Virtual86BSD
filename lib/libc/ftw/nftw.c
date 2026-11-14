@@ -189,8 +189,10 @@ int nftw(const char *path, fn_t fn, int fdlimit, int flags)
 }
 
 /* ftw: links followed as by stat(); a dangling one is FTW_SL */
-int ftw(const char *path, ofn_t fn, int ndirs)
+int __ftw(const char *path, ofn_t fn, int ndirs)
 {
 	if (ndirs < 1) { errno = EINVAL; return -1; }
 	return run(path, 0, fn, 0);
 }
+
+extern __typeof(__ftw) ftw __attribute__((weak, alias("__ftw")));

@@ -45,6 +45,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include "syscall.h"
 
 struct ent {
 	struct ifaddrs ifa;   /* first: the list is the array */
@@ -69,15 +70,15 @@ int getifaddrs(struct ifaddrs **out)
 	for (i = 1; i <= MAXIF; i++) {
 		memset(&r, 0, sizeof r);
 		r.ifr_index = i;
-		if (ioctl(fd, SIOCGIFNAME, &r) < 0)
+		if (__sys3(SYS_ioctl, fd, SIOCGIFNAME, &r) < 0)
 			break;
 		memcpy(names[nif], r.ifr_name, IFNAMSIZ);
 		names[nif][IFNAMSIZ - 1] = 0;
-		if (ioctl(fd, SIOCGIFFLAGS, &r) < 0)
+		if (__sys3(SYS_ioctl, fd, SIOCGIFFLAGS, &r) < 0)
 			goto fail;
 		flags[nif] = (unsigned short)r.ifr_flags;
 		memset(hw[nif], 0, 6);
-		if (ioctl(fd, SIOCGIFHWADDR, &r) == 0 && r.ifr_hwaddr.sa_family == 1)
+		if (__sys3(SYS_ioctl, fd, SIOCGIFHWADDR, &r) == 0 && r.ifr_hwaddr.sa_family == 1)
 			memcpy(hw[nif], r.ifr_hwaddr.sa_data, 6);
 		nif++;
 	}
@@ -86,14 +87,14 @@ int getifaddrs(struct ifaddrs **out)
 		free(conf);
 		ic.ifc_len = 0;
 		ic.ifc_buf = 0;
-		if (ioctl(fd, SIOCGIFCONF, &ic) < 0)
+		if (__sys3(SYS_ioctl, fd, SIOCGIFCONF, &ic) < 0)
 			goto fail;
 		n = ic.ifc_len;
 		if (!(conf = malloc((size_t)n + sizeof *conf)))
 			goto nomem;
 		ic.ifc_len = n;
 		ic.ifc_req = conf;
-		if (ioctl(fd, SIOCGIFCONF, &ic) < 0)
+		if (__sys3(SYS_ioctl, fd, SIOCGIFCONF, &ic) < 0)
 			goto fail;
 	} while (ic.ifc_len > n && ++tries < 5);
 	naddr = (int)(ic.ifc_len > n ? n : ic.ifc_len) / (int)sizeof *conf;
@@ -127,12 +128,12 @@ int getifaddrs(struct ifaddrs **out)
 			memcpy(&e[k].addr, &conf[j].ifr_addr, sizeof conf[j].ifr_addr);
 			a->ifa_addr = (struct sockaddr *)&e[k].addr;
 			r = conf[j]; /* (the address selects the answer) */
-			if (ioctl(fd, SIOCGIFNETMASK, &r) == 0) {
+			if (__sys3(SYS_ioctl, fd, SIOCGIFNETMASK, &r) == 0) {
 				memcpy(&e[k].mask, &r.ifr_addr, sizeof r.ifr_addr);
 				a->ifa_netmask = (struct sockaddr *)&e[k].mask;
 			}
 			r = conf[j];
-			if (ioctl(fd, SIOCGIFBRDADDR, &r) == 0) {
+			if (__sys3(SYS_ioctl, fd, SIOCGIFBRDADDR, &r) == 0) {
 				memcpy(&e[k].dst, &r.ifr_broadaddr, sizeof r.ifr_broadaddr);
 				a->ifa_dstaddr = (struct sockaddr *)&e[k].dst;
 			}

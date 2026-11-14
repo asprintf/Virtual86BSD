@@ -105,7 +105,7 @@ int setlogmask(int m)
 	return old;
 }
 
-void vsyslog(int pri, const char *fmt, va_list ap)
+void __vsyslog(int pri, const char *fmt, va_list ap)
 {
 	char fmt2[512], msg[1024], hdr[128], line[1200];
 	const char *t = tag;
@@ -183,6 +183,8 @@ void syslog(int pri, const char *fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
-	vsyslog(pri, fmt, ap);
+	__vsyslog(pri, fmt, ap);
 	va_end(ap);
 }
+
+extern __typeof(__vsyslog) vsyslog __attribute__((weak, alias("__vsyslog")));
