@@ -112,6 +112,16 @@ test (inside V86BSD).  The stages, each from a fresh copy of the sources
 The grammars of awk, bc and sh are generated afresh by V86BSD's yacc and
 lex in every stage.
 
+When the host's compiler is gcc (the default when `gcc` is on the `PATH`;
+`CC=c17` builds as above), gcc builds the world: stage 0 as before, then
+stage 1 compiles the C library and every utility with `gcc -O2 -Wall -Wextra`
+against V86BSD's headers (`lib/libc/tools/libc-cc`), and the same compiler
+builds stage 3, `/sbin/init` and the kernel (`make gnu` in its compile
+directory).  There is no stage 2 and no check: stage 2 is stage 1, which
+runs on the host.  c17 stays the system's compiler and the `c17` utility of
+POSIX.1-2024; it is built and installed like the other programs.  Inside V86BSD, which has no gcc, the build is the
+one above.
+
 `root/` then gets the directories of hier(7), `/etc` (from `etc`), empty
 `/dev` and `/proc` (the kernel and `chroot.sh` mount file systems there),
 these sources in `/usr/src`, and the host's

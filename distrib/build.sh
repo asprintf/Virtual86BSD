@@ -55,8 +55,9 @@
 #   -n            all programs statically linked (default: those in /bin and
 #                 /sbin are, the rest are linked dynamically)
 #
-# In the environment: CC (the host's compiler: without it c17, c99 or cc, the
-# first there is), MAKE, and BUILDER=user@host, the name in the kernel's banner
+# In the environment: CC (the host's compiler: without it gcc, c17, c99 or cc,
+# the first there is; gcc builds the whole world in one stage instead of the
+# three stages of c17, see below), MAKE, and BUILDER=user@host, the name in the kernel's banner
 # (without it that of this machine; to compare two builds, give both the same),
 # and ROOTPW, root's password for `distribution' (without it the tree's: root).
 #
@@ -117,6 +118,11 @@
 #            inside it, "cd /usr/src && make buildworld buildkernel" runs the
 #            same stages with CC=c17.
 #
+# With gcc as the host's compiler there is no stage 2 of its own and no check: stage 1
+# is built by gcc (libc-cc, against the headers and library of the stage), stage 2
+# is stage 1 (a link), and stage 3, init and the kernel (make gnu) are gcc's too.
+# $obj/worldcc keeps which compiler built the world, for buildkernel.
+#
 # Time: a few minutes for all of it (c17 is quick; most of it is make
 # and the shell).
 
@@ -154,11 +160,11 @@ unset MAKEFLAGS MFLAGS DESTDIR OBJDIR KERNCONF HOSTCC BUILDFLAGS BINDIR PREFIX \
 	RELROOT IMGROOT IMAGE IMGSIZE BOOTFLAGS
 [ -n "$BUILDER" ] && export BUILDER || unset BUILDER
 
-# the host's C compiler: CC, or the first of c17 (POSIX.1-2024), c99
+# the host's C compiler: CC, or the first of gcc, c17 (POSIX.1-2024), c99
 # (POSIX.1-2008) and cc on PATH
 cc=$CC
 if [ -z "$cc" ]; then
-	for c in c17 c99 cc; do
+	for c in gcc c17 c99 cc; do
 		if command -v $c >/dev/null 2>&1; then cc=$c; break; fi
 	done
 	cc=${cc:-cc}
@@ -168,6 +174,20 @@ log=$obj/log
 W=$obj/world
 R1=$obj/stage1/root
 R2=$obj/stage2/root
+
+# who builds the world: gcc, when that is the host's compiler (then there is
+# no stage 2: its place is stage 1, which gcc built), else c17 itself in
+# three stages.  $obj/worldcc keeps it for the kernel and the image.
+cc1=${cc%% *}
+case ${cc1##*/} in gcc*) detected=gcc ;; *) detected=c17 ;; esac
+worldcc=$detected
+[ ! -f "$obj/worldcc" ] || read worldcc < "$obj/worldcc"
+setworld() {
+	hostworld=false wdesc="c17 of stage 2"
+	if [ "$worldcc" = gcc ]; then hostworld=true wdesc=gcc; fi
+}
+setworld
+WCFLAGS=${WCFLAGS:--std=c17 -D_DEFAULT_SOURCE= -O2 -pipe -fPIE -fno-stack-protector -fcf-protection=none -Wall -Wextra -Wno-unused-parameter -Wno-missing-field-initializers}
 
 say() { printf '%s\n' "== $*"; [ ! -d "$obj" ] || printf '%s\n' "== $*" >> "$log"; }
 fail() { echo "build: $* (see $log)" >&2; exit 1; }
@@ -254,8 +274,17 @@ stage() {
 	abi=linux
 	[ -z "$forsystem" ] || abi=native
 	mkdir -p "$to/usr"
+	# the compiler of the stage: c17 (the tools') or gcc through libc-cc, which
+	# links with this stage's library (LIBC_LIB, LIBC_INCLUDE; a dynamic
+	# program asks for /usr/lib/libc.so)
+	ccname=c17 wcc=c17
+	if $hostworld; then
+		ccname=gcc wcc="sh $SRC/lib/libc/tools/libc-cc gcc $WCFLAGS"
+		LIBC_INCLUDE=$to/usr/include LIBC_LIB=$to/usr/lib LIBC_INTERP=/usr/lib/libc.so
+		export LIBC_INCLUDE LIBC_LIB LIBC_INTERP
+	fi
 	if [ -z "$libcdir" ]; then
-		say "stage $n: the C library, with c17 from $tools"
+		say "stage $n: the C library, with $ccname${tools:+ (tools from $tools)}"
 		copy include "$S/include"
 		abi_headers "$S/include" $abi
 		copy lib/libc "$S/lib/libc"
@@ -287,8 +316,8 @@ stage() {
 		C17_LIBC=$to/usr
 		export PATH C17_LIBDIR C17_LIBC
 		cd "$libcdir" &&
-		"$tools/make" CCNAME=c17 TARGET_ABI=$abi SYSCALL_H="$SRC/sys/sys/syscall.h" &&
-		"$tools/make" CCNAME=c17 TARGET_ABI=$abi SYSCALL_H="$SRC/sys/sys/syscall.h" PREFIX=/usr DESTDIR="$to" install
+		"$tools/make" CCNAME=$ccname TARGET_ABI=$abi SYSCALL_H="$SRC/sys/sys/syscall.h" &&
+		"$tools/make" CCNAME=$ccname TARGET_ABI=$abi SYSCALL_H="$SRC/sys/sys/syscall.h" PREFIX=/usr DESTDIR="$to" install
 	) >> "$log" 2>&1 || fail "stage $n: the C library"
 	say "stage $n: libcurses (X/Open Curses, terminfo, termcap)"
 	copy lib/libcurses "$S/lib/libcurses"
@@ -298,9 +327,9 @@ stage() {
 		C17_LIBC=$to/usr
 		export PATH C17_LIBDIR C17_LIBC
 		cd "$S/lib/libcurses" &&
-		"$tools/make" CC=c17 PREFIX=/usr DESTDIR="$to" install
+		LIBC_LINK=static "$tools/make" CC="$wcc" PREFIX=/usr DESTDIR="$to" install
 	) >> "$log" 2>&1 || fail "stage $n: libcurses"
-	say "stage $n: the utilities, with c17 on V86BSD's C library ($how)"
+	say "stage $n: the utilities, with $ccname on V86BSD's C library ($how)"
 	copy bin "$S/bin"
 	copy sbin "$S/sbin"
 	# fsck_ffs builds the driver'"'"'s bit map code from ../../sys/ufs/ffs
@@ -317,14 +346,15 @@ stage() {
 		export PATH C17_LIBDIR C17_LIBC
 		for d in bin sbin libexec usr.bin usr.sbin; do
 			if [ -z "$forsystem" ]; then
-				bindir=BINDIR=/usr/bin lf=	# (all together, for the next stage)
+				bindir=BINDIR=/usr/bin lf= lk=static	# (all together, for the next stage)
 			elif $static || { [ "$d" != usr.bin ] && [ "$d" != usr.sbin ]; }; then
-				bindir= lf="-B static -s"	# (BINDIR: /bin, /sbin, /usr/bin, /usr/sbin)
+				bindir= lf="-B static -s" lk=static	# (BINDIR: /bin, /sbin, /usr/bin, /usr/sbin)
 			else
-				bindir= lf=-s
+				bindir= lf=-s lk=dynamic
 			fi
+			$hostworld && lf=${lf#-B static }	# (gcc: LIBC_LINK says it)
 			(cd "$S/$d" &&
-			"$tools/make" CC=c17 LDFLAGS="$lf" RTC17="$rtc17" LIBC=v86bsd YACC=yacc LEX=lex $bindir \
+			LIBC_LINK=$lk "$tools/make" CC="$wcc" LDFLAGS="$lf" RTC17="$rtc17" LIBC=v86bsd YACC=yacc LEX=lex $bindir \
 				PREFIX=/usr DESTDIR="$to" install) || exit 1
 		done
 	) >> "$log" 2>&1 || fail "stage $n: the utilities"
@@ -337,6 +367,9 @@ do_world() {
 	rm -rf "$obj/stage0" "$obj/stage1" "$obj/stage2" "$obj/stage3" "$obj/world" "$obj"/stage*.profile
 	mkdir -p "$obj" || exit 1
 	: > "$log"
+	worldcc=$detected
+	setworld
+	echo "$worldcc" > "$obj/worldcc"
 	start=$(date +%s 2>/dev/null)
 
 	# ------------------------------------------------------------ stage 0
@@ -361,45 +394,57 @@ do_world() {
 		fail "stage 0: config"
 
 	# ------------------------------------------------------------ stages 1, 2
-	stage 1 "$S0/bin" "$S0/lib/c17" "$R1"
-	stage 2 "$R1/usr/bin" "$R1/usr/lib/c17" "$R2"
+	if $hostworld; then
+		# gcc builds the world once, with no c17 to prove (stage 2 is stage 1)
+		stage 1 "$S0/bin" "$S0/lib/c17" "$R1"
+		ln -s stage1 "$obj/stage2" || fail "stage 2"
+	else
+		stage 1 "$S0/bin" "$S0/lib/c17" "$R1"
+		stage 2 "$R1/usr/bin" "$R1/usr/lib/c17" "$R2"
 
-	# ------------------------------------------------------------ check
-	say "check: stage 1 and stage 2 compared"
-	differ=0 same=0
-	(cd "$R2/usr" && find . -type f) | sort > "$obj/files"
-	while IFS= read -r f; do
-		a=$R1/usr/$f b=$R2/usr/$f
-		[ -f "$a" ] || { echo "only in stage 2: $f" >> "$log"; differ=$((differ + 1)); continue; }
-		case $f in
-		*.a)
-			# archives hold dates: their members are compared
-			if [ "$(ar t "$a")" = "$(ar t "$b")" ]; then
-				ok=true
-				for m in $(ar t "$a"); do
-					[ "$(ar p "$a" "$m" | cksum)" = "$(ar p "$b" "$m" | cksum)" ] || { ok=false; break; }
-				done
-			else ok=false; fi ;;
-		*)
-			if cmp -s "$a" "$b"; then ok=true; else ok=false; fi ;;
-		esac
-		if $ok; then same=$((same + 1)); else differ=$((differ + 1)); echo "differs: $f" >> "$log"; fi
-	done < "$obj/files"
-	say "check: $same files identical, $differ different"
-	[ "$differ" = 0 ] || fail "stage 1 and stage 2 differ"
+		# ------------------------------------------------------------ check
+		say "check: stage 1 and stage 2 compared"
+		differ=0 same=0
+		(cd "$R2/usr" && find . -type f) | sort > "$obj/files"
+		while IFS= read -r f; do
+			a=$R1/usr/$f b=$R2/usr/$f
+			[ -f "$a" ] || { echo "only in stage 2: $f" >> "$log"; differ=$((differ + 1)); continue; }
+			case $f in
+			*.a)
+				# archives hold dates: their members are compared
+				if [ "$(ar t "$a")" = "$(ar t "$b")" ]; then
+					ok=true
+					for m in $(ar t "$a"); do
+						[ "$(ar p "$a" "$m" | cksum)" = "$(ar p "$b" "$m" | cksum)" ] || { ok=false; break; }
+					done
+				else ok=false; fi ;;
+			*)
+				if cmp -s "$a" "$b"; then ok=true; else ok=false; fi ;;
+			esac
+			if $ok; then same=$((same + 1)); else differ=$((differ + 1)); echo "differs: $f" >> "$log"; fi
+		done < "$obj/files"
+		say "check: $same files identical, $differ different"
+		[ "$differ" = 0 ] || fail "stage 1 and stage 2 differ"
+	fi
 
 	# ------------------------------------------------------------ stage 3
 	stage 3 "$R2/usr/bin" "$R2/usr/lib/c17" "$W" native
 
 	# ------------------------------------------------------------ init
-	say "init: /sbin/init, with c17 of stage 2 (statically linked)"
+	say "init: /sbin/init, with $wdesc (statically linked)"
 	(
 		PATH=$R2/usr/bin:$PATH
 		C17_LIBDIR=$R2/usr/lib/c17
 		C17_LIBC=$W/usr     # (statically linked)
 		export PATH C17_LIBDIR C17_LIBC
+		initcc="c17 -B static"
+		if $hostworld; then
+			LIBC_INCLUDE=$W/usr/include LIBC_LIB=$W/usr/lib LIBC_LINK=static
+			export LIBC_INCLUDE LIBC_LIB LIBC_LINK
+			initcc="sh $SRC/lib/libc/tools/libc-cc gcc $WCFLAGS"
+		fi
 		cd "$obj/stage3/sbin/init" &&
-		"$R2/usr/bin/make" C17="c17 -B static" DESTDIR="$W" install
+		"$R2/usr/bin/make" C17="$initcc" DESTDIR="$W" install
 	) >> "$log" 2>&1 || fail "init"
 
 	# ------------------------------------------------------------ terminfo
@@ -427,7 +472,7 @@ do_kernel() {
 	# own C library and ABI), not by c17 of the world, whose library is native
 	hostcc=$(command -v "${cc%% *}") || { echo "build: no C compiler $cc (set CC)" >&2; exit 1; }
 	case $cc in *\ *) hostcc="$hostcc ${cc#* }" ;; esac
-	say "kernel: bsd ($kernconf), with c17 of stage 2"
+	say "kernel: bsd ($kernconf), with $wdesc"
 	copy sys "$obj/sys"
 	# (what a build in the tree left in the compile directories is not kept)
 	rm -rf "$obj/sys/arch/amd64/compile/$kernconf"
@@ -441,7 +486,11 @@ do_kernel() {
 		cd "$obj/sys/arch/amd64/conf" &&
 		"$R2/usr/bin/config" "$kernconf" &&
 		cd "../compile/$kernconf" &&
-		"$R2/usr/bin/make" HOSTCC="$hostcc" all
+		if $hostworld; then
+			"$R2/usr/bin/make" KINC="$W/usr/include" gnu
+		else
+			"$R2/usr/bin/make" HOSTCC="$hostcc" all
+		fi
 	) >> "$log" 2>&1 || fail "the kernel"
 	say "kernel: $obj/sys/arch/amd64/compile/$kernconf/bsd"
 }

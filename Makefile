@@ -67,7 +67,8 @@
 #   ROOTPW=word      root's password in the new root (default: root, as in
 #                    etc/master.passwd; needs openssl on the host; it must
 #                    not contain a single quote)
-#   HOSTCC=cc        the host's compiler for stage 0 (default: c17, c99 or cc)
+#   HOSTCC=cc        the host's compiler (default: gcc, c17, c99 or cc); gcc builds
+#                    the whole world, c17 the three stages of README.md
 #   BUILDFLAGS=-n    all programs statically linked
 #
 # The work is done by distrib/build.sh; bootstrap.sh, mkdisk.sh, boot.sh and
