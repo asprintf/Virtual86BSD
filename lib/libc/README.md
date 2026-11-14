@@ -100,13 +100,18 @@ with `__NEED_<type>` macros.  The compiler supplies `<stddef.h>`,
 them); the library supplies the rest.
 
 **Namespace.**  A strictly conforming ISO C program may define any name
-ISO C does not reserve, e.g. its own `strdup` or `environ`.  So no object
-file defining an ISO C function may define or (transitively) reference a
-POSIX name: internal calls use `__`-prefixed names, and ISO and POSIX
-functions live in separate files.  POSIX data aliases such as `environ`
-are weak.  `tools/check-namespace.sh` enforces this on every `make check`.
-No GNU attributes (weak aliases, visibility) are used in C, since c17
-does not implement them; where an alias is needed it is made in assembly.
+ISO C does not reserve, e.g. its own `strdup` or `environ`; a POSIX
+application, any name POSIX does not reserve either, e.g. its own `ioctl`,
+`ftw` or `vsyslog`.  So no object file defining an ISO C function may
+define or (transitively) reference a POSIX name, and none defining a POSIX
+function any other name that is not reserved: internal calls use
+`__`-prefixed names (`__sys3(SYS_ioctl, ...)`, not `ioctl()`), and
+functions of other editions or of no standard live in files of their own
+or, when they share state, are weak aliases of a `__` function (`vsyslog`,
+`ftw`).  POSIX data aliases such as `environ` are weak.
+`tools/check-namespace.sh` enforces this on every `make check` (the POSIX
+names are those of `regress/os-test/include`) and
+`regress/lib/libc/s_nsclash.c` checks it from the program's side.
 
 **Close-on-fork.**  POSIX.1-2024's `O_CLOFORK`/`FD_CLOFORK` go to the
 kernel when it has them (V86BSD's kernel; found out once, by whether
