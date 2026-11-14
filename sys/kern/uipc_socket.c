@@ -159,7 +159,7 @@ static void sock_close(struct sock *s) {
       p->peer = NULL;
       p->state = SS_DISCONNECTED;
       p->shut_rd = true; /* reads see end of file once the data is read */
-      if (!list_empty(&s->rq))
+      if (!list_empty(&s->rq) || (is_inet(s) && s->linger[0] && !s->linger[1])) /* (unread data, or a zero linger: a reset) */
         p->error = ECONNRESET;
       sock_wake(p);
       sock_put(s); /* the peer's reference to us */
