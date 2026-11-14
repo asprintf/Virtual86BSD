@@ -114,3 +114,10 @@ types; `-n` keeps the host's copy that `bootstrap.sh` made).
       stty rows 50 columns 160         # what your window has (on the host: stty size)
 
   Resizing the window later isn't seen (a serial line carries no size).
+
+## gcc
+
+[gcc](gcc/HOWTO.md) is not a port that builds inside the system yet: it is
+a cross toolchain, GNU gcc 16.2.0 and binutils 2.47 for the target
+`x86_64-v86bsd`, built on the host (`sh ports/gcc/build.sh`).  C and C++
+programs it makes run in V86BSD, static and dynamic.

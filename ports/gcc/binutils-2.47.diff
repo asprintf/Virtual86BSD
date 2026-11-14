@@ -1,0 +1,43 @@
+--- a/config.sub
++++ b/config.sub
+@@ -2075,6 +2075,7 @@
+ 	| ohos* \
+ 	| onefs* \
+ 	| openbsd* \
++	| v86bsd* \
+ 	| openedition* \
+ 	| openstep* \
+ 	| os108* \
+--- a/bfd/config.bfd
++++ b/bfd/config.bfd
+@@ -1351,7 +1351,7 @@
+     targ_selvecs="i386_elf32_fbsd_vec i386_coff_vec i386_pei_vec x86_64_pe_vec x86_64_pei_vec i386_elf32_vec x86_64_elf64_vec"
+     want64=true
+     ;;
+-  x86_64-*-netbsd* | x86_64-*-openbsd*)
++  x86_64-*-netbsd* | x86_64-*-openbsd* | x86_64-*-v86bsd*)
+     targ_defvec=x86_64_elf64_vec
+     targ_selvecs="i386_elf32_vec i386_coff_vec i386_pei_vec x86_64_pe_vec x86_64_pei_vec"
+     want64=true
+--- a/ld/configure.tgt
++++ b/ld/configure.tgt
+@@ -958,6 +958,9 @@
+ 			targ_extra_libpath=elf_i386_sol2
+ 			targ_extra_emuls="elf_x86_64 elf_i386"
+ 			;;
++x86_64-*-v86bsd*)	targ_emul=elf_x86_64
++			targ_extra_emuls="elf_i386"
++			;;
+ x86_64-*-netbsd* | x86_64-*-openbsd*)
+ 			targ_emul=elf_x86_64
+ 			targ_extra_emuls="elf_i386"
+--- a/gas/configure.tgt
++++ b/gas/configure.tgt
+@@ -232,6 +232,7 @@
+   i386-*-fuchsia*)			fmt=elf ;;
+   i386-*-haiku*)			fmt=elf em=haiku ;;
+   i386-*-genode*)			fmt=elf ;;
++  i386-*-v86bsd*)			fmt=elf ;;
+   i386-*-bsd*)				fmt=aout em=386bsd ;;
+   i386-*-netbsd*-gnu* | \
+   i386-*-knetbsd*-gnu | \

@@ -1,0 +1,122 @@
+--- a/config.sub
++++ b/config.sub
+@@ -1730,7 +1730,7 @@
+ 	     | nindy* | vxsim* | vxworks* | ebmon* | hms* | mvs* \
+ 	     | clix* | riscos* | uniplus* | iris* | isc* | rtu* | xenix* \
+ 	     | mirbsd* | netbsd* | dicos* | openedition* | ose* \
+-	     | bitrig* | openbsd* | secbsd* | solidbsd* | libertybsd* | os108* \
++	     | bitrig* | openbsd* | secbsd* | solidbsd* | libertybsd* | os108* | v86bsd* \
+ 	     | ekkobsd* | freebsd* | riscix* | lynxos* | os400* \
+ 	     | bosx* | nextstep* | cxux* | aout* | elf* | oabi* \
+ 	     | ptx* | coff* | ecoff* | winnt* | domain* | vsta* \
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -2054,6 +2054,12 @@
+ 	gas=yes
+ 	gnu_ld=yes
+ 	;;
++x86_64-*-v86bsd*)
++	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h gnu-user.h glibc-stdint.h \
++		 i386/x86-64.h i386/gnu-user-common.h i386/gnu-user64.h v86bsd.h"
++	gas=yes
++	gnu_ld=yes
++	;;
+ x86_64-*-openbsd*)
+ 	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h"
+ 	tm_file="${tm_file} openbsd.h openbsd-stdint.h openbsd-libpthread.h i386/x86-64.h i386/openbsdelf.h"
+--- /dev/null
++++ b/gcc/config/v86bsd.h
+@@ -0,0 +1,46 @@
++/* Target definitions for Virtual/86 BSD on x86-64: an ELF system whose C
++   library is shaped like musl's (crt1.o, Scrt1.o, rcrt1.o; libc.so is also
++   the dynamic linker).
++   Copyright (C) 2026 asprintf
++
++This file is part of GCC.
++
++GCC is free software; you can redistribute it and/or modify it under
++the terms of the GNU General Public License as published by the Free
++Software Foundation; either version 3, or (at your option) any later
++version.
++
++GCC is distributed in the hope that it will be useful, but WITHOUT ANY
++WARRANTY; without even the implied warranty of MERCHANTABILITY or
++FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++for more details.
++
++You should have received a copy of the GNU General Public License
++along with GCC; see the file COPYING3.  If not see
++<http://www.gnu.org/licenses/>.  */
++
++#define GNU_USER_LINK_EMULATION32 "elf_i386"
++#define GNU_USER_LINK_EMULATION64 "elf_x86_64"
++#define GNU_USER_LINK_EMULATIONX32 "elf32_x86_64"
++
++#define GNU_USER_DYNAMIC_LINKER "/usr/lib/libc.so"
++#define GNU_USER_DYNAMIC_LINKER32 GNU_USER_DYNAMIC_LINKER
++#define GNU_USER_DYNAMIC_LINKER64 GNU_USER_DYNAMIC_LINKER
++#define GNU_USER_DYNAMIC_LINKERX32 GNU_USER_DYNAMIC_LINKER
++
++#undef TARGET_OS_CPP_BUILTINS
++#define TARGET_OS_CPP_BUILTINS()		\
++  do						\
++    {						\
++      builtin_define ("__V86BSD__");		\
++      builtin_define ("__ELF__");		\
++      builtin_define_std ("unix");		\
++      builtin_assert ("system=v86bsd");		\
++      builtin_assert ("system=unix");		\
++      builtin_assert ("system=posix");		\
++    }						\
++  while (0)
++
++/* The C++ library wants the extensions of the C library's headers.  */
++#undef CPLUSPLUS_CPP_SPEC
++#define CPLUSPLUS_CPP_SPEC "-D_GNU_SOURCE %(cpp)"
+--- a/libgcc/config.host
++++ b/libgcc/config.host
+@@ -297,6 +297,10 @@
+   tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic t-eh-dw2-dip t-slibgcc t-slibgcc-fuchsia"
+   extra_parts="crtbegin.o crtend.o"
+   ;;
++*-*-v86bsd*)
++  tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic t-slibgcc t-slibgcc-gld t-slibgcc-elf-ver"
++  extra_parts="crtbegin.o crtbeginS.o crtbeginT.o crtend.o crtendS.o"
++  ;;
+ *-*-linux* | frv-*-*linux* | *-*-kfreebsd*-gnu | *-*-gnu* | *-*-kopensolaris*-gnu | *-*-uclinuxfdpiceabi)
+   tmake_file="$tmake_file t-crtstuff-pic t-libgcc-pic t-eh-dw2-dip t-slibgcc t-slibgcc-gld t-slibgcc-elf-ver t-linux"
+   extra_parts="crtbegin.o crtbeginS.o crtbeginT.o crtend.o crtendS.o"
+@@ -783,6 +787,11 @@
+ 	;;
+ x86_64-*-openbsd*)
+ 	;;
++x86_64-*-v86bsd*)
++	extra_parts="$extra_parts crtprec32.o crtprec64.o crtprec80.o crtfastmath.o"
++	tmake_file="${tmake_file} i386/t-crtpc t-crtfm i386/t-crtstuff t-dfprules"
++	tm_file="${tm_file} i386/elf-lib.h"
++	;;
+ i[34567]86-*-linux*)
+ 	extra_parts="$extra_parts crtprec32.o crtprec64.o crtprec80.o crtfastmath.o"
+ 	tmake_file="${tmake_file} i386/t-crtpc t-crtfm i386/t-crtstuff t-dfprules"
+--- a/libstdc++-v3/crossconfig.m4
++++ b/libstdc++-v3/crossconfig.m4
+@@ -174,7 +174,7 @@
+ 
+     GCC_CHECK_TLS
+     ;;
+-  *-linux* | *-uclinux* | *-gnu* | *-kfreebsd*-gnu | *-cygwin* | *-solaris*)
++  *-linux* | *-uclinux* | *-gnu* | *-kfreebsd*-gnu | *-cygwin* | *-solaris* | *-v86bsd*)
+     GLIBCXX_CHECK_COMPILER_FEATURES
+     GLIBCXX_CHECK_LINKER_FEATURES
+     GLIBCXX_CHECK_MATH_SUPPORT
+--- a/libstdc++-v3/configure
++++ b/libstdc++-v3/configure
+@@ -39204,7 +39204,7 @@
+ 
+   fi
+     ;;
+-  *-linux* | *-uclinux* | *-gnu* | *-kfreebsd*-gnu | *-cygwin* | *-solaris*)
++  *-linux* | *-uclinux* | *-gnu* | *-kfreebsd*-gnu | *-cygwin* | *-solaris* | *-v86bsd*)
+ 
+   # All these tests are for C++; save the language and the compiler flags.
+   # The CXXFLAGS thing is suspicious, but based on similar bits previously

@@ -1,0 +1,9 @@
+int128: 68719 265454
+long double: 0.333333333333333
+ctor: 1, tls main: 5
+thread tls: 12 (main still 5)
+setjmp ok
+vla sorted: 0 0 1 ... 9
+strlen 99
+double: 3.142857
+destructor ran

@@ -1,0 +1,9 @@
+static ctor
+sorted: 1 3 5 9
+caught: boom
+out_of_range ok
+unique 2
+derived dyncast ok
+1.41421
+in thread
+static dtor
