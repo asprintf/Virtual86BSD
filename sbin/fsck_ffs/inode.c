@@ -562,14 +562,14 @@ pinode(ino_t ino)
 	if (p)
 		printf("MTIME=%12.12s %4.4s ", &p[4], &p[20]);
 	else
-		printf("MTIME=%lld ", t);
+		printf("MTIME=%lld ", (long long)t);
 }
 
 void
 blkerror(ino_t ino, char *type, daddr_t blk)
 {
 
-	pfatal("%lld %s I=%llu", blk, type, (unsigned long long)ino);
+	pfatal("%lld %s I=%llu", (long long)blk, type, (unsigned long long)ino);
 	printf("\n");
 	switch (GET_ISTATE(ino)) {
 

@@ -175,8 +175,7 @@ static void string_initializer(Token **rest, Token *tok, Initializer *init) {
 /* Designator lookup: finds member "name" in ty, descending into
    anonymous members; returns the path as a list. */
 static Member *find_designated_member(Type *ty, Token *name, Member **path, int *depth) {
-  int idx = 0;
-  for (Member *m = struct_members(ty); m; m = m->next, idx++) {
+  for (Member *m = struct_members(ty); m; m = m->next) {
     if (m->name && m->name->len == name->len && !memcmp(m->name->loc, name->loc, name->len)) {
       path[(*depth)++] = m;
       return m;

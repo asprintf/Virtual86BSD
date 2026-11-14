@@ -134,7 +134,7 @@ static int parse_address(const char **pp, long *v)
         have = 1;
     }
     for (;;) {
-        long n;
+        long n = 0;
         const char *q = p;
         while (*q == ' ' || *q == '\t')
             q++;

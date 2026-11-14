@@ -434,7 +434,7 @@ static void put(const unsigned char *p, size_t n)
 
 static void spaces(size_t n)
 {
-    static const unsigned char sp[64] =
+    static const unsigned char sp[] =
         "                                                                ";
     while (n > 0) {
         size_t k = n < sizeof sp ? n : sizeof sp;

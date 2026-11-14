@@ -341,7 +341,7 @@ static void bad_patch(const char *what)
 
 static void parse_unified(struct hunk *h)
 {
-    long a, b, c, d;
+    long a = 0, b = 0, c = 0, d = 0;
     is_unified_header(P(pl), &a, &b, &c, &d);
     pl++;
     h->kind = 'u';

@@ -100,6 +100,7 @@ NORETURN void error_tok(Token *tok, char *fmt, ...) PRINTF(2, 3);
 void warn_tok(Token *tok, char *fmt, ...) PRINTF(2, 3);
 void note_tok(Token *tok, char *fmt, ...) PRINTF(2, 3);
 NORETURN void internal_error(char *file, int line, char *msg);
+#undef unreachable
 #define unreachable() internal_error(__FILE__, __LINE__, "unreachable code reached")
 
 /* ------------------------------------------------------------- tokenize */

@@ -179,7 +179,7 @@ dumpfs(int fd, const char *name)
 			    afs.fs_magic, ctime(&fstime));
 		else
 			printf("magic\t%x (FFS2)\ttime\t%lld\n",
-			    afs.fs_magic, fstime);
+			    afs.fs_magic, (long long)fstime);
 		printf("superblock location\t%jd\tid\t[ %x %x ]\n",
 		    (intmax_t)afs.fs_sblockloc, afs.fs_id[0], afs.fs_id[1]);
 		printf("ncg\t%u\tsize\t%jd\tblocks\t%jd\n",
@@ -194,7 +194,7 @@ dumpfs(int fd, const char *name)
 			    afs.fs_magic, ctime(&fstime));
 		else
 			printf("magic\t%x (FFS1)\ttime\t%lld\n",
-			    afs.fs_magic, fstime);
+			    afs.fs_magic, (long long)fstime);
 		printf("id\t[ %x %x ]\n", afs.fs_id[0], afs.fs_id[1]);
 		i = 0;
 		if (afs.fs_postblformat != FS_42POSTBLFMT) {
@@ -357,7 +357,7 @@ dumpcg(const char *name, int fd, unsigned int c)
 			    acg.cg_magic, (intmax_t)cur, ct);
 		else
 			printf("magic\t%x\ttell\t%jx\ttime\t%lld\n",
-			    acg.cg_magic, (intmax_t)cur, cgtime);
+			    acg.cg_magic, (intmax_t)cur, (long long)cgtime);
 		printf("cgx\t%u\tndblk\t%u\tniblk\t%u\tinitiblk %u\n",
 		    acg.cg_cgx, acg.cg_ndblk, acg.cg_ffs2_niblk,
 		    acg.cg_initediblk);
@@ -374,7 +374,7 @@ dumpcg(const char *name, int fd, unsigned int c)
 			printf("magic\t%x\ttell\t%jx\ttime\t%lld\n",
 			    afs.fs_postblformat == FS_42POSTBLFMT ?
 			    ((struct ocg *)&acg)->cg_magic : acg.cg_magic,
-			    (intmax_t)cur, cgtime);
+			    (intmax_t)cur, (long long)cgtime);
 		printf("cgx\t%u\tncyl\t%d\tniblk\t%d\tndblk\t%u\n",
 		    acg.cg_cgx, acg.cg_ncyl, acg.cg_niblk, acg.cg_ndblk);
 		break;

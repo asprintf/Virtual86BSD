@@ -310,7 +310,7 @@ checkfilesys(char *filesys, char *mntpt, long auxdata, int child)
 	n_ffree = sblock.fs_cstotal.cs_nffree;
 	n_bfree = sblock.fs_cstotal.cs_nbfree;
 	pwarn("%lld files, %lld used, %lld free ",
-	    n_files, (long long)n_blks,
+	    (long long)n_files, (long long)n_blks,
 	    (long long)(n_ffree + sblock.fs_frag * n_bfree));
 	printf("(%lld frags, %lld blocks, %lld.%lld%% fragmentation)\n",
 	    (long long)n_ffree, (long long)n_bfree,
@@ -319,7 +319,7 @@ checkfilesys(char *filesys, char *mntpt, long auxdata, int child)
 	    sblock.fs_dsize) % 10));
 	if (debug &&
 	    (n_files -= maxino - ROOTINO - sblock.fs_cstotal.cs_nifree))
-		printf("%lld files missing\n", n_files);
+		printf("%lld files missing\n", (long long)n_files);
 	if (debug) {
 		n_blks += sblock.fs_ncg *
 			(cgdmin(&sblock, 0) - cgsblock(&sblock, 0));

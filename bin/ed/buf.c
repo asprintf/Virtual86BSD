@@ -239,7 +239,7 @@ long read_file(const char *name, long after, int is_cmd)
     Buf b = { 0 };
     char tmp[65536];
     size_t n;
-    long count = 0, nl = 0;
+    long count = 0;
     Line **v = NULL;
     long nv = 0, capv = 0;
     if (is_cmd)
@@ -280,7 +280,6 @@ long read_file(const char *name, long after, int is_cmd)
             }
             v[nv++] = line_new(b.s + st, end - st);
             st = i + 1;
-            nl++;
         }
     }
     if (nv)

@@ -611,8 +611,8 @@ Type *declspec(Token **rest, Token *tok, VarAttr *attr) {
   if (attr && has_alignas) {
     attr->align = align;
   }
-  if (attr && attr->is_noreturn)
-    ;
+  if (attr && attr->is_noreturn) {
+  }
 
   if (qual & Q_ATOMIC) {
     if (is_array(ty) || is_func(ty))
@@ -948,8 +948,8 @@ static Type *declarator2(Token **rest, Token *tok, Type *ty, Token **name, Token
   tok = skip_attributes(tok);
   ty = type_suffix(rest, tok, ty, oldstyle);
   tok = *rest;
-  if (tok->kind == TK_KEYWORD && (equal(tok, "__asm__") || equal(tok, "__asm")))
-    ;
+  if (tok->kind == TK_KEYWORD && (equal(tok, "__asm__") || equal(tok, "__asm"))) {
+  }
   return ty;
 }
 

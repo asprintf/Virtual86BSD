@@ -125,7 +125,7 @@ char *shell_echo(const char *text)
 char *expand_file_arg(const char *arg, int multi, char ***listp, int *np)
 {
     Str lit, sh;
-    int need_shell = 0, ntok = 0;
+    int need_shell = 0;
     char **list = NULL;
     int n = 0;
     const char *p = skipbl(arg);
@@ -171,7 +171,6 @@ char *expand_file_arg(const char *arg, int multi, char ***listp, int *np)
             list[n++] = xstrdup(lit.s ? lit.s : "");
             str_clear(&lit);
             str_addc(&sh, ' ');
-            ntok++;
             continue;
         }
         if (strchr("~{[*?$\"`'", c))
