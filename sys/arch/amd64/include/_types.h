@@ -42,7 +42,6 @@ typedef long __int64_t;
 typedef unsigned long __uint64_t;
 typedef long __intptr_t;
 typedef unsigned long __uintptr_t;
-typedef unsigned long __size_t;
 typedef __int64_t __ssize_t;
 typedef __int64_t __off_t;
 typedef __int32_t __pid_t;
