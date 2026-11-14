@@ -143,6 +143,7 @@ HDRS = \
 	../../include/unistd.h \
 	../../include/utime.h \
 	../../include/utmpx.h \
+	../../include/varargs.h \
 	../../include/wchar.h \
 	../../include/wctype.h \
 	../../include/wordexp.h \
