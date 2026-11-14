@@ -31,6 +31,7 @@ HOSTCC = c17
 GNU_CFLAGS = -std=c11 -O2 -Wall -Wextra -Wno-unused-parameter -Wno-cast-function-type -ffreestanding -fno-pic \
 	-mcmodel=kernel -mno-red-zone -mno-sse -mno-mmx -mno-80387 -fno-stack-protector \
 	-fno-asynchronous-unwind-tables -fno-omit-frame-pointer -D_KERNEL -I$(S) -I.
+KINC = /usr/include # (the headers of the C library: for gnu)
 GNU_LDFLAGS = -nostdlib -z max-page-size=4096 -z noexecstack --no-warn-rwx-segments -T
 QEMU = qemu-system-x86_64
 QEMUFLAGS = -m 512M -nographic -no-reboot
@@ -49,7 +50,8 @@ bsd.elf: $(OBJS) $(S)/arch/%MACHINE%/conf/ld.script
 	$(LD) $(LDFLAGS) $(S)/arch/%MACHINE%/conf/ld.script -o $@ $(OBJS)
 
 gnu:
-	$(MAKE) CC=gcc CFLAGS="$(GNU_CFLAGS)" AS=as LD=ld LDFLAGS="$(GNU_LDFLAGS)" HOSTCC=cc all
+	$(MAKE) CC=gcc CFLAGS="$(GNU_CFLAGS) -nostdinc -isystem $(KINC) -isystem `gcc -print-file-name=include`" \
+		AS=as LD=ld LDFLAGS="$(GNU_LDFLAGS)" HOSTCC=cc all
 
 mkimage: $(S)/arch/%MACHINE%/stand/mkimage/mkimage.c
 	$(HOSTCC) -o $@ $(S)/arch/%MACHINE%/stand/mkimage/mkimage.c
