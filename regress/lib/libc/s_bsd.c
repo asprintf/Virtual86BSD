@@ -5,8 +5,10 @@
 #include <sys/wait.h>
 #include <err.h>
 #include <errno.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
+#include <syslog.h>
 #include <unistd.h>
 #include "out.h"
 
@@ -40,6 +42,8 @@ static void f_errx(void) { setprogname("prog"); errx(4, "bad"); }
 static void f_errc(void) { setprogname("prog"); errno = 0; errc(5, ENOENT, "c %d", 1); }
 static void f_warnc(void) { setprogname("prog"); warnc(EACCES, "w"); exit(6); }
 static void f_warn_null(void) { setprogname("prog"); errno = EPERM; warn(NULL); exit(9); }
+static void vs(const char *fmt, ...) { va_list ap; va_start(ap, fmt); vsyslog(LOG_INFO, fmt, ap); va_end(ap); }
+static void f_vsyslog(void) { openlog("bsdt", LOG_PERROR, LOG_USER); errno = ENOENT; vs("%s %d: %m", "hello", 42); exit(10); }
 
 int main(void)
 {
@@ -63,6 +67,9 @@ int main(void)
 	CHECK(strcmp(b, "prog: c 1: No such file or directory\n") == 0);
 	CHECK(capture(f_warnc, b, sizeof b) == 6);
 	CHECK(strcmp(b, "prog: w: Permission denied\n") == 0);
+
+	CHECK(capture(f_vsyslog, b, sizeof b) == 10);
+	CHECK(strcmp(b, "bsdt: hello 42: No such file or directory\n") == 0);
 
 	setprogname("a/b/c");
 	CHECK(strcmp(getprogname(), "c") == 0);
