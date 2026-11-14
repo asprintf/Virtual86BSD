@@ -112,7 +112,9 @@ static const struct super_ops proc_sops;
 extern char kernel_cmdline[];
 extern char uts_nodename[65];
 
-#define PINO(pid, sub) ((ino_t)(pid) << 12 | (sub))
+/* pid 0 (kernel_task) is 1 << 12 | sub, above the R_* numbers */
+#define PINO(pid, sub) (((ino_t)(pid) + 1) << 12 | (sub))
+#define PINO_PID(ino) ((pid_t)((ino) >> 12) - 1)
 
 static struct proc *proc_of(pid_t pid) {
   struct proc *p = find_proc(pid);
@@ -150,7 +152,7 @@ static int proc_read_inode(struct inode *i) {
     i->gid = t->proc->cred.egid;
     i->mode = sub == P_DIR ? S_IFDIR | 0555 : S_IFREG | 0444;
   } else {
-    pid_t pid = (pid_t)(ino >> 12);
+    pid_t pid = PINO_PID(ino);
     int sub = (int)(ino & 0xfff);
     struct proc *p = proc_of(pid);
     if (!p)
@@ -200,7 +202,7 @@ static ino_t parent_of(ino_t ino) {
     return R_ROOT;
   }
   int sub = (int)(ino & 0xfff);
-  pid_t pid = (pid_t)(ino >> 12);
+  pid_t pid = PINO_PID(ino);
   if (sub == P_DIR)
     return R_ROOT;
   if (sub == P_TASKDIR)
@@ -225,7 +227,7 @@ static struct inode *proc_lookup(struct inode *dir, const char *name, size_t len
           return ERR_PTR(-ENOENT);
         pid = pid * 10 + (name[i] - '0');
       }
-      if (pid > 0 && proc_of((pid_t)pid))
+      if (len > 0 && proc_of((pid_t)pid))
         return iget(dir->sb, PINO(pid, P_DIR));
     }
     return ERR_PTR(-ENOENT);
@@ -237,7 +239,7 @@ static struct inode *proc_lookup(struct inode *dir, const char *name, size_t len
         return iget(dir->sb, (d & ~0xfffUL) | (ino_t)te[k].sub);
     return ERR_PTR(-ENOENT);
   }
-  pid_t pid = (pid_t)(d >> 12);
+  pid_t pid = PINO_PID(d);
   int sub = (int)(d & 0xfff);
   if (sub == P_TASKDIR && len < 8) {
     long tid = 0;
@@ -295,14 +297,14 @@ static int proc_readdir(struct file *f, struct dir_ctx *ctx) {
       return 0;
     /* processes, by increasing pid: position 100000 + pid */
     for (;;) {
-      pid_t last = f->pos >= 100000 ? (pid_t)(f->pos - 100000) : 0;
-      pid_t next = 0;
+      pid_t last = f->pos >= 100000 ? (pid_t)(f->pos - 100000) : -1;
+      pid_t next = -1;
       list_for_each(p, &all_procs) {
         struct proc *pr = list_entry(p, struct proc, all_link);
-        if (pr->state != P_DEAD && pr->pid > last && (!next || pr->pid < next))
+        if (pr->state != P_DEAD && pr->pid > last && (next < 0 || pr->pid < next))
           next = pr->pid;
       }
-      if (!next)
+      if (next < 0)
         return 0;
       char n[12];
       int len = snprintf(n, sizeof(n), "%d", next);
@@ -321,21 +323,21 @@ static int proc_readdir(struct file *f, struct dir_ctx *ctx) {
     }
     return 0;
   }
-  pid_t pid = (pid_t)(d >> 12);
+  pid_t pid = PINO_PID(d);
   int sub = (int)(d & 0xfff);
   struct proc *p = proc_of(pid);
   if (!p)
     return 0;
   if (sub == P_TASKDIR) {
     for (;;) {
-      pid_t last = f->pos >= 100000 ? (pid_t)(f->pos - 100000) : 0;
-      pid_t next = 0;
+      pid_t last = f->pos >= 100000 ? (pid_t)(f->pos - 100000) : -1;
+      pid_t next = -1;
       list_for_each(q, &p->threads) {
         struct task *t = list_entry(q, struct task, thread_link);
-        if (t->tid > last && (!next || t->tid < next))
+        if (t->tid > last && (next < 0 || t->tid < next))
           next = t->tid;
       }
-      if (!next)
+      if (next < 0)
         return 0;
       char n[12];
       int len = snprintf(n, sizeof(n), "%d", next);
@@ -379,7 +381,7 @@ static ssize_t proc_readlink(struct inode *i, char *buf, size_t n) {
   else if (ino == R_MOUNTS)
     strcpy(tmp, "self/mounts");
   else {
-    struct proc *p = proc_of((pid_t)(ino >> 12));
+    struct proc *p = proc_of(PINO_PID(ino));
     int sub = (int)(ino & 0xfff);
     if (!p)
       return -ENOENT;
@@ -463,6 +465,8 @@ static char state_char(struct proc *p) {
   bool sleeping = true;
   list_for_each(q, &p->threads) {
     struct task *t = list_entry(q, struct task, thread_link);
+    if (t->is_kthread && t->tid == 0)
+      continue; /* the idle task is always running */
     if (t->state == T_RUNNING)
       return 'R';
     if (t->state == T_UNINTERRUPTIBLE)
@@ -620,7 +624,7 @@ static int make_text(struct inode *i, struct sbuf *s) {
     th = find_task((pid_t)((ino & ~TBIT) >> 12));
     p = th ? th->proc : NULL;
   } else
-    p = proc_of((pid_t)(ino >> 12));
+    p = proc_of(PINO_PID(ino));
   if (!p)
     return -ESRCH;
   int sub = (int)(ino & 0xfff);
@@ -638,7 +642,7 @@ static int make_text(struct inode *i, struct sbuf *s) {
     }
     struct tty *tt = p->ctty;
     sb_printf(s, "%d (%s) %c %d %d %d %lu %d %u ", th ? th->tid : p->pid, p->comm, state_char(p),
-              p == init_proc ? 0 : p->parent->pid, p->pgid, p->sid, tty_nr(p), tt ? tt->pgrp : -1, 0x400000U);
+              p->parent->pid, p->pgid, p->sid, tty_nr(p), tt ? tt->pgrp : -1, 0x400000U);
     sb_printf(s, "0 0 0 0 %lu %lu %lu %lu %d %d %d 0 %lu %lu %lu %lu ", p->utime * 100 / HZ, p->stime * 100 / HZ,
               p->cutime * 100 / HZ, p->cstime * 100 / HZ, t0 && task_prio(t0) ? -1 - task_prio(t0) : 20 + p->nice,
               p->nice, nthreads, p->start_time / 10000000UL, vsize(mm), mm ? mm->rss : 0, RLIM_INFINITY);
@@ -657,7 +661,7 @@ static int make_text(struct inode *i, struct sbuf *s) {
     }
     struct cred *c = &p->cred;
     sb_printf(s, "Name:\t%s\nUmask:\t%04o\nState:\t%s\nTgid:\t%d\nPid:\t%d\nPPid:\t%d\n", p->comm, p->umask, st,
-              p->pid, p->pid, p == init_proc ? 0 : p->parent->pid);
+              p->pid, p->pid, p->parent->pid);
     sb_printf(s, "Uid:\t%u\t%u\t%u\t%u\nGid:\t%u\t%u\t%u\t%u\nGroups:\t", c->uid, c->euid, c->suid, c->fsuid,
               c->gid, c->egid, c->sgid, c->fsgid);
     for (int k = 0; k < c->ngroups; k++)
@@ -774,7 +778,7 @@ static ssize_t proc_write(struct file *f, const char *buf, size_t n, off_t *pos)
   (void)pos;
   ino_t ino = f->ino->ino;
   if (ino >= R_LAST && (ino & 0xfff) == P_COMM) {
-    struct proc *p = proc_of((pid_t)(ino >> 12));
+    struct proc *p = proc_of(PINO_PID(ino));
     if (!p)
       return -ESRCH;
     char c[16];
@@ -796,7 +800,7 @@ static void proc_put(struct inode *i) { (void)i; }
 static const struct inode_ops proc_dir_iops = {.lookup = proc_lookup};
 static int proc_follow(struct inode *i, struct path *out) {
   ino_t ino = i->ino;
-  struct proc *p = proc_of((pid_t)(ino >> 12));
+  struct proc *p = proc_of(PINO_PID(ino));
   int sub = (int)(ino & 0xfff);
   if (!p)
     return -ENOENT;
