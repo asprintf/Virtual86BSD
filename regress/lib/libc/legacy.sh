@@ -114,6 +114,19 @@ stackaddr|P:199506:200809|#include <pthread.h>
 int main(void) { pthread_attr_t a; void *p; return pthread_attr_setstackaddr(&a, 0) + pthread_attr_getstackaddr(&a, &p); }
 concurrency|X|#include <pthread.h>
 int main(void) { return pthread_setconcurrency(0) + pthread_getconcurrency(); }
+ftw|X|#include <ftw.h>
+static int f(const char *p, const struct stat *s, int t) { return p == 0 || s == 0 || t == FTW_NS; }
+int main(void) { return ftw("/", f, 1); }
+stropts|X|#include <stropts.h>
+int main(void) { struct strbuf b; return isastream(0) + getmsg(0, &b, &b, 0) + getpmsg(0, &b, &b, 0, 0) + putmsg(0, &b, &b, 0) + putpmsg(0, &b, &b, 0, 0) + fattach(0, "/") + fdetach("/") + ioctl(0, I_FIND, "x") + FMNAMESZ + MSG_ANY + S_INPUT; }
+xti|X5|#include <fcntl.h>
+#include <xti.h>
+int main(void) { struct t_info i; return t_open("/dev/tcp", O_RDWR, &i) + T_COTS_ORD + t_errno + T_IOV_MAX + XTI_GENERIC; }
+varargs|X5|#include <varargs.h>
+#ifndef va_dcl
+#error no va_dcl
+#endif
+int main(void) { va_list ap; (void)ap; return 0; }
 hostby|P:200112:200809+X6|#include <netdb.h>
 int main(void) { return !gethostbyname("x") + !gethostbyaddr("", 0, 0) + h_errno + HOST_NOT_FOUND + NO_DATA + NO_RECOVERY + TRY_AGAIN; }
 inetclass|X5|#include <arpa/inet.h>

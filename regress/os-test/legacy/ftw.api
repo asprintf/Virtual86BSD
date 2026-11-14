@@ -1,0 +1,2 @@
+#include <ftw.h>
+[SUSv4] maybe_define function ftw: int ftw(const char *, int (*)(const char *, const struct stat *, int), int);

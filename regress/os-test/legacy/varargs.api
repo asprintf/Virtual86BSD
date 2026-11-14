@@ -1,0 +1,7 @@
+#include <varargs.h>
+[SUSv2] typedef va_list;
+[SUSv2] define va_alist;
+[SUSv2] define va_dcl;
+[SUSv2] define va_start;
+[SUSv2] define va_arg;
+[SUSv2] define va_end;
