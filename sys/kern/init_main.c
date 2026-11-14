@@ -35,12 +35,14 @@
 #include <sys/file.h>
 #include <sys/buf.h>
 #include <sys/conf.h>
+#include <sys/reboot.h>
 #include <uvm/uvm.h>
 #include <net/if_var.h>
 #include <machine/cpu.h>
 
 extern char _kernel_end[];
 char kernel_cmdline[512];
+int boothowto;
 static uint64_t ranges[64], reserved[32];
 static int nranges, nreserved;
 
@@ -55,12 +57,8 @@ static void parse_multiboot(uint32_t magic, uint64_t mbi) {
   if (magic != 0x2BADB002)
     panic("not started by a multiboot loader (magic %#x)", magic);
   uint32_t flags = rd32(mbi);
-  if (flags & 4) {
-    const char *c = P2V((uint64_t)rd32(mbi + 16));
-    size_t n = strnlen(c, sizeof(kernel_cmdline) - 1);
-    memcpy(kernel_cmdline, c, n);
-    kernel_cmdline[n] = 0;
-  }
+  if (flags & 4)
+    bootargs_init(P2V((uint64_t)rd32(mbi + 16)));
   reserved[nreserved++] = PAGE_DOWN(mbi);
   reserved[nreserved++] = PAGE_UP(mbi + 120);
   if (flags & 8) {
@@ -126,6 +124,29 @@ static bool cmdline_flag(const char *name) {
       s++;
   }
   return false;
+}
+
+/* the loader's arguments: the words `-letters' are the boot flags of
+   <sys/reboot.h>, the rest (name=value, ro, rw) is read by cmdline_get */
+void bootargs_init(const char *args) {
+  size_t n = strnlen(args, sizeof(kernel_cmdline) - 1);
+  memcpy(kernel_cmdline, args, n);
+  kernel_cmdline[n] = 0;
+  boothowto = 0;
+  for (const char *s = kernel_cmdline; *s;) {
+    while (*s == ' ')
+      s++;
+    if (*s == '-') {
+      for (s++; *s && *s != ' '; s++) {
+        if (*s == 's')
+          boothowto |= RB_SINGLE;
+        else
+          printf("boot flag -%c is not supported\n", *s);
+      }
+    }
+    while (*s && *s != ' ')
+      s++;
+  }
 }
 
 /* the root: root= on the command line, else the `root on' of the
@@ -217,7 +238,7 @@ static long run_init(void *arg) {
   }
   envp[ne] = NULL;
   char init[128];
-  bool single = cmdline_flag("-s");
+  bool single = (boothowto & RB_SINGLE) != 0;
   const char *tries[] = {NULL, "/sbin/init", "/etc/init", "/bin/init", "/bin/sh"};
   if (cmdline_get("init", init, sizeof(init)))
     tries[0] = init;

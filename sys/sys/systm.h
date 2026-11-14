@@ -64,6 +64,12 @@ extern char cpu_model[64]; /* the processor's brand string, set by cpu_attach */
 extern int maxproc, maxfiles, argmax; /* kern_proc.c, kern_descrip.c, kern_exec.c */
 void loadavg_init(void);
 NORETURN void panic(const char *fmt, ...);
+
+/* what the loader gave the kernel (kern/init_main.c); MD start-up calls
+   bootargs_init with the argument string */
+extern char kernel_cmdline[];
+extern int boothowto; /* RB_* of <sys/reboot.h> */
+void bootargs_init(const char *args);
 extern int panic_reboot_wait_time; /* kern.panic_reboot_wait_time */
 
 /* assertions, on with "option DIAGNOSTIC" (-DDIAGNOSTIC); KDASSERT is the

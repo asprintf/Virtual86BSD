@@ -309,7 +309,9 @@ the image, the entry point and `_kernel_end`; the Multiboot header is in a
 section `.boot`, which c17 (and `kernel.ld` for ld) puts first, and
 `mkimage` makes the flat image from the program headers either way.
 
-Kernel command line (`-append`): `root=/dev/disk0s1` (default: the
+Kernel command line (`-append`): boot flags as the BSDs have them, `-s`
+(single-user mode; `boothowto` has `RB_SINGLE`; a letter the kernel does not
+know is reported and ignored), and `root=/dev/disk0s1` (default: the
 `root on` of the configuration, GENERIC: disk0s1),
 `rootfstype=ext2` (default ffs), `ro`, `rw` (an FFS root is read-only until rc has checked it), `init=/path`; `ip=dhcp` (default when there is a
 card; it configures the first one), `ip=off` or `ip=ADDR/PREFIX[,GATEWAY[,DNS]]`; `tym=NAME:SIZE,...`
