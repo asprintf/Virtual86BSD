@@ -99,6 +99,20 @@ int main(void)
 	CHECK(write(c, "x", 1) == -1 && (errno == EPIPE || errno == ECONNRESET));
 	close(c);
 
+	/* closed with a zero linger: the peer's read fails with ECONNRESET */
+	{
+		struct linger g = { 1, 0 };
+		struct sockaddr_in sb = v4("127.0.0.1", p);
+		int c3 = socket(AF_INET, SOCK_STREAM, 0), a3;
+		CHECK(connect(c3, (struct sockaddr *)&sb, sizeof sb) == 0);
+		a3 = accept(l, NULL, NULL);
+		CHECK(a3 >= 0);
+		CHECK(setsockopt(a3, SOL_SOCKET, SO_LINGER, &g, sizeof g) == 0);
+		close(a3);
+		CHECK(read(c3, buf, sizeof buf) == -1 && errno == ECONNRESET);
+		close(c3);
+	}
+
 	/* the port is taken; SO_REUSEADDR does not get round a listener */
 	u1 = socket(AF_INET, SOCK_STREAM, 0);
 	sa = v4("127.0.0.1", p);
