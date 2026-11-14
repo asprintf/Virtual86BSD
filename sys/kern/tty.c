@@ -51,6 +51,7 @@
 #define IMAXBEL 0020000
 #define IUTF8 0040000
 #define OPOST 0000001
+#define OLCUC 0000002
 #define ONLCR 0000004
 #define OCRNL 0000010
 #define ONOCR 0000020
@@ -64,6 +65,7 @@
 #define CLOCAL 0004000
 #define ISIG 0000001
 #define ICANON 0000002
+#define XCASE 0000004
 #define ECHO 0000010
 #define ECHOE 0000020
 #define ECHOK 0000040
@@ -138,6 +140,38 @@ static void tty_defaults(struct tty *t) {
   waitq_init(&t->wq);
 }
 
+/* XCASE (SVR4's termio, for a terminal with capitals only), output: what is
+   written after a backslash for c (capitals stay; ` | ~ { } \ are written as
+   \' \! \^ \( \) \\), or 0 */
+static char xcase_out(char c) {
+  if (c >= 'A' && c <= 'Z')
+    return c;
+  switch (c) {
+  case '`': return '\'';
+  case '|': return '!';
+  case '~': return '^';
+  case '{': return '(';
+  case '}': return ')';
+  case '\\': return '\\';
+  }
+  return 0;
+}
+
+/* input: what a backslash and c stand for, or 0 */
+static char xcase_in(char c) {
+  if (c >= 'a' && c <= 'z')
+    return (char)(c - 'a' + 'A');
+  switch (c) {
+  case '\'': return '`';
+  case '!': return '|';
+  case '^': return '~';
+  case '(': return '{';
+  case ')': return '}';
+  case '\\': return '\\';
+  }
+  return 0;
+}
+
 /* ---- output ---- */
 
 static void out_raw(struct tty *t, const char *s, size_t n) {
@@ -163,10 +197,18 @@ static void out_proc(struct tty *t, const char *s, size_t n) {
     return;
   }
   size_t start = 0;
+  bool xc = L(t, XCASE) && L(t, ICANON);
   for (size_t i = 0; i < n; i++) {
     char c = s[i];
+    char rb[3], e;
     const char *rep = NULL;
-    if (c == '\n' && (t->t.oflag & ONLCR))
+    if (xc && (e = xcase_out(c))) {
+      rb[0] = '\\', rb[1] = e, rb[2] = 0;
+      rep = rb;
+    } else if (c >= 'a' && c <= 'z' && (t->t.oflag & OLCUC)) {
+      rb[0] = (char)(c - 'a' + 'A'), rb[1] = 0;
+      rep = rb;
+    } else if (c == '\n' && (t->t.oflag & ONLCR))
       rep = "\r\n";
     else if (c == '\r' && (t->t.oflag & OCRNL))
       rep = "\n";
@@ -225,6 +267,8 @@ static size_t char_width(struct tty *t, char c) {
   (void)t;
   if (c == '\t')
     return 0; /* handled by recomputation */
+  if (L(t, XCASE) && L(t, ICANON) && (t->t.oflag & OPOST) && xcase_out(c))
+    return 2;
   if ((unsigned char)c < 32 || c == 0177)
     return L(t, ECHOCTL) ? 2 : 0;
   if (((unsigned char)c & 0xc0) == 0x80 && I(t, IUTF8))
@@ -264,10 +308,19 @@ static void erase_one(struct tty *t) {
     out_raw(t, "\b \b", 3);
 }
 
+static void line_put(struct tty *t, char c) {
+  if (t->linelen < TTY_BUF - 1)
+    t->line[t->linelen++] = c;
+  if (L(t, ECHO))
+    echo_char(t, c);
+}
+
 void tty_input(struct tty *t, char c) {
   random_mix((uint64_t)(unsigned char)c ^ rdtsc64());
   if (I(t, ISTRIP))
     c &= 0x7f;
+  if (I(t, IUCLC) && c >= 'A' && c <= 'Z')
+    c = (char)(c - 'A' + 'a');
   if (c == '\r') {
     if (I(t, IGNCR))
       return;
@@ -313,20 +366,36 @@ void tty_input(struct tty *t, char c) {
     }
   }
   if (L(t, ICANON)) {
+    bool literal = false; /* made by a backslash and another character (XCASE) */
+    if (L(t, XCASE)) {
+      if (t->xcase_esc) {
+        char r = xcase_in(c);
+        t->xcase_esc = false;
+        if (r) {
+          c = r;
+          literal = true;
+        } else
+          line_put(t, '\\'); /* the backslash stays */
+      } else if (c == '\\') {
+        t->xcase_esc = true;
+        return;
+      }
+    } else
+      t->xcase_esc = false;
     if (L(t, IEXTEN) && (uint8_t)c == cc[VLNEXT] && cc[VLNEXT] && false)
       return;
-    if ((uint8_t)c == cc[VERASE] && cc[VERASE]) {
+    if (!literal && (uint8_t)c == cc[VERASE] && cc[VERASE]) {
       erase_one(t);
       return;
     }
-    if (L(t, IEXTEN) && (uint8_t)c == cc[VWERASE] && cc[VWERASE]) {
+    if (!literal && L(t, IEXTEN) && (uint8_t)c == cc[VWERASE] && cc[VWERASE]) {
       while (t->linelen && (t->line[t->linelen - 1] == ' ' || t->line[t->linelen - 1] == '\t'))
         erase_one(t);
       while (t->linelen && t->line[t->linelen - 1] != ' ' && t->line[t->linelen - 1] != '\t')
         erase_one(t);
       return;
     }
-    if ((uint8_t)c == cc[VKILL] && cc[VKILL]) {
+    if (!literal && (uint8_t)c == cc[VKILL] && cc[VKILL]) {
       if (L(t, ECHO) && L(t, ECHOKE) && L(t, ECHOE)) {
         while (t->linelen)
           erase_one(t);
@@ -340,7 +409,7 @@ void tty_input(struct tty *t, char c) {
       }
       return;
     }
-    if (L(t, IEXTEN) && (uint8_t)c == cc[VREPRINT] && cc[VREPRINT]) {
+    if (!literal && L(t, IEXTEN) && (uint8_t)c == cc[VREPRINT] && cc[VREPRINT]) {
       if (L(t, ECHO)) {
         echo_char(t, c);
         out_proc(t, "\n", 1);
@@ -348,15 +417,15 @@ void tty_input(struct tty *t, char c) {
       }
       return;
     }
-    if ((uint8_t)c == cc[VEOF] && cc[VEOF]) {
+    if (!literal && (uint8_t)c == cc[VEOF] && cc[VEOF]) {
       push_line(t, t->line, t->linelen);
       t->linelen = 0;
       wake_up(&t->rq);
       poll_wake();
       return;
     }
-    bool eol = c == '\n' || ((uint8_t)c == cc[VEOL] && cc[VEOL]) ||
-               (L(t, IEXTEN) && (uint8_t)c == cc[VEOL2] && cc[VEOL2]);
+    bool eol = !literal && (c == '\n' || ((uint8_t)c == cc[VEOL] && cc[VEOL]) ||
+                          (L(t, IEXTEN) && (uint8_t)c == cc[VEOL2] && cc[VEOL2]));
     if (t->linelen < TTY_BUF - 1 || eol)
       t->line[t->linelen++] = c;
     else

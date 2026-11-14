@@ -538,7 +538,8 @@ words become init's environment; init uses `CONSOLE` (default
   page or as one contiguous run; `posix_mem_offset` reads the physical
   offset from the mapping.
 * **Terminals.** Linux's termios and line discipline (canonical editing,
-  echo, `VMIN`/`VTIME`, `ISIG`, `IXON`), controlling terminals and
+  echo, `VMIN`/`VTIME`, `ISIG`, `IXON`, and SVR4's `IUCLC`, `OLCUC`, `XCASE`),
+  controlling terminals and
   sessions, the console (serial + VGA + keyboard) and pseudo-terminals
   (`/dev/ptmx`, `/dev/pts/N`).
 * **No inline assembly** anywhere and only C17 (plus the attributes c17

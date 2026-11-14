@@ -59,6 +59,7 @@ struct tty {
   size_t linelen;
   size_t column; /* output column, for erasing tabs */
   bool stopped, hungup;
+  bool xcase_esc; /* XCASE: a backslash is waiting for the next character */
   int opens;
   struct waitq rq, wq;
   void (*output)(struct tty *t, const char *s, size_t n); /* raw output */
