@@ -4,13 +4,16 @@
 # COMPILER gcc or c17.
 #   LIBC_LIB=dir      link with the library in dir (e.g. one built by the
 #                     other compiler) instead of build/COMPILER/lib
+#   LIBC_INCLUDE=dir  compile against the headers in dir instead of ../../include
+#   LIBC_INTERP=path  the program interpreter of a dynamic executable (gcc),
+#                     instead of LIBC_LIB/libc.so
 #   LIBC_LINK=static  (the default) a static executable
 #   LIBC_LINK=dynamic linked with libc.so, which is also the program
 #                     interpreter (gcc: a PIE; c17: at a fixed address)
 #   LIBC_LINK=static-pie  (gcc) a static position-independent executable
 #   -shared (gcc), -G (c17)  a shared object, linked with libc.so
 here=$(cd "$(dirname "$0")/.." && pwd)
-include=$(cd "$here/../../include" && pwd)
+include=${LIBC_INCLUDE:-$(cd "$here/../../include" && pwd)}
 cc=$1; shift
 name=$(basename "$cc")
 mode=${LIBC_LINK:-static}
@@ -39,7 +42,7 @@ gcc*|cc)
 				"$lib/libc.a" "$($cc -print-libgcc-file-name)" "$lib/libc.a" \
 				"$($cc -print-file-name=crtendS.o)" "$lib/crtn.o";;
 		dynamic)
-			set -- -pie -nostdlib -L"$lib" -Wl,-dynamic-linker,"$lib/libc.so" \
+			set -- -pie -nostdlib -L"$lib" -Wl,-dynamic-linker,"${LIBC_INTERP:-$lib/libc.so}" \
 				"$lib/Scrt1.o" "$lib/crti.o" "$($cc -print-file-name=crtbeginS.o)" "$@" \
 				"$lib/libc.so" "$($cc -print-libgcc-file-name)" \
 				"$($cc -print-file-name=crtendS.o)" "$lib/crtn.o";;
