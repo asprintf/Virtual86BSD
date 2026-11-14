@@ -146,6 +146,7 @@ HDRS = \
 	../../include/wchar.h \
 	../../include/wctype.h \
 	../../include/wordexp.h \
+	../../include/xti.h \
 	crypt/des.h \
 	crypt/hash.h \
 	crypt/hash_tables.h \
@@ -178,6 +179,7 @@ HDRS = \
 	internal/syscall.h \
 	internal/syscall_nr_linux.h \
 	internal/time_impl.h \
+	internal/xti_impl.h \
 	intl/intl_impl.h \
 	locale/charsets_data.h \
 	locale/uctype_class.h \
@@ -358,6 +360,9 @@ OBJS = \
 	$(B)/obj/network/netdb_ent.o \
 	$(B)/obj/network/netdb_files.o \
 	$(B)/obj/network/socket.o \
+	$(B)/obj/network/xti.o \
+	$(B)/obj/network/xti_err.o \
+	$(B)/obj/network/xti_opt.o \
 	$(B)/obj/passwd/getgr.o \
 	$(B)/obj/passwd/getpw.o \
 	$(B)/obj/passwd/grent.o \
@@ -1194,6 +1199,18 @@ $(B)/obj/network/netdb_files.o: network/netdb_files.c $(HDRS)
 $(B)/obj/network/socket.o: network/socket.c $(HDRS)
 	mkdir -p $(B)/obj/network
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/socket.c
+
+$(B)/obj/network/xti.o: network/xti.c $(HDRS)
+	mkdir -p $(B)/obj/network
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/xti.c
+
+$(B)/obj/network/xti_err.o: network/xti_err.c $(HDRS)
+	mkdir -p $(B)/obj/network
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/xti_err.c
+
+$(B)/obj/network/xti_opt.o: network/xti_opt.c $(HDRS)
+	mkdir -p $(B)/obj/network
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/xti_opt.c
 
 $(B)/obj/passwd/getgr.o: passwd/getgr.c $(HDRS)
 	mkdir -p $(B)/obj/passwd
