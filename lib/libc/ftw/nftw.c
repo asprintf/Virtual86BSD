@@ -28,6 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#define _DEFAULT_SOURCE
 #include <ftw.h>
 #include <dirent.h>
 #include <fcntl.h>
@@ -38,16 +39,24 @@
 #include <limits.h>
 
 typedef int (*fn_t)(const char *, const struct stat *, int, struct FTW *);
+typedef int (*ofn_t)(const char *, const struct stat *, int);
 
 struct anc { dev_t dev; ino_t ino; struct anc *up; };
 
 struct w {
 	fn_t fn;
+	ofn_t ofn;                  /* ftw: SUSv2 to SUSv4 */
 	int flags;
 	dev_t dev;
 	char *path;
 	size_t cap;
 };
+
+static int call(struct w *w, int type, const struct stat *st, struct FTW *ftw)
+{
+	if (w->ofn) return w->ofn(w->path, st, type == FTW_SLN ? FTW_SL : type);
+	return w->fn(w->path, st, type, ftw);
+}
 
 /* entries of a directory, read at once so that only one descriptor is
  * open at a time: names separated by null bytes */
@@ -107,11 +116,11 @@ static int walk(struct w *w, size_t len, int base, int level, struct anc *up)
 		struct anc *a;
 		for (a = up; a; a = a->up)
 			if (a->dev == st.st_dev && a->ino == st.st_ino) break;
-		if (a) return w->fn(w->path, &st, FTW_D, &ftw);   /* a cycle: not entered */
+		if (a) return call(w, FTW_D, &st, &ftw);   /* a cycle: not entered */
 		if ((dfd = open(rel, O_RDONLY | O_DIRECTORY | O_CLOEXEC)) < 0 || !(d = fdopendir(dfd))) {
 			if (dfd >= 0) close(dfd);
 			if (errno != EACCES) return -1;
-			return w->fn(w->path, &st, FTW_DNR, &ftw);
+			return call(w, FTW_DNR, &st, &ftw);
 		}
 		dfd = -1;
 		names = readall(d, &nl);
@@ -123,7 +132,7 @@ static int walk(struct w *w, size_t len, int base, int level, struct anc *up)
 			if ((dfd = dup(dirfd(d))) < 0) { free(names); closedir(d); if (cwd >= 0) close(cwd); return -1; }
 		}
 		closedir(d);
-		if (!(w->flags & FTW_DEPTH) && (r = w->fn(w->path, &st, FTW_D, &ftw))) goto out;
+		if (!(w->flags & FTW_DEPTH) && (r = call(w, FTW_D, &st, &ftw))) goto out;
 		r = 0;
 		if (!(w->flags & (FTW_XDEV | FTW_MOUNT)) || st.st_dev == w->dev) {
 			if (dfd >= 0 && fchdir(dfd) < 0) { r = -1; goto out; }
@@ -144,24 +153,23 @@ static int walk(struct w *w, size_t len, int base, int level, struct anc *up)
 			}
 			if (cwd >= 0 && fchdir(cwd) < 0 && !r) r = -1;
 		}
-		if (!r && (w->flags & FTW_DEPTH)) r = w->fn(w->path, &st, FTW_DP, &ftw);
+		if (!r && (w->flags & FTW_DEPTH)) r = call(w, FTW_DP, &st, &ftw);
 	out:
 		free(names);
 		if (dfd >= 0) close(dfd);
 		if (cwd >= 0) close(cwd);
 		return r;
 	}
-	return w->fn(w->path, &st, type, &ftw);
+	return call(w, type, &st, &ftw);
 }
 
-int nftw(const char *path, fn_t fn, int fdlimit, int flags)
+static int run(const char *path, fn_t fn, ofn_t ofn, int flags)
 {
 	struct w w;
 	size_t l = strlen(path);
 	int r, base;
-	(void)fdlimit;              /* at most three descriptors at a time */
 	if (!*path) { errno = ENOENT; return -1; }
-	w.fn = fn; w.flags = flags; w.dev = 0;
+	w.fn = fn; w.ofn = ofn; w.flags = flags; w.dev = 0;
 	w.cap = l + 256 > PATH_MAX ? l + 256 : PATH_MAX;
 	if (!(w.path = malloc(w.cap))) return -1;
 	memcpy(w.path, path, l + 1);
@@ -172,4 +180,17 @@ int nftw(const char *path, fn_t fn, int fdlimit, int flags)
 	r = walk(&w, l, base, 0, 0);
 	free(w.path);
 	return r;
+}
+
+int nftw(const char *path, fn_t fn, int fdlimit, int flags)
+{
+	(void)fdlimit;              /* at most three descriptors at a time */
+	return run(path, fn, 0, flags);
+}
+
+/* ftw: links followed as by stat(); a dangling one is FTW_SL */
+int ftw(const char *path, ofn_t fn, int ndirs)
+{
+	if (ndirs < 1) { errno = EINVAL; return -1; }
+	return run(path, 0, fn, 0);
 }

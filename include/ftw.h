@@ -54,5 +54,8 @@ struct FTW {
 
 __BEGIN_DECLS
 int nftw(const char *, int (*)(const char *, const struct stat *, int, struct FTW *), int, int);
+#if __XSI_OB
+int ftw(const char *, int (*)(const char *, const struct stat *, int), int);
+#endif
 __END_DECLS
 #endif
