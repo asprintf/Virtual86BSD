@@ -79,7 +79,8 @@ from the current rules, `%C` for years below 1000, `strftime` `+` flag,
 | `<fnmatch.h>` | done | incl. `FNM_CASEFOLD`/`FNM_IGNORECASE` |
 | `<glob.h>` | done | |
 | `<wordexp.h>` | done | the expansions are done by `/bin/sh` |
-| `<ftw.h>` | done | `nftw` (POSIX.1-2024 dropped `ftw`); at most three descriptors at a time |
+| `<ftw.h>` | done | `nftw`, and `ftw` of SUSv2 to SUSv4 (share/doc/legacy.md); at most three descriptors at a time |
+| `<stropts.h>`, `<xti.h>` | done | SUSv2 to SUSv4 STREAMS (no file is a STREAM) and SUSv2 XTI on sockets (share/doc/legacy.md) |
 | `<spawn.h>` | done | incl. the `[PS]` scheduling attributes (`POSIX_SPAWN_SETSCHEDULER`, `POSIX_SPAWN_SETSCHEDPARAM`): applied in the child before the file actions; an error is returned as `sched_setscheduler`/`sched_setparam` would |
 | `<setjmp.h>` | done | |
 | `<libgen.h>` | done | |

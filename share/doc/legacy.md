@@ -29,6 +29,7 @@ strict ISO C compilation.
 | `<ctype.h>` | `isascii`, `toascii`, `_toupper`, `_tolower` | SUSv4 |
 | `<errno.h>` | `ENODATA`, `ENOSR`, `ENOSTR`, `ETIME` | SUSv4 |
 | `<fnmatch.h>`, `<glob.h>`, `<regex.h>`, `<wordexp.h>` | `FNM_NOSYS`, `GLOB_NOSYS`, `REG_ENOSYS`, `WRDE_NOSYS` (never returned) | SUSv3 |
+| `<ftw.h>` | `ftw` | SUSv4 |
 | `<langinfo.h>` | `YESSTR`, `NOSTR` | SUSv2 |
 | `<libgen.h>` | `regcmp`, `regex`, `__loc1` | SUSv2 |
 | `<limits.h>` | `DBL_DIG`, `DBL_MAX`, `FLT_DIG`, `FLT_MAX`, the `_POSIX_TRACE_*_MAX` minimums; `NL_NMAX`; `PASS_MAX`, `TMP_MAX` | SUSv4; SUSv3; SUSv2 |
@@ -42,17 +43,20 @@ strict ISO C compilation.
 | `<stdio.h>` | `tempnam`, `P_tmpdir`; `cuserid`, `L_cuserid`, `getw`, `putw`, `getopt` and its variables | SUSv4; SUSv2 |
 | `<stdlib.h>` | `rand_r`; `ecvt`, `fcvt`, `gcvt`, `mktemp`; `ttyslot`, `valloc` | SUSv4; SUSv3; SUSv2 |
 | `<strings.h>` | `bcmp`, `bcopy`, `bzero`, `index`, `rindex` | SUSv3 |
+| `<stropts.h>` | `isastream`, `getmsg`, `getpmsg`, `putmsg`, `putpmsg`, `fattach`, `fdetach`, `ioctl`, the `I_*` requests and the structures and constants of STREAMS | SUSv4 |
 | `<sys/time.h>` | `gettimeofday`, `getitimer`, `setitimer`, `struct itimerval`, `ITIMER_*` | SUSv4 |
 | `<sys/timeb.h>` | `ftime`, `struct timeb` | SUSv3 |
 | `<sys/types.h>` | `useconds_t` | SUSv3 |
 | `<sys/wait.h>` | `wait3` | SUSv2 |
-| `<termios.h>` | `IUCLC`, `OLCUC`, `XCASE` (the flags; the terminal driver does not act on them yet) | SUSv2 |
+| `<termios.h>` | `IUCLC`, `OLCUC`, `XCASE` (the terminal driver acts on them) | SUSv2 |
 | `<time.h>` | `asctime_r`, `ctime_r`; `CLK_TCK` | SUSv4; SUSv2 |
 | `<ucontext.h>` | `getcontext`, `setcontext`, `makecontext`, `swapcontext` | SUSv3 |
 | `<ulimit.h>` | `ulimit`, `UL_GETFSIZE`, `UL_SETFSIZE` | SUSv4 |
 | `<unistd.h>` | `setpgrp`, `_POSIX2_FORT_DEV`, the `POSIX_V6` environments (`_POSIX_V6_*`, `_SC_V6_*`, `_CS_POSIX_V6_*`, `_CS_V6_ENV`), the unsupported options `_POSIX_TRACE*`, `_POSIX2_PBS*`, `_XOPEN_STREAMS` (-1) and their `_SC_` names; `usleep`, `ualarm`, `getwd`, `vfork`, `_XOPEN_LEGACY`, the `XBS5` names; `brk`, `sbrk`, `chroot`, `ctermid`, `cuserid`, `getdtablesize`, `getpagesize`, `getpass`, `_POSIX2_C_VERSION`, `_XOPEN_XCU_VERSION`, `_XOPEN_XPG2`-`4`, `_SC_PASS_MAX` | SUSv4; SUSv3; SUSv2 |
 | `<utime.h>` | `utime`, `struct utimbuf` | SUSv4 |
+| `<varargs.h>` | `va_alist`, `va_dcl`, `va_start`, `va_arg`, `va_end`, `va_list` (c17 only) | SUSv2 |
 | `<wchar.h>` | the `isw*` and `tow*` functions, `wctype`, `wctype_t`; `wcswcs` | SUSv4; SUSv3 |
+| `<xti.h>` | X/Open Transport Interface: the `t_*` functions, `t_errno`, `struct t_info`, `struct t_call` ..., the XTI, TCP, UDP and IP options | SUSv2 |
 
 ## Choices the texts leave open
 
@@ -71,6 +75,41 @@ strict ISO C compilation.
   those of the locale, a byte at a time.
 * `regcmp`, `regex`: translated to an extended regular expression.
 * `gethostbyname`, `gethostbyaddr`: on `getaddrinfo` and `getnameinfo`.
+* `ftw`: a link is followed as by `stat`, a dangling one is `FTW_SL` (FreeBSD
+  and OpenBSD say `FTW_NS`), a directory that is its own ancestor is not entered
+  (as in `nftw`); `ndirs` below 1 is `EINVAL`, as in all three BSDs.
+* STREAMS: no file is a STREAM, so `isastream` gives 0 and `getmsg`,
+  `putmsg` and their `p` forms fail with `ENOSTR` (`EBADF` first), `fattach`
+  with `EINVAL`, `fdetach` with `EINVAL` for a file that exists, and
+  `ioctl` with an `I_*` request with `ENOTTY`; `_XOPEN_STREAMS` is -1.
+  `<stropts.h>` declares `ioctl` as `<sys/ioctl.h>` does, with an
+  `unsigned long` request where the texts say `int`.
+* XTI is on sockets: `/dev/tcp` (connection mode with orderly release,
+  `struct sockaddr_in` addresses) and `/dev/udp` (connectionless); any other
+  name is `TBADNAME`. A connection indication is a connection the kernel
+  has accepted and `t_listen` holds until `t_accept` or `t_snddis`. After
+  a release or disconnect the endpoint is a new socket with the same
+  options, bound to the same address, or to another port of the same
+  address when the old one is a listener's. No expedited data (the kernel has
+  none: `etsdu` is `T_INVALID`, `T_EXPEDITED` is `TBADFLAG`) and no user data
+  with a connection, release or disconnect. `T_UDERR` is never reported.
+  The options of a data unit are set on the endpoint. `t_errno` is a macro
+  of a per-thread value. The LEGACY `IP_OPTIONS`, `IP_TOS`, `IP_TTL`,
+  `IP_REUSEADDR`, `IP_DONTROUTE` and `IP_BROADCAST` are not defined
+  (`<netinet/in.h>` has `IP_TOS` and `IP_TTL` with other values); the ISO
+  options are `T_NOTSUPPORT`.
+* `<varargs.h>` needs c17: a function defined `f(a, va_alist) va_dcl` is
+  read as `f(a, ...)`, and `va_start(ap)` starts after `a`. No other
+  compiler reads it; with one, a function that uses `va_alist` does not
+  compile.
+* `IUCLC` and `OLCUC` map the ASCII letters. `XCASE` is that of SVR4's
+  `termio` (a terminal with capitals only) and needs `ICANON` (and `OPOST`
+  for the output): on output a capital is written after a backslash, and
+  `` ` | ~ { } \ `` as `\' \! \^ \( \) \\`; on input a backslash and a
+  letter, or one of `' ! ^ ( ) \`, is the capital or that character; a
+  backslash before anything else stays. Unescaped letters are the business
+  of `IUCLC` (`stty xcase iuclc olcuc` is the usual set). The echo goes the
+  output way; `ECHOE` takes two columns for an escaped character.
 * `gets()` is not there: C11 removed it.
 
 ## X/Open Curses
@@ -114,17 +153,14 @@ stays a port (`ports/ncurses`, in `/usr/local`).
 * After `start_color`, pair 0 is the terminal's own colours, taken to be
   white on black, as the text assumes a black background.
 
-## Not done yet
-
-* XTI (`<xti.h>`, the `t_*` functions of SUSv2's Networking Services) and
-  STREAMS (`<stropts.h>`, `fattach`, `getmsg`, `putmsg`, `isastream` ...).
-* `<varargs.h>`: needs the compiler.
-* The terminal driver's `IUCLC`, `OLCUC` and `XCASE`.
-
 ## Not planned
 
 * The utilities SUSv2 had and later editions removed (`cpio`, `tar`,
   `pack`, `pcat`, `unpack`, `egrep`, `fgrep`, `pg`, `col`, `sum`, `c89` ...).
+* The utilities SUSv3 and SUSv4 had and POSIX.1-2024 removed: `c99` and
+  the batch utilities `qalter` ... `qsub`.
+* The Trace option of SUSv3 and SUSv4 (`<trace.h>`, the `posix_trace_*`
+  functions): it is optional and `_POSIX_TRACE` is -1.
 
 ## Tests
 
