@@ -225,11 +225,11 @@ void kernel_fault(struct regs *r, uint64_t addr) {
   panic("trap type 14 in kernel mode");
 }
 
-/* PIT at HZ */
-void pit_init(void (*tick)(void)) {
+/* the clock: the PIT at HZ */
+void cpu_initclocks(void) {
   unsigned div = 1193182 / HZ;
   outb(0x43, 0x34);
   outb(0x40, div & 0xff);
   outb(0x40, div >> 8);
-  irq_register(0, tick);
+  irq_register(0, timer_tick);
 }

@@ -33,7 +33,7 @@
 # We build boot page tables that map the first GiB of physical memory three
 # times: at 0 (identity, only for the switch), at DIRECT_MAP
 # (0xffff888000000000) and at KERNEL_BASE (0xffffffff80000000), turn on long
-# mode and jump to kmain() in the higher half.
+# mode and call init_x86_64() and then kmain() in the higher half.
 #
 # The image is linked at KERNEL_BASE + 1 MiB and loaded at 1 MiB; 32-bit code
 # therefore uses "symbol - KERNEL_BASE" for physical addresses.  tools/mkimage
@@ -64,7 +64,7 @@ multiboot_header:
 	.globl _start32
 _start32:
 	cli
-	movl %eax, %edi                 # multiboot magic -> kmain's 1st argument
+	movl %eax, %edi                 # multiboot magic -> init_x86_64's 1st argument
 	movl %ebx, %esi                 # info -> 2nd argument
 
 	# boot_pd: 512 2-MiB pages covering the first GiB
@@ -134,6 +134,7 @@ start64:
 	movw %ax, %gs
 	leaq boot_stack_top(%rip), %rsp
 	xorl %ebp, %ebp
+	call init_x86_64
 	call kmain
 2:	hlt
 	jmp 2b

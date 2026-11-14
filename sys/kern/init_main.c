@@ -28,7 +28,8 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* init_main.c - kmain: from the multiboot hand-over to the first process. */
+/* init_main.c - kmain: the machine-independent start-up, from the clocks to
+   the first process (init_x86_64 has set up the machine). */
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/tty.h>
@@ -40,56 +41,12 @@
 #include <net/if_var.h>
 #include <machine/cpu.h>
 
-extern char _kernel_end[];
 char kernel_cmdline[512];
 int boothowto;
-static uint64_t ranges[64], reserved[32];
-static int nranges, nreserved;
 
-void pit_init(void (*tick)(void));
 long flush_thread(void *arg);
 NORETURN void cpu_idle(void);
 void enter_user(struct regs *r);
-
-static uint32_t rd32(uint64_t phys) { return *(uint32_t *)P2V(phys); }
-
-static void parse_multiboot(uint32_t magic, uint64_t mbi) {
-  if (magic != 0x2BADB002)
-    panic("not started by a multiboot loader (magic %#x)", magic);
-  uint32_t flags = rd32(mbi);
-  if (flags & 4)
-    bootargs_init(P2V((uint64_t)rd32(mbi + 16)));
-  reserved[nreserved++] = PAGE_DOWN(mbi);
-  reserved[nreserved++] = PAGE_UP(mbi + 120);
-  if (flags & 8) {
-    uint32_t count = rd32(mbi + 20), addr = rd32(mbi + 24);
-    for (uint32_t i = 0; i < count && nreserved < 30; i++) {
-      reserved[nreserved++] = PAGE_DOWN(rd32(addr + 16 * i));
-      reserved[nreserved++] = PAGE_UP(rd32(addr + 16 * i + 4));
-    }
-  }
-  if (flags & 64) {
-    uint32_t len = rd32(mbi + 44), addr = rd32(mbi + 48);
-    for (uint32_t off = 0; off < len && nranges < 32;) {
-      uint32_t size = rd32(addr + off);
-      uint64_t base = *(uint64_t *)P2V(addr + off + 4);
-      uint64_t l = *(uint64_t *)P2V(addr + off + 12);
-      uint32_t type = rd32(addr + off + 20);
-      if (type == 1) {
-        ranges[2 * nranges] = base;
-        ranges[2 * nranges + 1] = base + l;
-        nranges++;
-      }
-      off += size + 4;
-    }
-  } else if (flags & 1) {
-    ranges[0] = 0x100000;
-    ranges[1] = 0x100000 + (uint64_t)rd32(mbi + 8) * 1024;
-    nranges = 1;
-  }
-  if (!nranges)
-    panic("no memory map");
-}
 
 /* "name=value" from the command line */
 static bool cmdline_get(const char *name, char *out, size_t n) {
@@ -258,34 +215,10 @@ static long run_init(void *arg) {
   panic("no init");
 }
 
-void kmain(uint32_t magic, uint32_t mbi) {
-  serial_init();
-  vga_init();
-  printf("%s", version);
-  parse_multiboot(magic, mbi);
-  page_init((uint64_t)_kernel_end - KERNEL_BASE, ranges, nranges, reserved, nreserved);
-  vm_init();
-  page_init_high(ranges, nranges, reserved, nreserved);
-  {
-    /* as OpenBSD: the memory there is, then what the kernel has left */
-    uint64_t real = 0, avail = free_pages_count * PAGE_SIZE;
-    for (int i = 0; i < nranges; i++)
-      real += ranges[2 * i + 1] - ranges[2 * i];
-    printf("real mem = %lu (%luMB)\n", real, (real + 0x80000) >> 20);
-    printf("avail mem = %lu (%luMB)\n", avail, (avail + 0x80000) >> 20);
-    /* what follows the name of the kernel (the loader puts that first) */
-    const char *args = kernel_cmdline;
-    while (*args && *args != ' ')
-      args++;
-    while (*args == ' ')
-      args++;
-    if (*args)
-      printf("bootargs: %s\n", args);
-  }
-  arch_init();
+void kmain(void) {
   time_init();
   sched_init();
-  pit_init(timer_tick);
+  cpu_initclocks();
   bcache_init();
   mem_devices_init();
   {

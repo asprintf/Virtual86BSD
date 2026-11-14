@@ -325,10 +325,15 @@ words become init's environment; init uses `CONSOLE` (default
 1. QEMU (or GRUB) loads the flat image at 1 MiB (Multiboot address
    kludge: the loader needs no ELF64 support).  `boot.s` maps the first GiB
    at 0, at the direct map 0xffff888000000000 and at 0xffffffff80000000,
-   enables long mode and calls `kmain` in the higher half.
-2. `kmain`: memory map, page allocator (the first GiB), direct map of all
-   RAM, then the rest of the memory to the allocator; GDT/IDT,
-   TSC calibration, scheduler, timer at 1000 Hz, devices, root mount.
+   enables long mode and calls `init_x86_64` and then `kmain` in the higher
+   half.
+2. `init_x86_64` (arch/amd64/amd64/machdep.c) is the machine-dependent
+   start: the consoles, then GDT/IDT (so that a trap from here on prints its
+   registers and panics instead of resetting the machine), the Multiboot
+   information (boot arguments, memory map), the page allocator (the first
+   GiB), the direct map of all RAM, then the rest of the memory to the
+   allocator.  `kmain` (kern/init_main.c) is the rest: TSC calibration,
+   scheduler, timer at 1000 Hz, devices, root mount.
    The scheduler makes process 0, `kernel_task`: it has no address
    space, files or working directory, its threads are the idle task (thread
    0) and the other kernel threads (flush, loadavg, net), and it is the parent

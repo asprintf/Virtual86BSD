@@ -98,8 +98,12 @@ long user_strnlen(const char *s, size_t max);
 long user_set(void *dst, int c, size_t n);
 extern char user_access_begin[], user_access_end[], user_access_fault[];
 
+/* arch/machdep.c */
+void init_x86_64(uint32_t magic, uint32_t mbi);
+
 /* arch/x86.c */
 void arch_init(void);
+void cpu_initclocks(void);
 void set_kernel_stack(uint64_t top);
 void irq_register(int irq, void (*fn)(void));
 void pic_eoi(int irq);
