@@ -153,7 +153,7 @@ static bool prepare_signal(struct proc *p, int sig, struct task *t) {
 int send_signal_proc(struct proc *p, const struct siginfo *si) {
   int sig = si->signo;
   queued_last = false;
-  if (sig == 0)
+  if (sig == 0 || p == kernel_proc)
     return 0;
   uint64_t f = irq_save();
   if (!prepare_signal(p, sig, NULL)) {
@@ -239,6 +239,8 @@ static void fill_user_info(struct siginfo *si, int sig, int code) {
 }
 
 int kill_pgrp(int pgid, int sig, bool check) {
+  if (pgid <= 0)
+    return -ESRCH;
   struct siginfo si;
   if (check)
     fill_user_info(&si, sig, SI_USER);
@@ -272,7 +274,7 @@ long sys_kill(long pid, long sig) {
     struct proc *p = find_proc((pid_t)pid);
     if (!p || p->state != P_ALIVE) {
       struct task *t = find_task((pid_t)pid);
-      p = t ? t->proc : NULL;
+      p = t && !t->is_kthread ? t->proc : NULL;
     }
     if (!p || p->state == P_DEAD)
       return -ESRCH;
@@ -288,7 +290,7 @@ long sys_kill(long pid, long sig) {
   bool found = false;
   list_for_each_safe(q, n, &all_procs) {
     struct proc *p = list_entry(q, struct proc, all_link);
-    if (p == init_proc || p == cur_proc() || p->state != P_ALIVE || !may_signal(p, (int)sig))
+    if (p == init_proc || p == kernel_proc || p == cur_proc() || p->state != P_ALIVE || !may_signal(p, (int)sig))
       continue;
     found = true;
     if (sig)
@@ -301,7 +303,7 @@ static long do_tkill(long tgid, long tid, long sig) {
   if (sig < 0 || sig > NSIG || tid <= 0)
     return -EINVAL;
   struct task *t = find_task((pid_t)tid);
-  if (!t || !t->proc || (tgid > 0 && t->proc->pid != tgid) || t->exiting)
+  if (!t || !t->proc || t->is_kthread || (tgid > 0 && t->proc->pid != tgid) || t->exiting)
     return -ESRCH;
   if (!may_signal(t->proc, (int)sig))
     return -EPERM;
@@ -361,7 +363,7 @@ long sys_rt_tgsigqueueinfo(long tgid, long tid, long sig, long uinfo) {
   if ((si.code >= 0 || si.code == SI_TKILL) && cur_proc()->pid != tgid)
     return -EPERM;
   struct task *t = find_task((pid_t)tid);
-  if (!t || t->proc->pid != tgid)
+  if (!t || t->is_kthread || t->proc->pid != tgid)
     return -ESRCH;
   if (!may_signal(t->proc, (int)sig))
     return -EPERM;

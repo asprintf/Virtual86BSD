@@ -443,6 +443,7 @@ static struct task *task_kernel(long (*fn)(void *), void *arg) {
   if (!t)
     return NULL;
   t->is_kthread = true;
+  kproc_attach(t);
   /* the stack switch_stack pops: r15 r14 r13 r12 rbp rbx, return address */
   uint64_t *sp = (uint64_t *)((char *)t->kstack + (PAGE_SIZE << KSTACK_ORDER));
   *--sp = 0;
@@ -473,6 +474,7 @@ void kthread_exit(long code) {
   (void)code;
   cli();
   current->state = T_ZOMBIE;
+  kproc_detach(current);
   list_del(&current->all_link);
   dead_task = current;
   schedule();
@@ -482,10 +484,12 @@ void kthread_exit(long code) {
 /* the boot thread becomes the idle task */
 void sched_init(void) {
   static uint64_t boot_ksp;
+  proc_init_kernel();
   idle_task = task_alloc(NULL);
-  idle_task->tid = 0; /* the idle task is pid 0; init will be 1 */
+  idle_task->tid = 0; /* the idle task is thread 0 of kernel_task; init will be pid 1 */
   reset_pids();
   idle_task->is_kthread = true;
+  kproc_attach(idle_task);
   idle_task->state = T_RUNNING;
   current = idle_task;
   (void)boot_ksp;
@@ -503,6 +507,10 @@ NORETURN void cpu_idle(void) {
   current = t;
   set_kernel_stack((uint64_t)t->kstack + (PAGE_SIZE << KSTACK_ORDER));
   boot->state = T_ZOMBIE;
+  cli();
+  kproc_detach(boot);
+  list_del(&boot->all_link);
+  dead_task = boot; /* freed by the idle task, once off the boot thread */
   switch_stack(&boot->ksp, t->ksp);
   panic("boot thread resumed");
 }

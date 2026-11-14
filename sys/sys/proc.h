@@ -220,6 +220,7 @@ struct proc {
 
 extern struct task *current;
 extern struct proc *init_proc;
+extern struct proc *kernel_proc; /* pid 0, kernel_task: owns the kernel threads */
 extern struct list all_tasks, all_procs;
 extern bool need_resched;
 
@@ -259,6 +260,9 @@ void return_to_user(struct regs *r);
 struct task *task_alloc(struct proc *p);
 void task_free(struct task *t);
 struct proc *proc_alloc(void);
+void proc_init_kernel(void);
+void kproc_attach(struct task *t);
+void kproc_detach(struct task *t); /* interrupts off */
 pid_t alloc_pid(void);
 struct task *find_task(pid_t tid);
 struct proc *find_proc(pid_t pid);

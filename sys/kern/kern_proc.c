@@ -40,6 +40,7 @@
 struct list all_tasks = LIST_INIT(all_tasks);
 struct list all_procs = LIST_INIT(all_procs);
 struct proc *init_proc;
+struct proc *kernel_proc;
 static _Alignas(16) uint8_t clean_fpu[512];
 static pid_t last_pid;
 
@@ -155,18 +156,7 @@ struct proc *proc_alloc(void) {
 
 bool capable(void) { return cur_proc()->cred.euid == 0; }
 
-/* the first process (pid 1): made by the kernel, it execs /sbin/init */
-void proc_init_first(void) {
-  fxsave(clean_fpu); /* the kernel never uses the FPU: a clean state */
-  struct proc *p = proc_alloc();
-  struct task *t = task_alloc(p);
-  p->pid = t->tid;
-  p->pgid = p->sid = p->pid;
-  p->parent = p;
-  p->umask = 022;
-  p->mm = mm_new();
-  p->nice = 0;
-  p->next_timer_id = 0;
+static void rlim_defaults(struct proc *p) {
   for (int i = 0; i < RLIM_NLIMITS; i++)
     p->rlim[i].cur = p->rlim[i].max = RLIM_INFINITY;
   p->rlim[RLIMIT_STACK].cur = 8UL << 20;
@@ -179,6 +169,51 @@ void proc_init_first(void) {
   p->rlim[RLIMIT_MSGQUEUE].cur = p->rlim[RLIMIT_MSGQUEUE].max = 819200;
   p->rlim[RLIMIT_NICE].cur = p->rlim[RLIMIT_NICE].max = 0;
   p->rlim[RLIMIT_RTPRIO].cur = p->rlim[RLIMIT_RTPRIO].max = 0;
+}
+
+/* process 0, kernel_task: the kernel itself.  It has no address space, files
+   or working directory; its threads are the kernel threads, and it is the
+   parent of init. */
+void proc_init_kernel(void) {
+  struct proc *p = proc_alloc();
+  if (!p)
+    panic("no memory for kernel_task");
+  p->pid = p->pgid = p->sid = 0;
+  p->parent = p;
+  for (int i = 0; i < RLIM_NLIMITS; i++)
+    p->rlim[i].cur = p->rlim[i].max = RLIM_INFINITY;
+  strcpy(p->comm, "kernel_task");
+  list_add_tail(&all_procs, &p->all_link);
+  kernel_proc = p;
+}
+
+void kproc_attach(struct task *t) {
+  uint64_t f = irq_save();
+  t->proc = kernel_proc;
+  list_add_tail(&kernel_proc->threads, &t->thread_link);
+  kernel_proc->nthreads++;
+  irq_restore(f);
+}
+
+void kproc_detach(struct task *t) {
+  list_del(&t->thread_link);
+  kernel_proc->nthreads--;
+}
+
+/* the first user process (pid 1): made by the kernel, it execs /sbin/init */
+void proc_init_first(void) {
+  fxsave(clean_fpu); /* the kernel never uses the FPU: a clean state */
+  struct proc *p = proc_alloc();
+  struct task *t = task_alloc(p);
+  p->pid = t->tid;
+  p->pgid = p->sid = p->pid;
+  p->parent = kernel_proc;
+  list_add_tail(&kernel_proc->children, &p->sibling);
+  p->umask = 022;
+  p->mm = mm_new();
+  p->nice = 0;
+  p->next_timer_id = 0;
+  rlim_defaults(p);
   strcpy(p->comm, "init");
   p->cwd.mnt = p->root.mnt = root_mount;
   p->cwd.ino = igrab(root_mount->root);
@@ -224,6 +259,8 @@ long do_fork(uint64_t flags, uint64_t stack, uint64_t ptid, uint64_t ctid, uint6
   if (flags & (CLONE_UNSUPPORTED & ~(uint64_t)CLONE_PIDFD))
     return -EINVAL;
   if (flags & CLONE_PIDFD)
+    return -EINVAL;
+  if ((flags & CLONE_PARENT) && parent == init_proc)
     return -EINVAL;
   fxsave(current->fpu);
   struct task *t;
@@ -676,8 +713,7 @@ long sys_waitid(long which, long id, long uinfo, long options, long uru) {
 long sys_getpid(void) { return cur_proc()->pid; }
 long sys_gettid(void) { return current->tid; }
 long sys_getppid(void) {
-  struct proc *p = cur_proc();
-  return p == init_proc ? 0 : p->parent->pid;
+  return cur_proc()->parent->pid;
 }
 long sys_getpgrp(void) { return cur_proc()->pgid; }
 
@@ -978,7 +1014,7 @@ long sys_getpriority(long which, long who) {
   int best = 100;
   list_for_each(q, &all_procs) {
     struct proc *p = list_entry(q, struct proc, all_link);
-    if (p->state != P_ALIVE)
+    if (p->state != P_ALIVE || p == kernel_proc)
       continue;
     bool m = which == PRIO_PROCESS ? p->pid == (who ? who : cur_proc()->pid)
            : which == PRIO_PGRP    ? p->pgid == (who ? who : cur_proc()->pgid)
@@ -1003,7 +1039,7 @@ long sys_setpriority(long which, long who, long nice) {
   struct cred *me = &cur_proc()->cred;
   list_for_each(q, &all_procs) {
     struct proc *p = list_entry(q, struct proc, all_link);
-    if (p->state != P_ALIVE)
+    if (p->state != P_ALIVE || p == kernel_proc)
       continue;
     bool m = which == PRIO_PROCESS ? p->pid == (who ? who : cur_proc()->pid)
            : which == PRIO_PGRP    ? p->pgid == (who ? who : cur_proc()->pgid)
@@ -1115,7 +1151,8 @@ long sys_prctl(long op, long a2) {
 static struct task *sched_target(long pid) {
   if (pid < 0)
     return NULL;
-  return pid ? find_task((pid_t)pid) : current;
+  struct task *t = pid ? find_task((pid_t)pid) : current;
+  return t && t->is_kthread ? NULL : t;
 }
 
 long sys_sched_getscheduler(long pid) {

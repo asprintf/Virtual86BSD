@@ -327,6 +327,11 @@ words become init's environment; init uses `CONSOLE` (default
 2. `kmain`: memory map, page allocator (the first GiB), direct map of all
    RAM, then the rest of the memory to the allocator; GDT/IDT,
    TSC calibration, scheduler, timer at 1000 Hz, devices, root mount.
+   The scheduler makes process 0, `kernel_task`: it has no address
+   space, files or working directory, its threads are the idle task (thread
+   0) and the other kernel threads (flush, loadavg, net), and it is the parent
+   of init.  It is in `/proc/0`, and its threads cannot be signalled or given a
+   scheduling policy.
 3. Process 1 mounts devtmpfs on `/dev` and proc on `/proc` (mount(8) and
    umount(8) are programs now, and `/etc/rc` mounts the rest), opens `/dev/console` as 0, 1, 2
    and executes `init=`, `/sbin/init`, `/etc/init`, `/bin/init` or

@@ -190,7 +190,7 @@ bool owner_or_root(struct inode *i) {
 
 int permission(struct inode *i, int mask) {
   struct proc *p = current ? current->proc : NULL;
-  if (!p)
+  if (!p || current->is_kthread)
     return 0;
   struct cred *c = &p->cred;
   if ((mask & MAY_WRITE) && i->sb->rdonly && (S_ISREG(i->mode) || S_ISDIR(i->mode) || S_ISLNK(i->mode)))
