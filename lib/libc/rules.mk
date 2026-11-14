@@ -39,6 +39,7 @@ HDRS = \
 	../../include/bits/siginfo.h \
 	../../include/bits/stat_mode.h \
 	../../include/bits/waitstatus.h \
+	../../include/bits/xtitypes.h \
 	../../include/complex.h \
 	../../include/cpio.h \
 	../../include/ctype.h \
@@ -98,6 +99,7 @@ HDRS = \
 	../../include/stdnoreturn.h \
 	../../include/string.h \
 	../../include/strings.h \
+	../../include/stropts.h \
 	../../include/sys/cdefs.h \
 	../../include/sys/ioctl.h \
 	../../include/sys/ipc.h \
@@ -327,6 +329,7 @@ OBJS = \
 	$(B)/obj/misc/revoke.o \
 	$(B)/obj/misc/select.o \
 	$(B)/obj/misc/setpgrp.o \
+	$(B)/obj/misc/streams.o \
 	$(B)/obj/misc/sysctl.o \
 	$(B)/obj/misc/termios.o \
 	$(B)/obj/misc/time_ops.o \
@@ -1075,6 +1078,10 @@ $(B)/obj/misc/select.o: misc/select.c $(HDRS)
 $(B)/obj/misc/setpgrp.o: misc/setpgrp.c $(HDRS)
 	mkdir -p $(B)/obj/misc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/setpgrp.c
+
+$(B)/obj/misc/streams.o: misc/streams.c $(HDRS)
+	mkdir -p $(B)/obj/misc
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ misc/streams.c
 
 $(B)/obj/misc/sysctl.o: misc/sysctl.c $(HDRS)
 	mkdir -p $(B)/obj/misc
