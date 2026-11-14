@@ -1536,12 +1536,12 @@ static Node *builtin_va_start(Token **rest, Token *tok) {
   Token *start = tok;
   tok = skip(tok->next, "(");
   Node *ap = assign(&tok, tok);
-  tok = skip(tok, ",");
-  Node *last = assign(&tok, tok);
+  /* the last named parameter is not needed (C23 allows leaving it out) */
+  if (consume(&tok, tok, ","))
+    assign(&tok, tok);
   *rest = skip(tok, ")");
   if (!current_fn || !current_fn->ty->is_variadic)
     error_tok(start, "'va_start' used in function with fixed arguments");
-  (void)last;
   Node *n = new_unary(ND_VA_START, rval(ap), start);
   n->ty = ty_void;
   return n;

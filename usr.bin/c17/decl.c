@@ -1812,10 +1812,19 @@ static Token *function_def(Token *tok, Type *ty, Token *name, VarAttr *attr) {
   char *nm = tok_text(name);
   char *asm_label = asm_label_text();
 
-  bool oldstyle = last_decl_oldstyle;
-  if (oldstyle)
+  bool oldstyle = last_decl_oldstyle, knr_va = false;
+  if (oldstyle) {
     oldstyle_param_decls(&tok, tok, ty);
-  else if (!equal(tok, "{"))
+    /* <varargs.h>: "f(a, va_alist) va_dcl" is f(a, ...) */
+    for (Param **pp = &ty->params; *pp; pp = &(*pp)->next) {
+      Token *pn = (*pp)->name;
+      if (!(*pp)->next && pn->len == sizeof("__builtin_va_alist") - 1 && !memcmp(pn->loc, "__builtin_va_alist", pn->len)) {
+        *pp = NULL;
+        ty->is_variadic = knr_va = true;
+        break;
+      }
+    }
+  } else if (!equal(tok, "{"))
     error_tok(tok, "expected '{'");
 
   if (ty->params && !ty->has_proto && !oldstyle)
@@ -1839,6 +1848,8 @@ static Token *function_def(Token *tok, Type *ty, Token *name, VarAttr *attr) {
   Obj *fn = declare_linked(nm, ty, name, attr->is_static, true);
   if (fn->is_definition && fn->body)
     error_tok(name, "redefinition of '%s'", nm);
+  if (knr_va && !fn->ty->is_variadic)
+    fn->ty = ty;  /* (a declaration without a prototype came first) */
   fn->is_static = internal;
   fn->tok = name;
   if (asm_label)

@@ -231,7 +231,9 @@ labels and basic `asm` statements, statement expressions, `a ?: b`, case
 ranges, range designators, zero-length arrays, `, ## __VA_ARGS__`, named
 variadic macro parameters, `#include_next`, `#pragma once`,
 `push_macro`/`pop_macro`, `__has_include`, `__COUNTER__`, and the
-builtins `__builtin_va_*`, `__builtin_offsetof`,
+builtins `__builtin_va_*` (`__builtin_va_start(ap)` without the last
+parameter too, and a K&R definition whose last parameter is
+`__builtin_va_alist` is variadic, for `<varargs.h>`), `__builtin_offsetof`,
 `__builtin_types_compatible_p`, `__builtin_expect`,
 `__builtin_constant_p`, `__builtin_unreachable`, `__builtin_alloca`,
 `__builtin_complex`, `__builtin_return_address` and
