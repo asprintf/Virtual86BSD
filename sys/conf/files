@@ -112,6 +112,7 @@ file kern/subr_disk.c
 file dev/isa/isa.c isa
 file dev/ic/com.c com
 file dev/ic/vga.c vga
+file dev/rasops/rasops32.c vga
 file dev/ic/pckbc.c pckbc | pckbd
 file dev/wscons/wskbd.c wskbd
 file dev/wscons/wsdisplay.c wsdisplay
