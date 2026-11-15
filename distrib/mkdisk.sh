@@ -31,7 +31,7 @@
 # bootstrap.sh: an FFS2 file system holding the root (or ext2, with -t), to
 # boot with V86BSD's kernel (root/bsd) in QEMU (see boot.sh).
 #
-# Usage: sh mkdisk.sh [-s size] [-t ffs|ext2] [root [image]]
+# Usage: sh mkdisk.sh [-s size] [-t ffs|ext2] [-p mbr|gpt] [root [image]]
 #
 #   root     the system (default: root/ beside this script)
 #   image    the disk image to write (default: v86bsd.img beside this script);
@@ -40,6 +40,10 @@
 #   -t type  the file system: ffs (the default; makefs, made by the build in
 #            obj/stage2/root/usr/bin, or MAKEFS=path) or ext2 (e2fsprogs'
 #            mke2fs with -d, version 1.43 or later)
+#   -p table the partition table: mbr (the default) or gpt (with ffs only)
+#
+# If the root has the boot blocks (usr/mdec/mbr and boot) they are written to
+# the image: it boots by itself in QEMU, with no -kernel (boot.sh -d).
 #
 # No root privileges.  The root itself is not changed: it is copied, completed
 # with what a booted system needs (/dev, /proc, /tmp; /etc/resolv.conf
@@ -52,17 +56,19 @@
 # console shell, so that init writes everything back, rather than by
 # killing QEMU.)
 
-usage() { echo "usage: sh mkdisk.sh [-s size] [-t ffs|ext2] [root [image]]" >&2; exit 2; }
+usage() { echo "usage: sh mkdisk.sh [-s size] [-t ffs|ext2] [-p mbr|gpt] [root [image]]" >&2; exit 2; }
 
 here=$(pwd)
 cd "$(dirname "$0")/.." || exit 2
 SRC=$(pwd)
 size=1024
 type=ffs
-while getopts s:t: opt; do
+table=mbr
+while getopts s:t:p: opt; do
 	case $opt in
 	s) size=$OPTARG ;;
 	t) type=$OPTARG ;;
+	p) table=$OPTARG ;;
 	*) usage ;;
 	esac
 done
@@ -70,6 +76,8 @@ shift $((OPTIND - 1))
 [ $# -le 2 ] || usage
 case $size in ''|*[!0-9]*) echo "mkdisk: -s: a size in MiB" >&2; exit 2 ;; esac
 case $type in ffs|ext2) ;; *) echo "mkdisk: -t: ffs or ext2" >&2; exit 2 ;; esac
+case $table in mbr|gpt) ;; *) echo "mkdisk: -p: mbr or gpt" >&2; exit 2 ;; esac
+[ "$table" = mbr ] || [ "$type" = ffs ] || { echo "mkdisk: -p gpt needs -t ffs" >&2; exit 2; }
 root=${1:-$SRC/root}
 img=${2:-$SRC/v86bsd.img}
 case $root in /*) ;; *) root=$here/$root ;; esac
@@ -89,6 +97,6 @@ fi
 
 # distrib/mkdisk-$type.sh does the work; run here, where there are no
 # kernel test programs or init of a kernel build to add
-sh "$SRC/distrib/mkdisk-$type.sh" "$root" "$img" "$size" || { echo "mkdisk: failed" >&2; exit 1; }
-echo "$img: $size MiB, $type, root of $root"
+sh "$SRC/distrib/mkdisk-$type.sh" "$root" "$img" "$size" "$table" || { echo "mkdisk: failed" >&2; exit 1; }
+echo "$img: $size MiB, $type, ${table}, root of $root"
 echo "Boot it:  sh $SRC/boot.sh"

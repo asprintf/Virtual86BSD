@@ -32,25 +32,28 @@
 # with V86BSD's kernel (root/bsd) in QEMU (see boot.sh).  A wrapper: it runs "make image"
 # (distrib/mkdisk.sh does the work).
 #
-# Usage: sh mkdisk.sh [-s size] [-t ffs|ext2] [root [image]]
+# Usage: sh mkdisk.sh [-s size] [-t ffs|ext2] [-p mbr|gpt] [root [image]]
 #
 #   root     the system (default: root/ beside this script)
 #   image    the disk image to write (default: v86bsd.img beside this script);
 #            it is made afresh
 #   -s size  its size in MiB (default 1024)
 #   -t type  ffs (the default) or ext2
+#   -p table mbr (the default) or gpt (with ffs)
 
-usage() { echo "usage: sh mkdisk.sh [-s size] [-t ffs|ext2] [root [image]]" >&2; exit 2; }
+usage() { echo "usage: sh mkdisk.sh [-s size] [-t ffs|ext2] [-p mbr|gpt] [root [image]]" >&2; exit 2; }
 
 here=$(pwd)
 cd "$(dirname "$0")" || exit 2
 SRC=$(pwd)
 size=1024
 type=ffs
-while getopts s:t: opt; do
+table=mbr
+while getopts s:t:p: opt; do
 	case $opt in
 	s) size=$OPTARG ;;
 	t) type=$OPTARG ;;
+	p) table=$OPTARG ;;
 	*) usage ;;
 	esac
 done
@@ -60,4 +63,4 @@ root=${1:-$SRC/root}
 img=${2:-$SRC/v86bsd.img}
 case $root in /*) ;; *) root=$here/$root ;; esac
 case $img in /*) ;; *) img=$here/$img ;; esac
-exec "${MAKE:-make}" image IMGROOT="$root" IMAGE="$img" IMGSIZE="$size" IMGTYPE="$type"
+exec "${MAKE:-make}" image IMGROOT="$root" IMAGE="$img" IMGSIZE="$size" IMGTYPE="$type" IMGTABLE="$table"
