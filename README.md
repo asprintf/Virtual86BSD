@@ -199,8 +199,12 @@ shell on the console after `rc`, and `exit` shuts down.)
 root is mounted read-only, `/etc/rc` runs `fsck -p`, and if that had to change the
 root it reboots once).  What you change inside stays in
 `v86bsd.img` for the next boot; `sh mkdisk.sh` makes it afresh from
-`root/` (`-s size` in MiB; operands name another root and image; for
-another root, give `boot.sh` its kernel with `-k root/bsd`).
+`root/` (`-s size` in MiB; `-p gpt` for a GPT instead of an MBR; operands name
+another root and image; for another root, give `boot.sh` its kernel with
+`-k root/bsd`).  An image made from a root with the boot blocks also boots as
+a PC does, with no `-kernel`: `sh boot.sh -d` runs the loader on the disk
+(a `boot>` prompt that takes `boot disk0s1:/bsd -s`, `ls`, `machine diskinfo`;
+see `sys/README.md`).
 
 The disk is a virtio disk (`/dev/disk0` inside, with the root on its
 partition `/dev/disk0s1`); `-i` makes it a PC's IDE disk (also `disk0`)

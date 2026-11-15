@@ -3,7 +3,7 @@
 A small x86-64 kernel that runs V86BSD's programs, and Linux programs, as
 Linux would: the same system call numbers, structures, ELF loading, initial
 stack, signal frames and `/proc` files.  It boots in QEMU in text mode,
-mounts the root file system (FFS2; `rootfstype=ext2` for an ext2 disk) and starts `/sbin/init`.
+mounts the root file system (FFS2 or ext2, whichever is on the disk) and starts `/sbin/init`.
 
 First version (November 2026): one processor; networking over an Intel
 e1000 card (QEMU's default) and the loopback interface: IPv4 with ARP,
@@ -103,7 +103,7 @@ can find out at run time and keep its emulation on Linux:
   `sched_priority`, read and written only for this policy).  The library's
   `sysconf(_SC_SPORADIC_SERVER)` asks `sched_get_priority_max(4)`.
 * Typed memory objects: pools of physically contiguous memory, set aside
-  at boot (`tym=ram0:4M,ram1:1M` is the default), as `/dev/tym/NAME`;
+  at boot (`ram0`, 4 MiB, and `ram1`, 1 MiB), as `/dev/tym/NAME`;
   `/dev/tymctl` answers `posix_mem_offset`.  The library's
   `posix_typed_mem_open("/NAME", ...)` opens the device and passes the
   allocation flags by ioctl.
@@ -222,7 +222,12 @@ in the 16 colours of the text modes (the default text is white), with a block
 cursor; the escape sequences are the same.  The framebuffer is mapped
 cached (`ioremap_wb`: in a virtual machine it is the hypervisor's memory, and
 an uncached mapping made scrolling 16 times slower).  Any other adapter keeps
-the text console.  The console terminal still reports 24x80 to programs.
+the text console.  The console is one terminal for the screen with its
+keyboard and for the serial line, which are not the same size, so its size
+(`TIOCGWINSZ`) is that of the side typed on last, with a `SIGWINCH` when it
+changes: the screen's own size (128x48 on the framebuffer) after a key, 24x80
+after a byte from the serial line, whose terminal the kernel cannot measure.  A
+size a program sets (`stty rows`) stays with its side.
 The messages are OpenBSD's:
 the banner, `real mem` and `avail mem`, `bootargs:` (what follows the
 kernel's name on the command line, if anything), the `xx0 at yy0` tree
@@ -319,21 +324,76 @@ the image, the entry point and `_kernel_end`; the Multiboot header is in a
 section `.boot`, which c17 (and `kernel.ld` for ld) puts first, and
 `mkimage` makes the flat image from the program headers either way.
 
-Kernel command line (`-append`): boot flags as the BSDs have them, `-s`
-(single-user mode; `boothowto` has `RB_SINGLE`; a letter the kernel does not
-know is reported and ignored), and `root=/dev/disk0s1` (default: the
-`root on` of the configuration, GENERIC: disk0s1),
-`rootfstype=ext2` (default ffs), `ro`, `rw` (an FFS root is read-only until rc has checked it), `init=/path`; `ip=dhcp` (default when there is a
-card; it configures the first one), `ip=off` or `ip=ADDR/PREFIX[,GATEWAY[,DNS]]`; `tym=NAME:SIZE,...`
-(typed memory pools, `off` for none); `netloss=N` (testing: lose every
-Nth frame each way).  As on Linux, other `name=value`
-words become init's environment; init uses `CONSOLE` (default
-`/dev/tty00`) as the terminal for its shell.
+Boot arguments: the loader (below), or QEMU's `-kernel`, gives the kernel
+a line of words; the first is the kernel itself (`disk0s1:/bsd`, or the file
+name QEMU was given) and the rest are boot flags as the BSDs have them,
+`-s` for single-user mode (`boothowto` has `RB_SINGLE`; init is started
+with `-s`).  A flag letter or a word the kernel does not know is reported and
+ignored.  Nothing else is set there:
+
+* the root is on the disk and partition the loader booted from (a kernel
+  started by `-kernel` has the `root on` of the configuration, GENERIC:
+  disk0s1), its type is what is there, FFS2 or ext2, and it is mounted
+  read-only; `/etc/rc` runs `fsck -p` and `mount -uw /`;
+* the kernel runs `/sbin/init` (or `/sbin/oinit`, `/sbin/init.bak`), and
+  init takes the console `/dev/tty00`;
+* the network card is configured by DHCP; `/etc/netstart` and ifconfig(8)
+  say anything else.  For testing, `sysctl net.inet.ip.testloss=N` loses
+  every Nth frame each way;
+* the typed memory pools are `ram0` and `ram1`.
+
+## The boot loader
+
+`sys/arch/amd64/stand` has the loader of a disk that the BIOS boots, as a PC
+or QEMU without `-kernel` does (`boot.sh -d`; `mkdisk.sh` writes it to the
+image when the root has `usr/mdec/mbr` and `boot`, which `make buildkernel`
+makes with the host's compiler for 32-bit code and GNU `as` and `ld`).  It
+is the BSDs' scheme in two stages:
+
+* `mbr/mbr.S`, stage 1: the 440 bytes of boot code in sector 0 (the table
+  after it is the disk's, an MBR, or the protective MBR of a GPT).  It reads
+  stage 2 with the BIOS's extended read from sector 34 (free in both kinds
+  of table; the first partition starts at 2048) and jumps there.
+* `boot/`, stage 2 (at most 1 MiB, 12 KiB now): a 16-bit stub
+  (`start.S`) enters 32-bit protected mode with flat segments and runs BIOS
+  interrupts by going back to real mode (`bioscall`); the rest is 32-bit C.
+  `cons.c` writes to the VGA text memory and to COM1 and reads the keyboard
+  and COM1, so the prompt is on the QEMU window and on `-nographic`'s
+  terminal; `mem.c` has the E820 memory map; `disk.c` the BIOS disks and
+  their partitions, numbered as the kernel numbers them (`disk0s1`; MBR
+  slots 1 to 4, GPT entries, a GPT must have good CRC-32s, as for the
+  kernel); `ffs.c` reads FFS2 (super block, inodes, indirect blocks,
+  directories, symbolic links); `load.c` reads a kernel that is a flat Multiboot
+  image with the address fields (what `mkimage` makes of the ELF file),
+  clears its bss, builds the Multiboot information (memory map, boot device,
+  command line) and enters it as QEMU does, so there is one boot protocol,
+  whichever loader there is.
+
+It says what it found and waits 5 seconds at `boot>` before it boots
+`/bsd` of the first partition that has a file system (the active one of an
+MBR, one of type 0xa6 or OpenBSD's data type of a GPT, any other):
+
+    probing: pc0 com0 mem[639K 1022M a20=on]
+    disk: disk0*
+    >> V86BSD/amd64 BOOT 1.0
+    boot> 
+
+The commands are `boot [device:][/file] [-s] [word ...]` (`boot
+disk1s1:/bsd.old -s`: the device is `disk0`, `disk0s1` ... as the kernel names
+them, and the root is on it), `ls [device:][/directory]`, `machine diskinfo`,
+`machine memory`, `reboot` and `help`.  The kernel finds its root by the BIOS
+drive and partition in the Multiboot information, taking drive 0x80 for
+`disk0`, 0x81 for `disk1` and so on, as the disks attach in the order the BIOS
+has them.
+
+Image tables: `mkdisk.sh -p gpt` makes a GPT (`distrib/mkgpt.c` writes it:
+protective MBR, table, a copy at the end of the disk, one partition of
+OpenBSD's data type); the default is an MBR with a type 0xa6 partition.
 
 ## How it boots
 
-1. QEMU (or GRUB) loads the flat image at 1 MiB (Multiboot address
-   kludge: the loader needs no ELF64 support).  `boot.s` maps the first GiB
+1. QEMU's `-kernel`, the loader above or GRUB loads the flat image at 1 MiB
+   (Multiboot address kludge: the loader needs no ELF64 support).  `boot.s` maps the first GiB
    at 0, at the direct map 0xffff888000000000 and at 0xffffffff80000000,
    enables long mode and calls `init_x86_64` and then `kmain` in the higher
    half.
@@ -351,8 +411,7 @@ words become init's environment; init uses `CONSOLE` (default
    scheduling policy.
 3. Process 1 mounts devtmpfs on `/dev` and proc on `/proc` (mount(8) and
    umount(8) are programs now, and `/etc/rc` mounts the rest), opens `/dev/console` as 0, 1, 2
-   and executes `init=`, `/sbin/init`, `/etc/init`, `/bin/init` or
-   `/bin/sh`.
+   and executes `/sbin/init`.
 4. `/sbin/init` (sbin/init/init.c) runs `/etc/rc` if present, then a getty
    (libexec/getty) on each line of `/etc/ttys` that is on, each as a session
    leader with its terminal as controlling terminal (`/dev/console` itself never
@@ -644,7 +703,7 @@ and a helper on the host:
 It sends UDP (also fragmented both ways) and 2 MiB of TCP each way to
 echo servers on the host, has a non-blocking and a blocking connect
 refused, pings the gateway, and serves a connection the host makes
-through the forwarded port.  With `netloss=13` on the command line (every
+through the forwarded port.  With `sysctl net.inet.ip.testloss=13` (every
 13th frame lost, each way) it still passes, in about 30 s.  The utility suite: inside the system,
 `cd /usr/src/utilities; CC=c17 sh run_tests.sh </dev/null` from a
 process without a controlling terminal (several tests check behaviour
