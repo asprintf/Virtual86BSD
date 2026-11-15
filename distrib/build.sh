@@ -39,13 +39,15 @@
 #   commands (in the order they are meant to be given):
 #     newroot       make destdir afresh (removes it first)
 #     world         stages 0-3 and init into objdir (buildworld)
-#     kernel        the kernel into objdir (buildkernel)
+#     kernel        the kernel into objdir (buildkernel), and the boot blocks
+#                   (the loader) if a host compiler makes 32-bit code
 #     installworld  the programs, libraries and headers into destdir, with
 #                   the directories of hier(7)
 #     distribution  /etc, the sources in /usr/src and the host's data (time
 #                   zones, terminfo, locale sources, certificate authorities)
 #                   into destdir: a new root only
-#     installkernel the kernel as destdir/bsd
+#     installkernel the kernel as destdir/bsd, the boot blocks as
+#                   destdir/usr/mdec/mbr and boot
 #
 #   -o objdir     where things are built (default: obj/ beside distrib/)
 #   -d destdir    where to install (default: none: the running system, which
@@ -493,6 +495,28 @@ do_kernel() {
 		fi
 	) >> "$log" 2>&1 || fail "the kernel"
 	say "kernel: $obj/sys/arch/amd64/compile/$kernconf/bsd"
+
+	# the boot blocks (the loader: 32-bit code with a 16-bit stub, for GNU as and
+	# ld), by a host compiler that can make 32-bit code
+	bootcc=
+	for c in $BOOTCC gcc cc clang; do
+		command -v "$c" >/dev/null 2>&1 || continue
+		if echo 'int f(void) { return 0; }' | "$c" -m32 -ffreestanding -c -x c - -o "$obj/bootcc.o" >/dev/null 2>&1; then
+			bootcc=$c
+			break
+		fi
+	done
+	rm -f "$obj/bootcc.o"
+	if [ -n "$bootcc" ]; then
+		say "boot blocks: mbr and boot, with $bootcc"
+		(
+			PATH=$R2/usr/bin:$PATH
+			export PATH
+			cd "$obj/sys/arch/amd64/stand" && "$R2/usr/bin/make" HOSTCC="$bootcc"
+		) >> "$log" 2>&1 || fail "the boot blocks"
+	else
+		say "boot blocks: not built (no host compiler for 32-bit code): the disk boots with -kernel only"
+	fi
 }
 
 # ---------------------------------------------------------------- install
@@ -537,6 +561,13 @@ do_installkernel() {
 	[ -f "$k" ] || { echo "build: no $k: make buildkernel first" >&2; exit 1; }
 	say "installkernel: ${dest:-}/bsd"
 	cp "$k" "$dest/bsd" || fail "installing the kernel"
+	# the boot blocks, if they were built: /usr/mdec/mbr and boot, which
+	# mkdisk writes to the disk
+	b=$obj/sys/arch/amd64/stand
+	if [ -f "$b/mbr/mbr" ] && [ -f "$b/boot/boot" ]; then
+		mkd usr/mdec
+		cp "$b/mbr/mbr" "$b/boot/boot" "$dest/usr/mdec/" || fail "installing the boot blocks"
+	fi
 }
 
 do_distribution() {

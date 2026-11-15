@@ -9,3 +9,7 @@
 !/regress/sys/kern/k_*.s
 /regress/sys/kern/libc/*
 !/regress/sys/kern/libc/run.sh
+/sys/arch/*/stand/boot/boot
+/sys/arch/*/stand/boot/boot.elf
+/sys/arch/*/stand/mbr/mbr
+/sys/arch/*/stand/mbr/mbr.elf
