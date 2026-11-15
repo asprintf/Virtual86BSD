@@ -48,49 +48,19 @@ long flush_thread(void *arg);
 NORETURN void cpu_idle(void);
 void enter_user(struct regs *r);
 
-/* "name=value" from the command line */
-static bool cmdline_get(const char *name, char *out, size_t n) {
-  size_t nl = strlen(name);
-  const char *s = kernel_cmdline;
-  while (*s) {
-    while (*s == ' ')
-      s++;
-    if (!strncmp(s, name, nl) && s[nl] == '=') {
-      s += nl + 1;
-      size_t k = 0;
-      while (*s && *s != ' ' && k + 1 < n)
-        out[k++] = *s++;
-      out[k] = 0;
-      return true;
-    }
-    while (*s && *s != ' ')
-      s++;
-  }
-  return false;
-}
-
-static bool cmdline_flag(const char *name) {
-  size_t nl = strlen(name);
-  const char *s = kernel_cmdline;
-  while (*s) {
-    while (*s == ' ')
-      s++;
-    if (!strncmp(s, name, nl) && (s[nl] == ' ' || !s[nl]))
-      return true;
-    while (*s && *s != ' ')
-      s++;
-  }
-  return false;
-}
-
-/* the loader's arguments: the words `-letters' are the boot flags of
-   <sys/reboot.h>, the rest (name=value, ro, rw) is read by cmdline_get */
+/* the loader's arguments: the first word is the kernel (the loader's
+   `disk0s1:/bsd', QEMU's file name), the rest are the boot flags of
+   <sys/reboot.h>, `-letters' as the BSDs have them.  A letter or a word the
+   kernel does not know is reported and ignored. */
 void bootargs_init(const char *args) {
   size_t n = strnlen(args, sizeof(kernel_cmdline) - 1);
   memcpy(kernel_cmdline, args, n);
   kernel_cmdline[n] = 0;
   boothowto = 0;
-  for (const char *s = kernel_cmdline; *s;) {
+  const char *s = kernel_cmdline;
+  while (*s && *s != ' ')
+    s++;
+  while (*s) {
     while (*s == ' ')
       s++;
     if (*s == '-') {
@@ -100,36 +70,45 @@ void bootargs_init(const char *args) {
         else
           printf("boot flag -%c is not supported\n", *s);
       }
+    } else if (*s) {
+      const char *w = s;
+      while (*s && *s != ' ')
+        s++;
+      printf("boot argument %.*s is not supported\n", (int)(s - w), w);
     }
-    while (*s && *s != ' ')
-      s++;
   }
 }
 
-/* the root: root= on the command line, else the `root on' of the
-   configuration (GENERIC: disk0s1), else the first disk (an image with no
-   partition table) */
+/* the root: the disk (and partition) the loader booted from, else the
+   `root on' of the configuration (GENERIC: disk0s1), else the first disk
+   (an image with no partition table).  The file system type is what is
+   there, FFS or ext2; it is mounted read-only, and /etc/rc checks it
+   (fsck) and makes it writable. */
 extern const char cf_rootdev[]; /* ioconf.c */
 
 static void mount_root_fs(void) {
-  char root[64] = "", type[32] = "ffs";
-  bool given = cmdline_get("root", root, sizeof(root)) && root[0];
-  if (!given)
+  char root[64] = "";
+  struct blockdev *b = NULL;
+  if (boot_drive >= 0x80) {
+    /* (the BIOS numbers its drives from 0x80, as the disks attach: disk0 is 0x80) */
+    snprintf(root, sizeof(root), "disk%d", boot_drive - 0x80);
+    if (boot_part >= 0)
+      snprintf(root + strlen(root), sizeof(root) - strlen(root), "s%d", boot_part + 1);
+    b = blockdev_by_name(root);
+  }
+  if (!b) {
     snprintf(root, sizeof(root), "%s", cf_rootdev);
-  cmdline_get("rootfstype", type, sizeof(type));
-  const char *name = !strncmp(root, "/dev/", 5) ? root + 5 : root;
-  struct blockdev *b = name[0] ? blockdev_by_name(name) : NULL;
-  if (!b && !given)
-    b = blockdev_nth(0); /* (the configured one is not there: the first disk) */
+    b = root[0] ? blockdev_by_name(root) : NULL;
+  }
+  if (!b)
+    b = blockdev_nth(0);
+  static const char *const types[] = {"ffs", "ext2"};
+  const char *type = "";
   int e = -ENODEV;
-  if (b) {
-    name = b->name;
+  const char *name = b ? b->name : root;
+  for (size_t i = 0; b && i < ARRAY_SIZE(types) && e; i++) {
+    type = types[i];
     e = mount_root(type, b);
-    /* an FFS root stays read-only until /etc/rc has run fsck and then
-       `mount -uw /'; `rw' on the command line says otherwise */
-    bool ro = cmdline_flag("ro") || (!cmdline_flag("rw") && !strcmp(type, "ffs"));
-    if (!e && ro)
-      root_mount->sb->rdonly = true, root_mount->flags |= MS_RDONLY;
   }
   if (e) {
     printf("cannot mount root from %s, error = %d\n", name[0] ? name : "(none)", -e);
@@ -138,7 +117,8 @@ static void mount_root_fs(void) {
     printf("root on tmpfs\n");
     return;
   }
-  printf("root on %s (%s%s)\n", name, type, root_mount->sb->rdonly ? ", read-only" : "");
+  root_mount->sb->rdonly = true, root_mount->flags |= MS_RDONLY;
+  printf("root on %s (%s, read-only)\n", name, type);
 }
 
 static void auto_mount(const char *dir, const char *type) {
@@ -169,41 +149,13 @@ static long run_init(void *arg) {
   auto_mount("/proc", "proc");
   if (open_console())
     printf("warning: unable to open an initial console\n");
-  /* as Linux: name=value words the kernel does not know go to init's
-     environment */
-  static const char *known[] = {"root=", "rootfstype=", "init=", "console=", NULL};
-  static char envbuf[512];
-  const char *envp[32] = {"HOME=/", "TERM=linux"};
-  int ne = 2;
-  memcpy(envbuf, kernel_cmdline, sizeof(envbuf));
-  for (char *w = envbuf; *w && ne < 31;) {
-    while (*w == ' ')
-      *w++ = 0;
-    char *start = w;
-    while (*w && *w != ' ')
-      w++;
-    if (*w)
-      *w++ = 0;
-    if (!strchr(start, '='))
-      continue;
-    bool k = false;
-    for (int i = 0; known[i]; i++)
-      if (!strncmp(start, known[i], strlen(known[i])))
-        k = true;
-    if (!k)
-      envp[ne++] = start;
-  }
-  envp[ne] = NULL;
-  char init[128];
+  /* init gets a bare environment, as the BSDs give it */
+  const char *envp[] = {"HOME=/", "TERM=linux", NULL};
   bool single = (boothowto & RB_SINGLE) != 0;
-  const char *tries[] = {NULL, "/sbin/init", "/etc/init", "/bin/init", "/bin/sh"};
-  if (cmdline_get("init", init, sizeof(init)))
-    tries[0] = init;
+  static const char *const tries[] = {"/sbin/init", "/sbin/oinit", "/sbin/init.bak"};
   for (size_t i = 0; i < ARRAY_SIZE(tries); i++) {
-    if (!tries[i])
-      continue;
     /* `-s' on the command line: init starts in single-user mode */
-    const char *argv[] = {tries[i], single && strcmp(tries[i], "/bin/sh") ? "-s" : NULL, NULL};
+    const char *argv[] = {tries[i], single ? "-s" : NULL, NULL};
     int e = kernel_execve(tries[i], argv, (const char *const *)envp);
     if (e == 0) {
       cli();
@@ -221,11 +173,7 @@ void kmain(void) {
   cpu_initclocks();
   bcache_init();
   mem_devices_init();
-  {
-    char tym[128] = "";
-    cmdline_get("tym", tym, sizeof(tym));
-    tym_init(tym);
-  }
+  tym_init();
   tty_init();
   cpu_configure(); /* the devices: mainbus0 and all it finds, as config(8) says */
   tym_report();
@@ -249,11 +197,6 @@ void kmain(void) {
   sti();
   kthread_create("flush", flush_thread, NULL);
   loadavg_init();
-  {
-    char ip[64] = "dhcp", loss[16] = "";
-    cmdline_get("ip", ip, sizeof(ip));
-    cmdline_get("netloss", loss, sizeof(loss));
-    net_init_conf(ip, loss);
-  }
+  net_init_conf();
   cpu_idle();
 }

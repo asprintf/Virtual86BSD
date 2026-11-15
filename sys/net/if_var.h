@@ -114,7 +114,7 @@ struct netinfo {
 };
 extern struct netinfo netinfo;
 
-void net_init_conf(const char *ipconf, const char *loss); /* ip=, netloss= */
+void net_init_conf(void); /* DHCP on the first card (ifconfig(8) and /etc/netstart change it) */
 void dhcp_stop(struct ifnet *ifp); /* an address was set by hand: the kernel's DHCP client leaves ifp alone */
 
 /* a limit of events per second (net.inet.icmp.errppslimit and the like) */
@@ -125,6 +125,7 @@ struct ratelim {
 bool net_ratelimit(struct ratelim *r, int pps); /* true: this one may go (pps < 0: no limit) */
 extern int icmp_bmcastecho;    /* net.inet.icmp.bmcastecho: answer echo requests to a broadcast address */
 extern int icmp_errppslimit;   /* net.inet.icmp.errppslimit: ICMP errors per second (-1: no limit) */
+extern int ip_testloss;        /* net.inet.ip.testloss: lose every Nth frame each way (0: none), for testing */
 extern int tcp_rstppslimit;    /* net.inet.tcp.rstppslimit: RSTs per second for segments that have no connection */
 void net_pnp(void (*out)(void *, const char *, ...), void *sb);
 void net_rx(struct ifnet *ifp, const void *frame, size_t len); /* a driver: a frame came (from the network thread) */

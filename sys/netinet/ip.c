@@ -33,10 +33,9 @@
    fragmenting on output, reassembling on input: up to 8 datagrams at
    once, 30 seconds each), ICMP (echo, unreachable), UDP to and from the
    sockets, and a DHCP client.  The first Ethernet interface is configured
-   by DHCP or by ip= on the kernel command line (ip=dhcp, ip=off,
-   ip=ADDR/PREFIX[,GATEWAY[,DNS]]), the others by ifconfig(8) (/etc/netstart);
-   /proc/net/pnp tells the name server, as on Linux.  For testing,
-   netloss=N on the command line loses every Nth frame each way.
+   by DHCP at boot, the others (and that one, if told to) by ifconfig(8)
+   (/etc/netstart); /proc/net/pnp tells the name server, as on Linux.  For
+   testing, sysctl net.inet.ip.testloss=N loses every Nth frame each way.
 
    All of it runs in the network thread (frames received, timers) or in a
    system call (sending); the card's interrupt only wakes the thread.  The
@@ -162,10 +161,11 @@ uint32_t ip_srcaddr(uint32_t dst) {
 
 /* ---- Ethernet and ARP ---- */
 
-static unsigned loss_every, loss_tx, loss_rx;
+int ip_testloss; /* net.inet.ip.testloss: lose every Nth frame (0: none) */
+static unsigned loss_tx, loss_rx;
 
 static void eth_send(struct ifnet *ifp, const uint8_t *dmac, uint16_t type, const void *payload, size_t len) {
-  if (loss_every && ++loss_tx % loss_every == 0)
+  if (ip_testloss > 0 && ++loss_tx % (unsigned)ip_testloss == 0)
     return;
   uint8_t f[MTU + 14];
   memcpy(f, dmac, 6);
@@ -742,7 +742,7 @@ void net_rx(struct ifnet *ifp, const void *frame, size_t len) {
     ifp->if_idrops++;
     return;
   }
-  if (loss_every && ++loss_rx % loss_every == 0)
+  if (ip_testloss > 0 && ++loss_rx % (unsigned)ip_testloss == 0)
     return;
   if (len < 14 || (f[6] & 1) || (memcmp(f, ifp->if_lladdr, 6) && memcmp(f, bmac, 6)))
     return; /* too short, from a group address, or not for this card */
@@ -921,26 +921,6 @@ static long net_thread(void *arg) {
   return 0;
 }
 
-static bool parse_ip(const char **sp, uint32_t *out) {
-  const char *s = *sp;
-  uint32_t v = 0;
-  for (int i = 0; i < 4; i++) {
-    if (*s < '0' || *s > '9')
-      return false;
-    uint32_t b = 0;
-    while (*s >= '0' && *s <= '9')
-      b = b * 10 + (uint32_t)(*s++ - '0');
-    if (b > 255)
-      return false;
-    v = v << 8 | b;
-    if (i < 3 && *s++ != '.')
-      return false;
-  }
-  *out = v;
-  *sp = s;
-  return true;
-}
-
 static struct ifnet *first_ether(void) {
   for (int i = 0; i < nifnet; i++)
     if (ifnet[i]->if_ether)
@@ -948,59 +928,26 @@ static struct ifnet *first_ether(void) {
   return NULL;
 }
 
-void net_init_conf(const char *conf, const char *loss) {
+void net_init_conf(void) {
   waitq_init(&netwq);
-  for (; *loss >= '0' && *loss <= '9'; loss++)
-    loss_every = loss_every * 10 + (unsigned)(*loss - '0');
   struct ifnet *ifp = first_ether();
   if (!ifp) /* no card: its driver did not find or set one up */
     return;
-  const char *nm = ifp->if_xname;
   if_up(ifp);
-  if (!strcmp(conf, "off")) {
-    printf("%s: not configured (ip=off)\n", nm);
-  } else if (conf[0] && strcmp(conf, "dhcp")) {
-    const char *s = conf;
-    uint32_t a, g = 0, d = 0;
-    int prefix = 24;
-    if (!parse_ip(&s, &a)) {
-      printf("%s: bad ip=%s\n", nm, conf);
-      return;
-    }
-    if (*s == '/') {
-      s++;
-      prefix = 0;
-      while (*s >= '0' && *s <= '9')
-        prefix = prefix * 10 + *s++ - '0';
-      if (prefix < 1 || prefix > 32)
-        prefix = 24;
-    }
-    if (*s == ',' && (s++, parse_ip(&s, &g)) && *s == ',')
-      s++, parse_ip(&s, &d);
-    ifa_add(ifp, a, prefix == 32 ? 0xffffffffU : ~((1U << (32 - prefix)) - 1));
-    if (g)
-      rt_add(0, 0, g, ifp, 0);
-    if (d)
-      netinfo.dns[0] = d, netinfo.ndns = 1;
-    printf("%s: %s\n", nm, conf);
-  } else {
-    /* DHCP: wait for it here a few seconds (by polling: the thread is not
-       there yet), then the thread goes on trying */
-    netinfo.dhcp = true;
-    dhcp_ifp = ifp;
-    dhcp_running = true;
-    uint64_t until = net_now_ms() + 4000;
-    while (!if_addr(ifp) && net_now_ms() < until) {
-      dhcp_timers(net_now_ms());
-      if (ifp->if_poll)
-        ifp->if_poll(ifp);
-      arp_timers(net_now_ms());
-    }
-    if (!if_addr(ifp))
-      printf("%s: no DHCP answer yet\n", nm);
+  /* DHCP: wait for it here a few seconds (by polling: the thread is not
+     there yet), then the thread goes on trying */
+  netinfo.dhcp = true;
+  dhcp_ifp = ifp;
+  dhcp_running = true;
+  uint64_t until = net_now_ms() + 4000;
+  while (!if_addr(ifp) && net_now_ms() < until) {
+    dhcp_timers(net_now_ms());
+    if (ifp->if_poll)
+      ifp->if_poll(ifp);
+    arp_timers(net_now_ms());
   }
-  if (loss_every)
-    printf("%s: losing every %uth frame (netloss=)\n", nm, loss_every);
+  if (!if_addr(ifp))
+    printf("%s: no DHCP answer yet\n", ifp->if_xname);
   kthread_create("net", net_thread, NULL);
 }
 

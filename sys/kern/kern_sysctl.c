@@ -326,11 +326,14 @@ static long rw_int(void *oldp, size_t *oldlenp, void *newp, size_t newlen, int *
 
 /* net.route: the routing table, as BSD's route(8) and netstat(1) ask for it
    (net, AF_ROUTE, 0, AF_INET or 0, NET_RT_DUMP, 0), but an array of struct
-   rtinfo.  net.inet.icmp.bmcastecho, net.inet.icmp.errppslimit and
+   rtinfo.  net.inet.ip.testloss, net.inet.icmp.bmcastecho,
+   net.inet.icmp.errppslimit and
    net.inet.tcp.rstppslimit are the variables of the kernel's IP; the rest of
    net.* answers nothing yet. */
 static long net_sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen) {
   if (namelen == 3 && name[0] == AF_INET) {
+    if (name[1] == IPPROTO_IP && name[2] == IPCTL_TESTLOSS)
+      return rw_int(oldp, oldlenp, newp, newlen, &ip_testloss, 0, 1000000);
     if (name[1] == IPPROTO_ICMP && name[2] == ICMPCTL_BMCASTECHO)
       return rw_int(oldp, oldlenp, newp, newlen, &icmp_bmcastecho, 0, 1);
     if (name[1] == IPPROTO_ICMP && name[2] == ICMPCTL_ERRPPSLIMIT)

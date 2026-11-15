@@ -40,12 +40,20 @@ extern char _kernel_end[];
 static uint64_t ranges[64], reserved[32];
 static int nranges, nreserved;
 
+int boot_drive = -1; /* the BIOS drive and partition (-1: none) the loader booted from */
+int boot_part = -1;
+
 static uint32_t rd32(uint64_t phys) { return *(uint32_t *)P2V(phys); }
 
 static void parse_multiboot(uint32_t magic, uint64_t mbi) {
   if (magic != 0x2BADB002)
     panic("not started by a multiboot loader (magic %#x)", magic);
   uint32_t flags = rd32(mbi);
+  if (flags & 2) { /* the boot device: drive, partition (from 0; 0xff: none) */
+    uint32_t dev = rd32(mbi + 12);
+    boot_drive = (int)(dev >> 24);
+    boot_part = (dev >> 16 & 0xff) == 0xff ? -1 : (int)(dev >> 16 & 0xff);
+  }
   if (flags & 4)
     bootargs_init(P2V((uint64_t)rd32(mbi + 16)));
   reserved[nreserved++] = PAGE_DOWN(mbi);

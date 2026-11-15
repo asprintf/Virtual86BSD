@@ -544,7 +544,8 @@ struct loadavg {
 #define IPCTL_ARPTIMEOUT            39 /* int */
 #define IPCTL_ARPDOWN               40 /* int */
 #define IPCTL_ARPQUEUE              41 /* node */
-#define IPCTL_MAXID                 42
+#define IPCTL_TESTLOSS              42 /* int: V86BSD's, lose every Nth frame (testing) */
+#define IPCTL_MAXID                 43
 
 #define IPCTL_NAMES { \
 	{ 0, 0 }, \
@@ -589,6 +590,7 @@ struct loadavg {
 	{ "arptimeout", CTLTYPE_INT }, \
 	{ "arpdown", CTLTYPE_INT }, \
 	{ "arpq", CTLTYPE_NODE }, \
+	{ "testloss", CTLTYPE_INT }, \
 }
 
 /* ---- debug, machdep, ddb, vfs: nothing below them yet ---- */

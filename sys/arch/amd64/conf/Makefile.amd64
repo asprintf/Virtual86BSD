@@ -35,7 +35,6 @@ KINC = /usr/include # (the headers of the C library: for gnu)
 GNU_LDFLAGS = -nostdlib -z max-page-size=4096 -z noexecstack --no-warn-rwx-segments -T
 QEMU = qemu-system-x86_64
 QEMUFLAGS = -m 512M -nographic -no-reboot
-APPEND = CONSOLE=/dev/tty00
 DISK = disk.img
 
 %OBJS%
@@ -71,7 +70,7 @@ proto:
 	sh $(S)/kern/makesyscalls.sh $(S)
 
 run: bsd
-	$(QEMU) $(QEMUFLAGS) -kernel bsd -append "$(APPEND)" -drive file=$(DISK),format=raw,if=virtio
+	$(QEMU) $(QEMUFLAGS) -kernel bsd -drive file=$(DISK),format=raw,if=virtio
 
 clean:
 	rm -f $(OBJS) vers.c vers.c.new bsd bsd.elf mkimage

@@ -11,10 +11,10 @@ machine		amd64
 option		DIAGNOSTIC		# KASSERT and its friends
 option		COMPAT_LINUX		# Linux's system calls and ABI (compat/linux, later)
 
-# the kernel is bsd.  The root file system is root=/dev/... on the kernel's
-# command line, or else the `root on' here: the first partition of the first
-# disk (disk0s1: the whole disk, an image with no partition table, if
-# there is no such partition)
+# the kernel is bsd.  The root file system is on the disk the loader booted
+# from, or else the `root on' here (a kernel started by QEMU's -kernel has no
+# loader): the first partition of the first disk (disk0s1: the whole disk, an
+# image with no partition table, if there is no such partition)
 config		bsd root on disk0s1
 
 mainbus0	at root

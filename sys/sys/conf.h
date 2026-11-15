@@ -94,7 +94,7 @@ struct blockdev *blockdev_by_name(const char *name);
 struct blockdev *blockdev_nth(int i);
 
 /* typed memory objects (drivers/tym.c) */
-void tym_init(const char *conf);
+void tym_init(void);
 void tym_populate(void);
 void tym_report(void);
 

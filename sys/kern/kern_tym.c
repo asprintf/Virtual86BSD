@@ -31,10 +31,9 @@
 /* tym.c - typed memory objects (POSIX [TYM]): pools of physically
    contiguous memory set aside at boot, named /dev/tym/NAME (the C
    library's posix_typed_mem_open("/NAME", ...) opens that), and
-   /dev/tymctl for posix_mem_offset().  tym=NAME:SIZE[,NAME:SIZE...] on
-   the command line (sizes in KiB with K, MiB with M; powers of two pages,
-   at most 4 MiB, the allocator's largest block) sets them; the default is
-   ram0:4M,ram1:1M.
+   /dev/tymctl for posix_mem_offset().  There are two, ram0 (4 MiB) and ram1
+   (1 MiB); a pool is a power of two pages, at most 4 MiB, the allocator's
+   largest block.
 
    How a descriptor maps depends on the flags it was opened with (set by
    ioctl TYM_SETFLAGS right after open):
@@ -261,12 +260,8 @@ static uint64_t parse_size(const char **sp) {
   return v;
 }
 
-void tym_init(const char *conf) {
-  if (!*conf)
-    conf = "ram0:4M,ram1:1M";
-  if (!strcmp(conf, "off"))
-    return;
-  const char *s = conf;
+void tym_init(void) {
+  const char *s = "ram0:4M,ram1:1M";
   while (*s && npools < NPOOL) {
     struct pool *p = &pools[npools];
     size_t k = 0;

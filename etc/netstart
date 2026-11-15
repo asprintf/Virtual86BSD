@@ -4,7 +4,7 @@
 # (all of them, or just those named: again after a change).
 #
 # The kernel has already brought up lo0 and the first Ethernet interface
-# (DHCP, or ip= on the kernel's command line).  Every other interface, and
+# (DHCP).  Every other interface, and
 # that one too if you want it different, is set up by a file
 # /etc/hostname.INTERFACE (hostname.em1, hostname.vio0 ...): each line is
 # what ifconfig(8) gets after the interface's name, for example
