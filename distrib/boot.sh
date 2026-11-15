@@ -30,11 +30,13 @@
 # boot.sh - boot a V86BSD system in QEMU: V86BSD's kernel with the disk image
 # mkdisk.sh made.
 #
-# Usage: sh boot.sh [-egiv] [-m memory] [-n] [-k kernel] [-p hostport:port]...
+# Usage: sh boot.sh [-degiv] [-m memory] [-n] [-k kernel] [-p hostport:port]...
 #                   [image [-- qemu-argument...]]
 #
 #   image     the disk image (default: v86bsd.img beside this script)
 #   -k kernel the kernel (default: root/bsd beside this script)
+#   -d        boot from the disk: its loader (the boot blocks mkdisk wrote,
+#             a boot> prompt) reads /bsd from the disk, as on a PC; no -kernel
 #   -m memory QEMU's memory size (default 1G; for example 512M, 2G)
 #   -g        a window with the VGA screen and the keyboard, instead of the
 #             console on this terminal (the serial port)
@@ -66,16 +68,17 @@
 # -e uses that even where KVM is available).
 
 usage() {
-	echo "usage: sh boot.sh [-egiv] [-m memory] [-n] [-k kernel] [-p hostport:port]... [image [-- qemu-argument...]]" >&2
+	echo "usage: sh boot.sh [-degiv] [-m memory] [-n] [-k kernel] [-p hostport:port]... [image [-- qemu-argument...]]" >&2
 	exit 2
 }
 
 here=$(pwd)
 cd "$(dirname "$0")/.." || exit 2
 SRC=$(pwd)
-kernel=$SRC/root/bsd mem=1G graphic=false net=true fwd= kvm=true ide=false nic=e1000
-while getopts egik:m:nvp: opt; do
+kernel=$SRC/root/bsd mem=1G graphic=false net=true fwd= kvm=true ide=false nic=e1000 disk=false
+while getopts degik:m:nvp: opt; do
 	case $opt in
+	d) disk=true ;;
 	e) kvm=false ;;
 	i) ide=true ;;
 	g) graphic=true ;;
@@ -100,7 +103,7 @@ case $kernel in /*) ;; *) kernel=$here/$kernel ;; esac
 
 command -v qemu-system-x86_64 >/dev/null 2>&1 ||
 	{ echo "boot: no qemu-system-x86_64: install QEMU (Ubuntu: qemu-system-x86)" >&2; exit 1; }
-[ -f "$kernel" ] || { echo "boot: no kernel $kernel (run sh bootstrap.sh)" >&2; exit 1; }
+$disk || [ -f "$kernel" ] || { echo "boot: no kernel $kernel (run sh bootstrap.sh)" >&2; exit 1; }
 [ -f "$img" ] || { echo "boot: no disk image $img (run sh mkdisk.sh)" >&2; exit 1; }
 
 # An ext2 disk is checked first, as a boot of Linux would: after a system
@@ -127,8 +130,12 @@ fi
 # the disk: virtio, or with -i the IDE disk of a PC (the slower ATA driver).
 # Either way it is disk0 and the root is disk0s1 (the kernel's `root on')
 if $ide; then if=ide; else if=virtio; fi
-set -- -m "$mem" -no-reboot -kernel "$kernel" -append "CONSOLE=/dev/tty00" \
-	-drive "file=$img,format=raw,if=$if" "$@"
+if $disk; then
+	set -- -m "$mem" -no-reboot -drive "file=$img,format=raw,if=$if" "$@"
+else
+	set -- -m "$mem" -no-reboot -kernel "$kernel" \
+		-drive "file=$img,format=raw,if=$if" "$@"
+fi
 if $net; then
 	set -- "$@" -nic "user,model=$nic$fwd"
 else
