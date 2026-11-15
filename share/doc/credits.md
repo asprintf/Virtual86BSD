@@ -210,6 +210,14 @@ and the Shall code the fork started from (see `LICENSE`).
 | `usr.sbin/makefs/ufs/ufs/quota.h` | NetBSD `sys/ufs/ufs/quota.h` | 1.30 | BSD 3-clause |
 | `usr.sbin/makefs/ufs/ufs/ufs_bswap.h` | NetBSD `sys/ufs/ufs/ufs_bswap.h` | 1.23 | BSD 2-clause |
 
+## Not adapted from the BSDs
+
+`sys/dev/wsfont/yee8x16.h` is the 8x16 ISO Latin-1 font by Ka-Ping Yee
+(2000, "may be freely used for any purpose"), the glyph table of
+`osfmk/console/iso_font.c` in Apple's XNU (the Apple licence header of that
+file is not carried: only the table is). The names of `dev/wsfont/` and
+`dev/rasops/` follow OpenBSD's; the code is V86BSD's own.
+
 ## Test suites in the tree
 
 * `regress/os-test`: Sortix's os-test (https://gitlab.com/sortix/os-test),

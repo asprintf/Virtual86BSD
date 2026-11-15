@@ -159,7 +159,7 @@ and the `machine` link.
                        addresses and flags), route.c (the routing table)
     netinet/           ip.c (Ethernet, ARP, IPv4 with fragments, ICMP, UDP,
                        DHCP, the network thread), tcp.c (TCP)
-    dev/               ic/ (16550 serial console, VGA text console, PS/2
+    dev/               ic/ (16550 serial console, VGA console, PS/2
                        keyboard), isa/ (the ISA bus), pci/ (PCI and pcidevs.h,
                        e1000 as if_em.c, ATA disks (PIO) as pciide.c), pv/
                        (virtio, vioblk, virtio-net as if_vio.c)
@@ -196,7 +196,7 @@ and `isa0`, and so on down.  The tree is printed as it is found:
     "Intel 82441FX" rev 0x02 at pci0 dev 0 function 0 not configured
     pciide0 at pci0 dev 1 function 1 "Intel 82371SB IDE" rev 0x00
     disk0 at pciide0 channel 0 drive 0: <QEMU HARDDISK>
-    vga0 at pci0 dev 2 function 0 "QEMU Standard VGA" rev 0x02: console (80x25)
+    vga0 at pci0 dev 2 function 0 "Bochs VGA" rev 0x02: framebuffer 1024x768, console (128x48)
     wsdisplay0 at vga0: console (std, vt100 emulation)
     em0 at pci0 dev 3 function 0 "Intel 82540EM" rev 0x03: irq 11, address 52:54:00:12:34:56
     virtio0 at pci0 dev 4 function 0 "Qumranet Virtio Storage" rev 0x00
@@ -212,8 +212,18 @@ machines; what is not in it is printed with its numbers, and a device no
 driver takes gets `not configured`.  The console is set up before any of
 this (`serial_init`, `vga_init`, polled output), so the first messages
 appear; `com0` and `vga0` attach to it later.  `vga0` is the PCI display adapter
-(class display, subclass VGA); the text console it shows is the legacy VGA
-at its fixed ports and memory.  The messages are OpenBSD's:
+(class display, subclass VGA); the console starts as the legacy VGA text
+screen (80x25, at its fixed ports and memory).  On QEMU's standard VGA (the
+Bochs adapter, PCI 1234:1111) `vga0` then sets a 1024x768 linear 32-bit mode
+through the Bochs VBE registers (ports 0x1ce and 0x1cf, no BIOS) and the
+screen is redrawn in it: 128x48 cells of an 8x16 font (`dev/wsfont/yee8x16.h`,
+Ka-Ping Yee's ISO Latin-1 font as XNU has it), drawn by `dev/rasops/rasops32.c`
+in the 16 colours of the text modes (the default text is white), with a block
+cursor; the escape sequences are the same.  The framebuffer is mapped
+cached (`ioremap_wb`: in a virtual machine it is the hypervisor's memory, and
+an uncached mapping made scrolling 16 times slower).  Any other adapter keeps
+the text console.  The console terminal still reports 24x80 to programs.
+The messages are OpenBSD's:
 the banner, `real mem` and `avail mem`, `bootargs:` (what follows the
 kernel's name on the command line, if anything), the `xx0 at yy0` tree
 (`cpu0: apid 0 (boot processor)` and its brand string, MHz and
