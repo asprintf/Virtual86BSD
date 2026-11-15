@@ -61,13 +61,13 @@ ok "kern lists ostype" sh -c '"$1" kern | grep "^kern.ostype=V86BSD$" > /dev/nul
 t "net.inet.icmp lists its two" "net.inet.icmp.bmcastecho=0${nl}net.inet.icmp.errppslimit=100" 0 "$U" net.inet.icmp
 t "net.inet.tcp lists its one" "net.inet.tcp.rstppslimit=100" 0 "$U" net.inet.tcp
 te "an icmp name the kernel does not have" "sysctl: net.inet.icmp.maskrepl: value is not available" 1 "$U" net.inet.icmp.maskrepl
-ok "net.inet.ip lists nothing (reserved)" sh -c '"$1" net.inet.ip > "$2"; [ ! -s "$2" ]' sh "$U" "$T/o"
+t "net.inet.ip lists its one" "net.inet.ip.testloss=0" 0 "$U" net.inet.ip
 
 # everything
 ok "-a: kern.ostype" sh -c '"$1" -a | grep "^kern.ostype=V86BSD$" > /dev/null' sh "$U"
 ok "-a: hw.model, vm.loadavg" sh -c '"$1" -a | grep "^hw.model=" > /dev/null && "$1" -a | grep "^vm.loadavg=" > /dev/null' sh "$U"
-ok "-a: no gaps, no unanswered names" sh -c '! "$1" -a | grep "gap\|kern.proc=\|net\.inet\.ip\." > /dev/null' sh "$U"
-t "-a: the network knobs" "net.inet.icmp.bmcastecho=0${nl}net.inet.icmp.errppslimit=100${nl}net.inet.tcp.rstppslimit=100" 0 sh -c '"$1" -a | grep "^net\."' sh "$U"
+ok "-a: no gaps, no unanswered names" sh -c '! "$1" -a | grep "gap\|kern.proc=" > /dev/null' sh "$U"
+t "-a: the network knobs" "net.inet.ip.testloss=0${nl}net.inet.icmp.bmcastecho=0${nl}net.inet.icmp.errppslimit=100${nl}net.inet.tcp.rstppslimit=100" 0 sh -c '"$1" -a | grep "^net\."' sh "$U"
 ok "-a: every line is name=value (kern.version has more lines)" sh -c '! "$1" -a | grep -v "^[a-z0-9_.-]*=\|^ \|^$" > /dev/null' sh "$U"
 ok "no arguments: the same as -a" sh -c '[ "$("$1")" = "$("$1" -a)" ]' sh "$U"
 ok "-A is -a" sh -c '[ "$("$1" -A | head -n 3)" = "$("$1" -a | head -n 3)" ]' sh "$U"
@@ -131,6 +131,9 @@ kern.hostname: from-file -> after-error" 1 "$U" -f "$T/conf2"
     t "errppslimit back" "net.inet.icmp.errppslimit: -1 -> 100" 0 "$U" net.inet.icmp.errppslimit=100
     t "rstppslimit" "net.inet.tcp.rstppslimit: 100 -> 400" 0 "$U" net.inet.tcp.rstppslimit=400
     t "rstppslimit back" "net.inet.tcp.rstppslimit: 400 -> 100" 0 "$U" net.inet.tcp.rstppslimit=100
+    t "testloss" "net.inet.ip.testloss: 0 -> 7" 0 "$U" net.inet.ip.testloss=7
+    te "testloss is not negative" "sysctl: net.inet.ip.testloss: Invalid argument" 1 "$U" net.inet.ip.testloss=-1
+    t "testloss back" "net.inet.ip.testloss: 7 -> 0" 0 "$U" net.inet.ip.testloss=0
     # the wait before a panic restarts the system: -1 (halt) to a day
     pw=$("$U" -n kern.panic_reboot_wait_time)
     t "set the panic wait" "kern.panic_reboot_wait_time: $pw -> 5" 0 "$U" kern.panic_reboot_wait_time=5
