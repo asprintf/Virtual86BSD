@@ -124,6 +124,7 @@ void unmap_range(struct mm *mm, uint64_t start, uint64_t end);
 void flush_tlb(void);
 uint64_t vm_prot_pte(unsigned vmflags);
 void *ioremap(uint64_t phys, size_t size); /* device memory, uncached */
+void *ioremap_wb(uint64_t phys, size_t size); /* device memory, cached: a framebuffer */
 
 struct vma *vma_find(struct mm *mm, uint64_t addr);  /* the VMA containing addr */
 struct vma *vma_new(struct mm *mm, uint64_t start, uint64_t end, unsigned flags);

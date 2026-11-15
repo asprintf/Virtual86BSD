@@ -88,9 +88,9 @@ uint64_t *pte_get(uint64_t pml4, uint64_t va, bool create) {
   return &t[(va >> 12) & 511];
 }
 
-/* device memory: mapped uncached at kernel addresses of its own (from
+/* device memory: mapped at kernel addresses of its own (from
    0xffffc90000000000, in a PML4 entry every address space shares) */
-void *ioremap(uint64_t phys, size_t size) {
+static void *map_io(uint64_t phys, size_t size, uint64_t cache) {
   static uint64_t next = 0xffffc90000000000UL;
   uint64_t off = phys & (PAGE_SIZE - 1);
   phys -= off;
@@ -101,10 +101,20 @@ void *ioremap(uint64_t phys, size_t size) {
     uint64_t *pte = pte_get(kernel_pml4, va + o, true);
     if (!pte)
       return NULL;
-    *pte = (phys + o) | PTE_P | PTE_W | PTE_PCD | PTE_PWT | PTE_G | PTE_NX;
+    *pte = (phys + o) | PTE_P | PTE_W | cache | PTE_G | PTE_NX;
     invlpg(va + o);
   }
   return (void *)(va + off);
+}
+
+/* registers: uncached */
+void *ioremap(uint64_t phys, size_t size) {
+  return map_io(phys, size, PTE_PCD | PTE_PWT);
+}
+
+/* memory the hypervisor keeps in its RAM (a framebuffer): cached */
+void *ioremap_wb(uint64_t phys, size_t size) {
+  return map_io(phys, size, 0);
 }
 
 uint64_t vm_prot_pte(unsigned vmflags) {
