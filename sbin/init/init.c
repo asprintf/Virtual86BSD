@@ -60,8 +60,6 @@
  *  - every child resets signal dispositions and the signal mask;
  *  - init never signals process 0 or a negative pid other than the kill(-1)
  *    of the shutdown (the kernel spares init itself);
- *  - the console named by CONSOLE (from the kernel command line) must be
- *    /dev/<word>.
  *
  * The utmp entry of a session whose process ended is marked DEAD_PROCESS
  * (login writes the USER_PROCESS entry).  There is no wtmp.
@@ -123,7 +121,7 @@ enum state { RUNCOM, READ_TTYS, MULTI_USER, SINGLE_USER, DEATH, DEATH_SINGLE };
 
 static enum state after_single = RUNCOM; /* where the console shell leads */
 static int single_poweroff;               /* after it: power off */
-static char console_path[64] = "/dev/tty00";
+static const char console_path[] = "/dev/tty00";
 
 /* what init complains about goes to the console (its stderr) and to
    syslogd (daemon.err; a message sent before syslogd runs is lost, the
@@ -699,11 +697,6 @@ int main(int argc, char **argv) {
   umask(022);
   if (chdir("/root") != 0)
     (void)!chdir("/");
-  /* the console: /dev/<word> only */
-  const char *c = getenv("CONSOLE");
-  if (c && !strncmp(c, "/dev/", 5) && valid_name(c + 5) && strlen(c) < sizeof console_path)
-    strcpy(console_path, c);
-  unsetenv("CONSOLE");
   for (;;) {
     switch (s) {
     case RUNCOM: s = runcom(); break;
