@@ -1156,6 +1156,34 @@ static const struct chrdev tty4 = {"tty", tty4_open};
 static const struct chrdev tty5 = {"tty5", tty5_open};
 static const struct chrdev pts = {"pts", pts_open};
 
+/* the size of the console on each side: the serial line is taken to be 24x80
+   (what the terminal at the other end is, the kernel cannot tell), the screen
+   as its driver says; console_side is the one the tty has now */
+static struct winsize console_ws[2] = {{24, 80, 0, 0}, {0, 0, 0, 0}};
+static int console_side = CONSOLE_SERIAL;
+
+static void console_set_ws(const struct winsize *w) {
+  if (!memcmp(w, &console_tty->ws, sizeof(*w)))
+    return;
+  console_tty->ws = *w;
+  signal_pgrp(console_tty, SIGWINCH);
+}
+
+void console_screen_size(unsigned rows, unsigned cols) {
+  console_ws[CONSOLE_SCREEN].row = (uint16_t)rows;
+  console_ws[CONSOLE_SCREEN].col = (uint16_t)cols;
+  if (console_side == CONSOLE_SCREEN)
+    console_set_ws(&console_ws[CONSOLE_SCREEN]);
+}
+
+void console_input_from(int side) {
+  if (side == console_side || !console_ws[side].row)
+    return;
+  console_ws[console_side] = console_tty->ws;
+  console_side = side;
+  console_set_ws(&console_ws[side]);
+}
+
 void tty_init(void) {
   tty_defaults(&console);
   strcpy(console.name, "console");

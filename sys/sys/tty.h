@@ -69,6 +69,14 @@ struct tty {
 extern struct tty *console_tty;
 void tty_init(void);
 void tty_input(struct tty *t, char c);
+
+/* The console is one tty for the serial line and for the screen with its
+   keyboard, which are not the same size: the tty has the size of the side
+   that was typed on last (a size a program set stays with its side). */
+#define CONSOLE_SERIAL 0
+#define CONSOLE_SCREEN 1
+void console_screen_size(unsigned rows, unsigned cols); /* the screen, once it is known */
+void console_input_from(int side);                       /* before input from a side */
 void tty_maybe_set_ctty(struct file *f);
 void tty_session_hangup(struct tty *t, pid_t sid);
 

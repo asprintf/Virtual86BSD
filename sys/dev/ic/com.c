@@ -69,6 +69,7 @@ void serial_write(const char *s, size_t n) {
 static void serial_irq(void) {
   while (inb(COM1 + 5) & 1) {
     char c = (char)inb(COM1);
+    console_input_from(CONSOLE_SERIAL);
     tty_input(console_tty, c);
   }
 }

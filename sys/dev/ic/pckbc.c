@@ -52,9 +52,15 @@ static const char shifted[128] = {
 
 static bool shift, ctrl, alt, caps, e0;
 
+/* a key's character: input from the screen's side of the console */
+static void key(char c) {
+  console_input_from(CONSOLE_SCREEN);
+  tty_input(console_tty, c);
+}
+
 static void send(const char *s) {
   while (*s)
-    tty_input(console_tty, *s++);
+    key(*s++);
 }
 
 static void kbd_irq(void) {
@@ -81,7 +87,7 @@ static void kbd_irq(void) {
         case 0x47: send("\033[H"); break;
         case 0x4f: send("\033[F"); break;
         case 0x53: send("\033[3~"); break;
-        case 0x1c: tty_input(console_tty, '\r'); break;
+        case 0x1c: key('\r'); break;
         }
       }
       continue;
@@ -122,8 +128,8 @@ static void kbd_irq(void) {
         c = 0;
     }
     if (alt)
-      tty_input(console_tty, 033);
-    tty_input(console_tty, c);
+      key(033);
+    key(c);
   }
 }
 

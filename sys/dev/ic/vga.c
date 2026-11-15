@@ -38,6 +38,7 @@
 #include <sys/systm.h>
 #include <sys/buf.h>
 #include <sys/device.h>
+#include <sys/tty.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcidevs.h>
 #include <uvm/uvm.h>
@@ -347,6 +348,7 @@ static void vga_attach(struct device *parent, struct device *self, void *aux) {
     printf(": framebuffer %dx%d, console (%dx%d)\n", FB_WIDTH, FB_HEIGHT, cols, rows);
   else
     printf(": console (%dx%d)\n", cols, rows);
+  console_screen_size((unsigned)rows, (unsigned)cols);
   config_found(self, NULL, NULL); /* wsdisplay0 */
 }
 
