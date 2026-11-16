@@ -112,9 +112,11 @@ static int args_copy(struct args *a, char *const *uv, int *count) {
     if (!up)
       break;
     long n;
-    if ((uint64_t)up >= USER_TOP)
+    if ((uint64_t)up >= USER_TOP && uaccess_kernel())
       n = (long)strlen(up);
     else {
+      if ((uint64_t)up >= USER_TOP)
+        return -EFAULT;
       n = user_strnlen(up, MIN(USER_TOP - (uint64_t)up, 131072));
       if (n < 0)
         return -EFAULT;
@@ -684,5 +686,8 @@ long sys_execveat(long dirfd, long path, long argv, long envp, long flags) {
 }
 
 int kernel_execve(const char *path, const char *const *argv, const char *const *envp) {
-  return do_execve(path, (char *const *)argv, (char *const *)envp, AT_FDCWD, 0);
+  bool k = uaccess_kernel_set(true);
+  int e = do_execve(path, (char *const *)argv, (char *const *)envp, AT_FDCWD, 0);
+  uaccess_kernel_set(k);
+  return e;
 }

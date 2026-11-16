@@ -143,6 +143,8 @@ void kernel_fault(struct regs *r, uint64_t addr);
 
 /* checked access to user memory */
 bool user_range_ok(uint64_t addr, size_t n);
+bool uaccess_kernel_set(bool on); /* kernel buffers accepted by the copies; returns the old setting */
+bool uaccess_kernel(void);
 int copy_from_user(void *dst, const void *usrc, size_t n);
 int copy_to_user(void *udst, const void *src, size_t n);
 int clear_user(void *udst, size_t n);

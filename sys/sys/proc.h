@@ -70,6 +70,7 @@ struct task {
   void *fpu;               /* fxsave area */
   bool is_kthread;
   bool is_idle;            /* a processor's idle task: never on the run queue */
+  bool kuaccess;           /* copy_from_user and the like accept kernel addresses (uaccess_kernel_set) */
   int oncpu;               /* the processor it runs on, -1 when none */
   uint64_t cpus_allowed;   /* bit i: it may run on cpu i */
 

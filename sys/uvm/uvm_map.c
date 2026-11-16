@@ -608,8 +608,22 @@ bool user_range_ok(uint64_t addr, size_t n) {
   return addr <= USER_TOP && n <= USER_TOP - addr;
 }
 
+/* Kernel addresses are accepted by the copies below only while the task has
+   this set: the kernel's own calls into code written for user buffers
+   (kernel_read, kernel_write, kernel_execve).  Its old value is returned. */
+bool uaccess_kernel_set(bool on) {
+  struct task *t = current;
+  if (!t)
+    return false;
+  bool old = t->kuaccess;
+  t->kuaccess = on;
+  return old;
+}
+
+bool uaccess_kernel(void) { return current && current->kuaccess; }
+
 int copy_from_user(void *dst, const void *usrc, size_t n) {
-  if ((uint64_t)usrc >= USER_TOP) { /* kernel buffer (internal callers) */
+  if ((uint64_t)usrc >= USER_TOP && uaccess_kernel()) {
     memcpy(dst, usrc, n);
     return 0;
   }
@@ -619,7 +633,7 @@ int copy_from_user(void *dst, const void *usrc, size_t n) {
 }
 
 int copy_to_user(void *udst, const void *src, size_t n) {
-  if ((uint64_t)udst >= USER_TOP) {
+  if ((uint64_t)udst >= USER_TOP && uaccess_kernel()) {
     memcpy(udst, src, n);
     return 0;
   }
@@ -629,7 +643,7 @@ int copy_to_user(void *udst, const void *src, size_t n) {
 }
 
 int clear_user(void *udst, size_t n) {
-  if ((uint64_t)udst >= USER_TOP) {
+  if ((uint64_t)udst >= USER_TOP && uaccess_kernel()) {
     memset(udst, 0, n);
     return 0;
   }
@@ -642,7 +656,7 @@ int clear_user(void *udst, size_t n) {
    -ENAMETOOLONG if it does not fit */
 long strncpy_from_user(char *dst, const char *usrc, size_t max) {
   long n;
-  if ((uint64_t)usrc >= USER_TOP)
+  if ((uint64_t)usrc >= USER_TOP && uaccess_kernel())
     n = (long)strnlen(usrc, max);
   else {
     if ((uint64_t)usrc >= USER_TOP)

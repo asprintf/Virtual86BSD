@@ -193,14 +193,20 @@ ssize_t kernel_read(struct file *f, void *buf, size_t n, off_t off) {
   if (!f->fops || !f->fops->read)
     return -EINVAL;
   off_t pos = off;
-  return f->fops->read(f, buf, n, &pos);
+  bool k = uaccess_kernel_set(true);
+  ssize_t r = f->fops->read(f, buf, n, &pos);
+  uaccess_kernel_set(k);
+  return r;
 }
 
 ssize_t kernel_write(struct file *f, const void *buf, size_t n, off_t off) {
   if (!f->fops || !f->fops->write)
     return -EINVAL;
   off_t pos = off;
-  return f->fops->write(f, buf, n, &pos);
+  bool k = uaccess_kernel_set(true);
+  ssize_t r = f->fops->write(f, buf, n, &pos);
+  uaccess_kernel_set(k);
+  return r;
 }
 
 /* ---- opening ---- */

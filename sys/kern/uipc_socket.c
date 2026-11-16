@@ -1060,6 +1060,15 @@ struct kiovec {
 
 static size_t queued(struct sock *s) { return s->rbytes; }
 
+/* the iovec array of a message: the user's (sendmsg, recvmsg) or one built here */
+static int iov_fetch(struct kiovec *dst, const struct kmsghdr *m, bool kernel) {
+  size_t n = m->iovlen * sizeof(*dst);
+  if (!kernel)
+    return copy_from_user(dst, (void *)m->iov, n);
+  memcpy(dst, (void *)m->iov, n);
+  return 0;
+}
+
 /* gather the user's buffers */
 static long iov_total(struct kiovec *v, int n) {
   long t = 0;
@@ -1406,7 +1415,7 @@ static long raw_send(struct sock *s, struct kmsghdr *m, struct kiovec *vp, long 
   return total;
 }
 
-static long do_send(struct file *f, struct kmsghdr *m, int flags) {
+static long do_send(struct file *f, struct kmsghdr *m, int flags, bool kernel_iov) {
   int e = -EBADF;
   struct sock *s = SK(f);
   if (m->iovlen > 1024)
@@ -1416,7 +1425,7 @@ static long do_send(struct file *f, struct kmsghdr *m, int flags) {
   if (!vp)
     return -ENOMEM;
   long r;
-  if (copy_from_user(vp, (void *)m->iov, m->iovlen * sizeof(*vp))) {
+  if (iov_fetch(vp, m, kernel_iov)) {
     r = -EFAULT;
     goto out;
   }
@@ -1707,7 +1716,7 @@ static int put_control(struct kmsghdr *m, struct skb *b, unsigned fdfl, int *mfl
   return 0;
 }
 
-static long do_recv(struct file *f, struct kmsghdr *m, int flags) {
+static long do_recv(struct file *f, struct kmsghdr *m, int flags, bool kernel_iov) {
   struct sock *s = SK(f);
   if (flags & MSG_OOB)
     return -EOPNOTSUPP;
@@ -1718,7 +1727,7 @@ static long do_recv(struct file *f, struct kmsghdr *m, int flags) {
   if (!vp)
     return -ENOMEM;
   long r;
-  if (copy_from_user(vp, (void *)m->iov, m->iovlen * sizeof(*vp))) {
+  if (iov_fetch(vp, m, kernel_iov)) {
     r = -EFAULT;
     goto out;
   }
@@ -1864,7 +1873,7 @@ long sys_sendmsg(long fd, long umsg, long flags) {
     return -EFAULT;
   int e = -EBADF;
   struct file *f = sock_file_of((int)fd, &e);
-  return f ? do_send(f, &m, (int)flags) : e;
+  return f ? do_send(f, &m, (int)flags, false) : e;
 }
 
 long sys_recvmsg(long fd, long umsg, long flags) {
@@ -1875,7 +1884,7 @@ long sys_recvmsg(long fd, long umsg, long flags) {
   struct file *f = sock_file_of((int)fd, &e);
   if (!f)
     return e;
-  long r = do_recv(f, &m, (int)flags);
+  long r = do_recv(f, &m, (int)flags, false);
   if (r >= 0) {
     struct kmsghdr *u = (struct kmsghdr *)umsg;
     if (copy_to_user(&u->namelen, &m.namelen, 4) || copy_to_user(&u->controllen, &m.controllen, 8) ||
@@ -1895,7 +1904,7 @@ long sys_sendto(long fd, long buf, long len, long flags, long uaddr, long alen) 
   m.namelen = (uint32_t)alen;
   int e = -EBADF;
   struct file *f = sock_file_of((int)fd, &e);
-  return f ? do_send(f, &m, (int)flags) : e;
+  return f ? do_send(f, &m, (int)flags, true) : e;
 }
 
 long sys_recvfrom(long fd, long buf, long len, long flags, long uaddr, long ulen) {
@@ -1915,7 +1924,7 @@ long sys_recvfrom(long fd, long buf, long len, long flags, long uaddr, long ulen
   struct file *f = sock_file_of((int)fd, &e);
   if (!f)
     return e;
-  long r = do_recv(f, &m, (int)flags);
+  long r = do_recv(f, &m, (int)flags, true);
   if (r >= 0 && uaddr) {
     int32_t n = (int32_t)m.namelen;
     if (copy_to_user((void *)ulen, &n, 4))
@@ -2080,7 +2089,7 @@ static ssize_t sock_read(struct file *f, char *buf, size_t n, off_t *pos) {
   memset(&m, 0, sizeof(m));
   m.iov = (uint64_t)&v;
   m.iovlen = 1;
-  return do_recv(f, &m, 0);
+  return do_recv(f, &m, 0, true);
 }
 
 static ssize_t sock_write(struct file *f, const char *buf, size_t n, off_t *pos) {
@@ -2090,7 +2099,7 @@ static ssize_t sock_write(struct file *f, const char *buf, size_t n, off_t *pos)
   memset(&m, 0, sizeof(m));
   m.iov = (uint64_t)&v;
   m.iovlen = 1;
-  return do_send(f, &m, 0);
+  return do_send(f, &m, 0, true);
 }
 
 static unsigned sock_poll(struct file *f) {

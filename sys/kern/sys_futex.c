@@ -79,14 +79,14 @@ static void unqueue(struct task *t) {
 static int get_key(uint64_t uaddr, bool priv, uint64_t *k1, uint64_t *k2) {
   if (uaddr & 3)
     return -EINVAL;
+  if (!user_range_ok(uaddr, 4))
+    return -EFAULT;
   struct mm *mm = cur_proc()->mm;
   if (priv) {
     *k1 = (uint64_t)mm;
     *k2 = uaddr;
     return 0;
   }
-  if (!user_range_ok(uaddr, 4))
-    return -EFAULT;
   uint64_t *pte = pte_get(mm->pml4, uaddr, false);
   if (!pte || !(*pte & PTE_P)) {
     if (handle_fault(mm, uaddr, false, false))
