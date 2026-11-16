@@ -33,6 +33,7 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/device.h>
+#include <machine/cpu.h>
 #include <machine/mainbus.h>
 
 static int mainbus_print(void *aux, const char *pnp) {
@@ -56,7 +57,9 @@ static void mainbus_attach(struct device *parent, struct device *self, void *aux
   (void)aux;
   struct mainbus_attach_args ma = {"cpu", 0};
   printf("\n");
-  config_found(self, &ma, mainbus_print);
+  acpimadt_init();
+  if (lapic_pa)
+    printf("acpimadt0 at mainbus0 addr 0x%lx%s\n", lapic_pa, acpimadt_pcat ? ": PC-AT compat" : "");  config_found(self, &ma, mainbus_print);
   ma.maa_name = "pci";
   config_found(self, &ma, mainbus_print);
 }

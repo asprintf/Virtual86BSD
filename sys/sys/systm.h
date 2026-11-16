@@ -61,6 +61,7 @@ extern const char ostype[], osrelease[], osversion[], version[];
 
 /* what sysctl(2) shows (kern/kern_sysctl.c and its owners) */
 extern char cpu_model[64]; /* the processor's brand string, set by cpu_attach */
+extern int ncpufound;      /* the processors the firmware lists (acpimadt.c) */
 extern int maxproc, maxfiles, argmax; /* kern_proc.c, kern_descrip.c, kern_exec.c */
 void loadavg_init(void);
 NORETURN void panic(const char *fmt, ...);

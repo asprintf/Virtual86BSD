@@ -265,8 +265,9 @@ static long hw_sysctl(int *name, unsigned namelen, void *oldp, size_t *oldlenp, 
     return rd_string(oldp, oldlenp, newp, "amd64");
   case HW_MODEL:
     return rd_string(oldp, oldlenp, newp, cpu_model);
-  case HW_NCPU:
   case HW_NCPUFOUND:
+    return rd_int(oldp, oldlenp, newp, ncpufound ? ncpufound : 1);
+  case HW_NCPU:
   case HW_NCPUONLINE:
     return rd_int(oldp, oldlenp, newp, 1);
   case HW_BYTEORDER:

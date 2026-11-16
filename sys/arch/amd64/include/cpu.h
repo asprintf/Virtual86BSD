@@ -101,6 +101,13 @@ extern char user_access_begin[], user_access_end[], user_access_fault[];
 /* arch/machdep.c */
 void init_x86_64(uint32_t magic, uint32_t mbi);
 
+/* arch/acpimadt.c: the processors the firmware lists (ncpufound: systm.h) */
+#define MAXCPUS 64
+extern uint32_t cpu_apicid[MAXCPUS], bsp_apicid;
+extern uint64_t lapic_pa; /* 0: no ACPI */
+extern bool acpimadt_pcat;
+void acpimadt_init(void);
+
 /* arch/x86.c */
 void arch_init(void);
 void cpu_initclocks(void);
