@@ -36,6 +36,7 @@ testprogs:
 	rb=`awk '$$2 == "SYS_set_robust_list" { print $$3 }' /usr/include/sys/syscall.h 2>/dev/null`; \
 	tid=`awk '$$2 == "SYS_set_tid_address" { print $$3 }' /usr/include/sys/syscall.h 2>/dev/null`; \
 	$(C17) -DFUTEX_NR=$${nr:-202} -DROBUST_NR=$${rb:-273} -DTIDADDR_NR=$${tid:-218} -o k_futex k_futex.c k_uaccess_s.s
+	$(C17) -o k_tlb k_tlb.c
 	mkdir -p libc
 	cp $(LIBCTESTS)/collate.def libc/
 	for t in $(LIBCTESTS)/s_*.c; do \
@@ -44,6 +45,6 @@ testprogs:
 	done
 
 clean:
-	rm -f k_sigwait k_shm k_fpu k_clofork k_mmap k_inet k_net k_timer k_maxmap k_disk k_revoke k_itimer k_sigq k_sysctl k_umount k_klog k_ifconfig k_thrkill k_xcase k_kproc k_badrip k_uaccess k_futex libc/s_* libc/collate.def
+	rm -f k_sigwait k_shm k_fpu k_clofork k_mmap k_inet k_net k_timer k_maxmap k_disk k_revoke k_itimer k_sigq k_sysctl k_umount k_klog k_ifconfig k_thrkill k_xcase k_kproc k_badrip k_uaccess k_futex k_tlb libc/s_* libc/collate.def
 
 .PHONY: testprogs clean
