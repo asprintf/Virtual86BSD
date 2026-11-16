@@ -28,9 +28,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* lock_machdep.c - the big kernel lock.  A processor holds it while it is in
-   kernel mode (taken on entry from user mode, dropped on the way back and in
-   the idle halt); a task switch keeps it.  A driver must not drop it to wait. */
+/* lock_machdep.c - the big kernel lock, a ticket lock.  A processor holds it
+   while it is in kernel mode (taken on entry from user mode, dropped on the
+   way back and in the idle halt); a task switch keeps it.  A driver must not
+   drop it to wait. */
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -38,44 +39,48 @@
 
 #define BKL_PANIC_SECS 40 /* longer than any device wait (virtio-blk gives up after 30 s) */
 
-static volatile int bkl_owner; /* the cpu index, -1 free; the boot processor holds it from the start */
-static volatile int bkl_bsp_waiting;
+/* The boot processor holds ticket 0 from the start. */
+static volatile int bkl_next = 1;    /* the next ticket to hand out */
+static volatile int bkl_serving = 0; /* the ticket that holds the lock */
+static volatile int bkl_owner = 0;   /* the cpu index of the holder, -1 between two holders */
 bool bkl_armed;
 
 bool bkl_held(void) {
   return bkl_owner == curcpu()->ci_index;
 }
 
-/* With interrupts off.  The boot processor is served first: it takes every
-   device interrupt. */
+/* With interrupts off.  The panic comes when the lock has not been passed on
+   for BKL_PANIC_SECS: a long queue of short holds is no reason. */
 void bkl_lock(void) {
   int me = curcpu()->ci_index;
   KASSERT(!(read_rflags() & 0x200));
   KASSERT(bkl_owner != me);
-  if (me == 0)
-    bkl_bsp_waiting = 1;
-  uint64_t deadline = 0;
-  for (unsigned spins = 0;; spins++) {
-    if (bkl_owner == -1 && (me == 0 || !bkl_bsp_waiting) && cas32(&bkl_owner, -1, me) == -1)
-      break;
+  int ticket = xadd32(&bkl_next, 1);
+  int seen = bkl_serving;
+  uint64_t hz = 0, deadline = 0;
+  for (unsigned spins = 1; bkl_serving != ticket; spins++) {
     if (panicking)
       for (;;)
         hlt();
     cpu_pause();
-    if (deadline == 0) {
-      uint64_t hz = tsc_frequency();
+    if (bkl_serving != seen) {
+      seen = bkl_serving;
+      deadline = 0;
+    } else if (deadline == 0) {
+      if (hz == 0)
+        hz = tsc_frequency();
       if (hz)
         deadline = rdtsc64() + BKL_PANIC_SECS * hz;
     } else if ((spins & 1023) == 0 && rdtsc64() > deadline)
       panic("cpu%d waits for the kernel lock held by cpu%d", me, bkl_owner);
   }
-  if (me == 0)
-    bkl_bsp_waiting = 0;
+  bkl_owner = me;
 }
 
 void bkl_unlock(void) {
   KASSERT(bkl_owner == curcpu()->ci_index);
-  store32(&bkl_owner, -1);
+  bkl_owner = -1;
+  store32(&bkl_serving, (int)((unsigned)bkl_serving + 1));
 }
 
 /* irq_save() in a kernel with DIAGNOSTIC: the code that irq_save protects

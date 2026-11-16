@@ -234,8 +234,9 @@ cpu_pause:	pause
 
 # int cas32(volatile int *p, int old, int new): the value that was at p (old if it
 # was replaced); void store32(volatile int *p, int v): an ordered store;
-# int xchg32(volatile int *p, int v): store v, return the old value
-	.globl cas32, store32, xchg32
+# int xchg32(volatile int *p, int v): store v, return the old value;
+# int xadd32(volatile int *p, int v): add v to *p, return the old value
+	.globl cas32, store32, xchg32, xadd32
 cas32:	movl %esi, %eax
 	lock cmpxchgl %edx, (%rdi)
 	ret
@@ -243,4 +244,7 @@ store32:	movl %esi, (%rdi)
 	ret
 xchg32:	movl %esi, %eax
 	xchgl %eax, (%rdi)
+	ret
+xadd32:	movl %esi, %eax
+	lock xaddl %eax, (%rdi)
 	ret

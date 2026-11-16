@@ -78,6 +78,7 @@ void cpu_pause(void); /* pause */
 int cas32(volatile int *p, int old, int nv); /* the value found at p; nv was stored if it was old */
 void store32(volatile int *p, int v);
 int xchg32(volatile int *p, int v); /* store v, return the old value */
+int xadd32(volatile int *p, int v); /* add v, return the old value */
 void lgdt_reload(void *ptr);
 void lidt(void *ptr);
 void ltr(uint16_t sel);
