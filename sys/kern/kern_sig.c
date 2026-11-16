@@ -521,6 +521,8 @@ static bool on_altstack(uint64_t sp) {
 
 static int setup_frame(int sig, struct k_sigaction *ka, struct siginfo *si, struct regs *r,
                        sigset_t oldmask) {
+  if (ka->handler >= USER_TOP) /* iretq to such an address would fault in the kernel */
+    return -EFAULT;
   uint64_t sp = r->rsp;
   if ((ka->flags & SA_ONSTACK) && !(current->altstack.flags & SS_DISABLE) && !on_altstack(sp))
     sp = current->altstack.sp + current->altstack.size;
