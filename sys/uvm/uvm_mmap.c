@@ -320,12 +320,12 @@ long sys_mremap(long oaddr, long olen, long nlen, long flags, long naddr) {
       continue;
     uint64_t e = *pte;
     *pte = 0;
-    invlpg(old + a);
+    tlb_flush_page(mm, old + a);
     uint64_t *npte = pte_get(mm->pml4, na + a, true);
     if (!npte)
       return -ENOMEM;
     *npte = e;
-    invlpg(na + a);
+    tlb_flush_page(mm, na + a);
   }
   vma_unmap(mm, old, old + os);
   return (long)na;

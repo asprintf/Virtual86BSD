@@ -71,6 +71,18 @@ void vm_init(void) {
 
 void flush_tlb(void) { write_cr3(read_cr3()); }
 
+/* A processor holds translations of an address space only while it is loaded
+   (CR3), so these reach no other processor yet. */
+void tlb_flush_page(struct mm *mm, uint64_t va) {
+  if (read_cr3() == mm->pml4)
+    invlpg(va);
+}
+
+void tlb_flush_mm(struct mm *mm) {
+  if (read_cr3() == mm->pml4)
+    flush_tlb();
+}
+
 uint64_t *pte_get(uint64_t pml4, uint64_t va, bool create) {
   uint64_t *t = P2V(pml4);
   for (int level = 3; level > 0; level--) {
@@ -135,7 +147,7 @@ int map_page(struct mm *mm, uint64_t va, uint64_t phys, uint64_t flags) {
   else
     mm->rss++;
   *pte = phys | flags;
-  invlpg(va);
+  tlb_flush_page(mm, va);
   return 0;
 }
 
@@ -182,8 +194,7 @@ void unmap_range(struct mm *mm, uint64_t start, uint64_t end) {
       page_put(*pde & PTE_ADDR);
       *pde = 0;
       mm->rss--;
-      if (mm == (current ? current->proc->mm : NULL))
-        invlpg(a);
+      tlb_flush_page(mm, a);
     }
     a += PAGE_SIZE;
   }
@@ -304,10 +315,10 @@ struct mm *mm_dup(struct mm *old) {
       mm->rss++;
     }
   }
-  flush_tlb();
+  tlb_flush_mm(old);
   return mm;
 fail:
-  flush_tlb();
+  tlb_flush_mm(old);
   mm_put(mm);
   return NULL;
 }
@@ -493,8 +504,7 @@ static int do_cow(struct mm *mm, uint64_t *pte, uint64_t addr) {
     *pte = n | ((*pte | PTE_W) & ~PTE_COW & ~PTE_ADDR);
     page_put(old);
   }
-  (void)mm;
-  invlpg(PAGE_DOWN(addr));
+  tlb_flush_page(mm, PAGE_DOWN(addr));
   return 0;
 }
 
@@ -535,7 +545,7 @@ int handle_fault(struct mm *mm, uint64_t addr, bool write, bool user) {
       return do_cow(mm, pte, addr);
     if (write && !(*pte & PTE_W))
       return -EFAULT;
-    invlpg(PAGE_DOWN(addr)); /* stale TLB entry */
+    tlb_flush_page(mm, PAGE_DOWN(addr)); /* stale TLB entry */
     return 0;
   }
   int r = fault_in(mm, v, addr);
@@ -777,7 +787,7 @@ void vma_protect_range(struct mm *mm, uint64_t start, uint64_t end, unsigned pro
       if (!(prot & (VM_READ | VM_WRITE | VM_EXEC)))
         e &= ~PTE_U; /* PROT_NONE: the page stays, user access faults */
       *pte = e;
-      invlpg(a);
+      tlb_flush_page(mm, a);
     }
   }
 }

@@ -122,6 +122,8 @@ uint64_t *pte_get(uint64_t pml4, uint64_t va, bool create);
 int map_page(struct mm *mm, uint64_t va, uint64_t phys, uint64_t flags);
 void unmap_range(struct mm *mm, uint64_t start, uint64_t end);
 void flush_tlb(void);
+void tlb_flush_page(struct mm *mm, uint64_t va); /* mm's translation of va changed */
+void tlb_flush_mm(struct mm *mm);                /* many of mm's translations changed */
 uint64_t vm_prot_pte(unsigned vmflags);
 void *ioremap(uint64_t phys, size_t size); /* device memory, uncached */
 void *ioremap_wb(uint64_t phys, size_t size); /* device memory, cached: a framebuffer */
