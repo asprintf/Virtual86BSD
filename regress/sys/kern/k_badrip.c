@@ -1,6 +1,7 @@
-/* A return address no user program can run at (rt_sigreturn with a changed
- * address, or an ELF entry point) must end the process with SIGSEGV; it must
- * not stop the kernel (iretq faults in kernel mode on a non-canonical one). */
+/* An address no user program can run at (the return address of
+ * rt_sigreturn, an ELF entry point, a signal handler) must end the process
+ * with SIGSEGV; it must not stop the kernel (iretq faults in kernel mode on a
+ * non-canonical one). */
 #define _XOPEN_SOURCE 700
 #include <fcntl.h>
 #include <signal.h>
@@ -35,6 +36,18 @@ static void sigret_child(unsigned long long rip)
 	sa.sa_flags = SA_SIGINFO;
 	sigaction(SIGUSR1, &sa, NULL);
 	newrip = rip;
+	raise(SIGUSR1);
+	_exit(0);
+}
+
+/* the child: a signal handler at that address */
+static void handler_child(unsigned long long addr)
+{
+	struct sigaction sa;
+
+	memset(&sa, 0, sizeof(sa));
+	sa.sa_handler = (void (*)(int))addr;
+	sigaction(SIGUSR1, &sa, NULL);
 	raise(SIGUSR1);
 	_exit(0);
 }
@@ -99,6 +112,18 @@ int main(void)
 		pid = fork();
 		if (pid == 0)
 			sigret_child(rips[i]);
+		CHECK(waitpid(pid, &st, 0) == pid);
+		CHECK(WIFSIGNALED(st) && WTERMSIG(st) == SIGSEGV);
+	}
+
+	for (i = 0; i < sizeof(rips) / sizeof(rips[0]); i++) {
+		pid_t pid;
+
+		printf("signal handler at %#llx\n", rips[i]);
+		fflush(stdout);
+		pid = fork();
+		if (pid == 0)
+			handler_child(rips[i]);
 		CHECK(waitpid(pid, &st, 0) == pid);
 		CHECK(WIFSIGNALED(st) && WTERMSIG(st) == SIGSEGV);
 	}
