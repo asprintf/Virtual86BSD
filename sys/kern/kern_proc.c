@@ -512,6 +512,8 @@ NORETURN void do_exit(int status) {
   cli();
   list_del(&t->thread_link);
   p->nthreads--;
+  if (p->nthreads > 0 && p->stopped)
+    group_stop_report(p); /* (the others may all have stopped) */
   /* process-directed signals that this thread still holds stay in p */
   if (p->nthreads == 0) {
     sti();

@@ -88,6 +88,7 @@ static void proc_continue(struct proc *p, bool notify) {
   if (!p->stopped)
     return;
   p->stopped = false;
+  p->stop_unreported = false;
   p->report = CLD_CONTINUED;
   list_for_each(q, &p->threads) {
     struct task *t = list_entry(q, struct task, thread_link);
@@ -467,26 +468,40 @@ void orphan_check_exit(struct proc *p) {
   p->state = P_ALIVE;
 }
 
+/* The parent is told of a stop when no thread of the process runs any more:
+   by the last one to stop, or to exit. */
+void group_stop_report(struct proc *p) {
+  if (!p->stop_unreported)
+    return;
+  list_for_each(q, &p->threads) {
+    struct task *t = list_entry(q, struct task, thread_link);
+    if (t != current && t->state == T_RUNNING)
+      return;
+  }
+  p->stop_unreported = false;
+  p->report = CLD_STOPPED;
+  struct proc *pp = p->parent;
+  if (pp != p) {
+    if (!(pp->sigact[SIGCHLD - 1].flags & SA_NOCLDSTOP)) {
+      struct siginfo si;
+      memset(&si, 0, sizeof(si));
+      si.signo = SIGCHLD;
+      si.code = CLD_STOPPED;
+      si.u.chld.pid = p->pid;
+      si.u.chld.uid = p->cred.uid;
+      si.u.chld.status = p->stop_sig;
+      send_signal_proc(pp, &si);
+    }
+    wake_up(&pp->child_wait);
+  }
+}
+
 static void do_signal_stop(int sig) {
   struct proc *p = cur_proc();
   if (!p->stopped) {
     p->stopped = true;
     p->stop_sig = sig;
-    p->report = CLD_STOPPED;
-    struct proc *pp = p->parent;
-    if (pp != p) {
-      if (!(pp->sigact[SIGCHLD - 1].flags & SA_NOCLDSTOP)) {
-        struct siginfo si;
-        memset(&si, 0, sizeof(si));
-        si.signo = SIGCHLD;
-        si.code = CLD_STOPPED;
-        si.u.chld.pid = p->pid;
-        si.u.chld.uid = p->cred.uid;
-        si.u.chld.status = sig;
-        send_signal_proc(pp, &si);
-      }
-      wake_up(&pp->child_wait);
-    }
+    p->stop_unreported = true;
     list_for_each(q, &p->threads) {
       struct task *t = list_entry(q, struct task, thread_link);
       if (t != current)
@@ -498,6 +513,7 @@ static void do_signal_stop(int sig) {
 static void stop_here(void) {
   struct proc *p = cur_proc();
   while (p->stopped && !task_ending(current)) {
+    group_stop_report(p);
     current->state = T_STOPPED;
     schedule();
   }

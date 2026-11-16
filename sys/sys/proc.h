@@ -211,6 +211,7 @@ struct proc {
   bool did_exec;              /* for setpgid's EACCES */
   int stop_sig;               /* group stop in progress/done: the signal */
   bool stopped;
+  bool stop_unreported;       /* the parent has not been told of the stop */
   int report;                 /* to the parent: 0, CLD_STOPPED, CLD_CONTINUED */
   struct waitq child_wait;    /* parent's wait4 sleeps here */
   struct waitq vfork_wait;
@@ -280,6 +281,7 @@ struct proc *find_proc(pid_t pid);
 NORETURN void do_exit(int status);         /* this thread */
 NORETURN void do_group_exit(int status);   /* the whole process */
 bool task_ending(struct task *t);          /* its process exits, or another thread executes */
+void group_stop_report(struct proc *p);    /* tell the parent of a stop once no thread runs */
 void proc_vfork_release(struct proc *p);
 bool in_group(gid_t g);
 void orphan_check_exit(struct proc *p);
