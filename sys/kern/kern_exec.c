@@ -264,6 +264,8 @@ static int load_elf(struct mm *mm, struct file *f, struct elf_ehdr *eh, struct e
   }
   out->bias = bias;
   out->entry = eh->entry + bias;
+  if (out->entry >= USER_TOP) /* iretq to such an address would fault in the kernel */
+    return -ENOEXEC;
   out->phdr = phdr;
   out->phnum = eh->phnum;
   out->end = hi + bias;

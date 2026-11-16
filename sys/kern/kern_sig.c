@@ -577,6 +577,10 @@ long sys_rt_sigreturn(void) {
     return r->rax;
   }
   uint64_t *g = f.gregs;
+  if (g[RIP] >= USER_TOP) { /* iretq to such an address would fault in the kernel */
+    force_signal(SIGSEGV, SI_KERNEL, 0, 0, 0);
+    return r->rax;
+  }
   r->r8 = g[R8], r->r9 = g[R9], r->r10 = g[R10], r->r11 = g[R11];
   r->r12 = g[R12], r->r13 = g[R13], r->r14 = g[R14], r->r15 = g[R15];
   r->rdi = g[RDI], r->rsi = g[RSI], r->rbp = g[RBP], r->rbx = g[RBX];
