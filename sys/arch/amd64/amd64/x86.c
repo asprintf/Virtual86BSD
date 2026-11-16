@@ -219,7 +219,10 @@ static void trap_dispatch(struct regs *r) {
     ci->ci_irq_nesting++;
     if (v == IPI_VEC_TIMER) {
       lapic_eoi();
-      cpu_tick((r->cs & 3) == 3);
+      if (ci->ci_idling)
+        idle_tick(); /* (the kernel lock is not held) */
+      else
+        cpu_tick((r->cs & 3) == 3);
     } else
       lapic_intr((int)v);
     ci->ci_irq_nesting--;
@@ -248,8 +251,9 @@ static void trap_dispatch(struct regs *r) {
 }
 
 /* Every entry from user mode takes the kernel lock (trap_return gives it back).
-   One from kernel mode already has it, except in the idle halt; a fatal
-   exception in the kernel may come anywhere, and takes none. */
+   One from kernel mode already has it, except in the idle halt, where the kick
+   and the tick of an idle processor go without; a fatal exception in the
+   kernel may come anywhere, and takes none. */
 void trap_handler(struct regs *r) {
   uint64_t v = r->vector;
   bool user = (r->cs & 3) == 3, took = false;
@@ -259,8 +263,10 @@ void trap_handler(struct regs *r) {
   else if (v == 2 || v == 8 || v == 18)
     ci->ci_nolock = true;
   else if (!bkl_held()) {
-    bkl_lock();
-    took = true;
+    if (v != IPI_VEC_RESCHED && !(v == IPI_VEC_TIMER && ci->ci_idling)) {
+      bkl_lock();
+      took = true;
+    }
   }
   trap_dispatch(r);
   if (took)

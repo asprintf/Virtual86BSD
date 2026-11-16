@@ -91,8 +91,11 @@ struct cpu_info *cpu_alloc(int index, uint32_t apicid) {
   return ci;
 }
 
+static volatile int smp_go; /* the boot processor has finished: the others may enter the scheduler */
+
 /* A processor that is running: it takes the page tables of the kernel,
-   loads its own tables and enables its local APIC, then says so and parks. */
+   loads its own tables and enables its local APIC, then says so and waits
+   for the boot processor to let it in the scheduler. */
 void ap_main(struct cpu_info *ci) {
   write_cr3(kernel_pml4);
   cpu_tables_load(ci);
@@ -100,10 +103,30 @@ void ap_main(struct cpu_info *ci) {
   lapic_init_ap();
   mb();
   ci->ci_state = CPU_RUNNING;
-  for (;;) {
-    cli();
-    hlt();
+  cli();
+  while (!smp_go)
+    sti_hlt();
+  lapic_timer_start();
+  ap_idle();
+}
+
+/* Let the processors that came up into the scheduler (the boot processor, at
+   the end of start-up).  Without a usable timer clock they stay parked. */
+void cpu_release(void) {
+  int n = 0;
+  for (int i = 1; i < MAXCPUS; i++)
+    if (cpu_info_list[i] && cpu_info_list[i]->ci_state == CPU_RUNNING)
+      n++;
+  if (n == 0)
+    return;
+  if (!lapic_hz) {
+    printf("%d other processors not used: no apic clock\n", n);
+    return;
   }
+  smp_go = 1;
+  for (int i = 1; i < MAXCPUS; i++)
+    if (cpu_info_list[i] && cpu_info_list[i]->ci_state == CPU_RUNNING)
+      ipi_resched(cpu_info_list[i]);
 }
 
 /* Start processor ci: 0 when it is running (the boot processor is, and

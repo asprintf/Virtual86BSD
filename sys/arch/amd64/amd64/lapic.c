@@ -58,6 +58,11 @@ void ipi_register(int vec, void (*fn)(void)) {
   ipi_fn[vec - IPI_VEC_FIRST] = fn;
 }
 
+/* make ci take the IPI_VEC_RESCHED interrupt (the caller holds the kernel lock) */
+void ipi_resched(struct cpu_info *ci) {
+  lapic_ipi(ci->ci_apicid, LAPIC_ICR_ASSERT | IPI_VEC_RESCHED);
+}
+
 /* an IPI vector arrived (trap_handler) */
 void lapic_intr(int vec) {
   lapic_eoi();

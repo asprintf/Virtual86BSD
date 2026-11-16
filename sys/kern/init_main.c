@@ -195,7 +195,9 @@ void kmain(void) {
   cli();
   make_runnable(t);
   sti();
-  kthread_create("flush", flush_thread, NULL);
+  struct task *flush = kthread_create("flush", flush_thread, NULL);
+  if (flush)
+    flush->cpus_allowed = 1; /* it polls the disk with the kernel lock: the boot processor (no other runs it yet) */
   loadavg_init();
   net_init_conf();
   cpu_idle();

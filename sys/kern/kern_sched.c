@@ -29,8 +29,11 @@
  */
 
 /* sched.c - round-robin scheduler, wait queues, sleeping with timeouts,
-   kernel threads.  One processor; the kernel is not preemptive: a task
-   switches only in schedule(), which runs with interrupts off. */
+   kernel threads.  The kernel is not preemptive: a task switches only in
+   schedule(), which runs with interrupts off, by the processor that holds
+   the kernel lock (arch lock_machdep.c).  Every processor has its own idle
+   task; a user task runs on the boot processor only (kernel threads on any),
+   and the others wait without the lock until a waker kicks them. */
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -43,7 +46,7 @@ void reset_pids(void);
 
 static struct list runq = LIST_INIT(runq);
 static struct list timed = LIST_INIT(timed);
-static struct task *dead_task; /* to free once off its stack */
+int ncpu_sched = 1; /* processors in the scheduler */
 
 /* real-time throttling, as Linux's sched_rt_runtime_us: real-time tasks
    get at most 950 ms of every second on a processor (ci_rt_ticks) */
@@ -212,17 +215,92 @@ int task_prio(struct task *t) {
 /* the priority t counts for on ci: the real-time ones do not while it is throttled */
 static int cpu_prio(const struct cpu_info *ci, struct task *t) { return rt_throttled(ci) ? 0 : task_prio(t); }
 
-void task_prio_changed(struct task *t) {
-  struct cpu_info *ci = curcpu();
-  if (current && t != current && t->state == T_RUNNING && cpu_prio(ci, t) > cpu_prio(ci, current))
-    need_resched = true;
-  if (t == current)
-    need_resched = true; /* a lower priority may let another run */
+/* a user task runs on the boot processor only (its translations are not
+   yet shot down on the others); a kernel thread where cpus_allowed says */
+static bool can_run(const struct cpu_info *ci, const struct task *t) {
+  return (t->cpus_allowed >> ci->ci_index & 1) && (ci->ci_index == 0 || t->is_kthread);
 }
 
-void make_runnable(struct task *t) {
+/* A processor in idle_loop's wait is told by ci_kick and an IPI (the kernel
+   lock is held by the caller, which makes the order with idle_loop's checks). */
+static void kick_cpu(struct cpu_info *ci) {
+  ci->ci_kick = 1;
+  ipi_resched(ci);
+}
+
+/* This processor when it is idle (we are in an interrupt that woke something),
+   else another that is idle and may run t: tell it to look at the run queue. */
+static bool kick_idle(struct task *t) {
+  struct cpu_info *me = curcpu();
+  if (me->ci_curtask && me->ci_curtask->is_idle && can_run(me, t)) {
+    me->ci_kick = 1;
+    return true;
+  }
+  if (ncpu_sched > 1) {
+    for (int i = 0; i < MAXCPUS; i++) {
+      struct cpu_info *ci = cpu_info_list[i];
+      if (ci && ci != me && ci->ci_idling && !ci->ci_kick && can_run(ci, t)) {
+        kick_cpu(ci);
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/* t has become runnable, in the run queue: have a processor take it. Idle
+   ones first, then one running something t outranks (equal: or ranks with). */
+static void run_somewhere(struct task *t, bool equal) {
+  struct cpu_info *me = curcpu();
+  if (!me->ci_curtask) {
+    me->ci_need_resched = true;
+    return;
+  }
+  if (kick_idle(t))
+    return;
+  if (can_run(me, t) && (cpu_prio(me, t) > cpu_prio(me, me->ci_curtask) ||
+                         (equal && cpu_prio(me, t) == cpu_prio(me, me->ci_curtask)))) {
+    me->ci_need_resched = true;
+    return;
+  }
+  for (int i = 0; ncpu_sched > 1 && i < MAXCPUS; i++) {
+    struct cpu_info *ci = cpu_info_list[i];
+    if (!ci || ci == me || !can_run(ci, t) || !ci->ci_curtask || ci->ci_curtask->is_idle)
+      continue;
+    int a = cpu_prio(ci, t), b = cpu_prio(ci, ci->ci_curtask);
+    if (a > b || (equal && a == b)) {
+      ci->ci_need_resched = true;
+      ipi_resched(ci);
+      return;
+    }
+  }
+}
+
+void task_prio_changed(struct task *t) {
+  if (t->state != T_RUNNING)
+    return;
+  if (t->oncpu >= 0) {
+    /* running: a lower priority may let another run */
+    struct cpu_info *ci = cpu_info_list[t->oncpu];
+    ci->ci_need_resched = true;
+    if (ci != curcpu())
+      ipi_resched(ci);
+  } else {
+    run_somewhere(t, false);
+  }
+}
+
+static void runq_add(struct task *t) {
   if (t->run_link.next == &t->run_link && !t->is_idle)
     list_add_tail(&runq, &t->run_link);
+}
+
+/* put t in the run queue, and wake a processor that is idle for it */
+void make_runnable(struct task *t) {
+  if (t->run_link.next == &t->run_link && !t->is_idle) {
+    list_add_tail(&runq, &t->run_link);
+    kick_idle(t);
+  }
 }
 
 void wake_task(struct task *t) {
@@ -231,10 +309,8 @@ void wake_task(struct task *t) {
     t->state = T_RUNNING;
     if (t->ss)
       ss_activate(t->ss, monotonic_ns());
-    make_runnable(t);
-    struct cpu_info *ci = curcpu();
-    if (!current || cpu_prio(ci, t) >= cpu_prio(ci, current))
-      need_resched = true;
+    runq_add(t);
+    run_somewhere(t, true);
   }
   irq_restore(f);
 }
@@ -261,9 +337,10 @@ void wake_up_one(struct waitq *q) {
 }
 
 static void finish_switch(void) {
-  if (dead_task && dead_task != current) {
-    struct task *t = dead_task;
-    dead_task = NULL;
+  struct cpu_info *ci = curcpu();
+  struct task *t = ci->ci_dead;
+  if (t && t != current) {
+    ci->ci_dead = NULL;
     task_free(t);
   }
 }
@@ -272,17 +349,13 @@ void schedule_tail(void) {
   finish_switch();
 }
 
-static bool can_run(const struct cpu_info *ci, const struct task *t) {
-  return t->cpus_allowed >> ci->ci_index & 1;
-}
-
 void schedule(void) {
   struct cpu_info *ci = curcpu();
   struct task *prev = current;
   KASSERT(bkl_held());
   need_resched = false;
   if (prev->state == T_RUNNING)
-    make_runnable(prev);
+    runq_add(prev);
   else if (prev->ss)
     ss_stop(prev->ss, monotonic_ns()); /* it blocks */
   /* the first of the highest priority (FIFO among equals) */
@@ -303,6 +376,8 @@ void schedule(void) {
     list_del(&next->run_link);
   if (next == prev)
     return;
+  if (prev->state == T_RUNNING && !prev->is_idle)
+    kick_idle(prev); /* (it stays in the run queue) */
   KASSERT(next->oncpu == -1);
   prev->oncpu = -1;
   next->oncpu = ci->ci_index;
@@ -440,19 +515,53 @@ void return_to_user(struct regs *r) {
   }
 }
 
+static bool runq_has_work(const struct cpu_info *ci) {
+  list_for_each(p, &runq) {
+    if (can_run(ci, list_entry(p, struct task, run_link)))
+      return true;
+  }
+  return false;
+}
+
+/* The idle task of a processor, with the kernel lock and interrupts off.
+   With nothing to run the lock is let go and the processor halts until it is
+   kicked (ci_idling is set before the lock goes, so a waker that finds the run
+   queue changed after our look sees it; clearing ci_kick under the lock). */
+static NORETURN void idle_loop(struct cpu_info *ci) {
+  for (;;) {
+    ci->ci_need_resched = false;
+    ci->ci_kick = 0;
+    if (runq_has_work(ci)) {
+      schedule();
+      continue;
+    }
+    ci->ci_idling = 1;
+    bkl_unlock();
+    while (!ci->ci_kick)
+      sti_hlt();
+    ci->ci_idling = 0;
+    bkl_lock();
+  }
+}
+
 static long idle_fn(void *arg) {
   (void)arg;
-  for (;;) {
-    cli();
-    if (!list_empty(&runq))
-      schedule();
-    else {
-      bkl_unlock();
-      sti_hlt();
-      bkl_lock();
-    }
-  }
-  return 0;
+  cli();
+  idle_loop(curcpu());
+}
+
+/* an application processor, on its idle task's stack: it joins the scheduler */
+void ap_idle(void) {
+  bkl_lock();
+  ncpu_sched++;
+  idle_loop(curcpu());
+}
+
+/* the tick of an idle processor needs no lock: it only looks for work that was
+   queued without a kick */
+void idle_tick(void) {
+  if (!list_empty(&runq))
+    curcpu()->ci_kick = 1;
 }
 
 static struct task *task_kernel(long (*fn)(void *), void *arg) {
@@ -493,7 +602,7 @@ void kthread_exit(long code) {
   current->state = T_ZOMBIE;
   kproc_detach(current);
   list_del(&current->all_link);
-  dead_task = current;
+  curcpu()->ci_dead = current;
   schedule();
   panic("dead kernel thread ran");
 }
@@ -533,7 +642,8 @@ NORETURN void cpu_idle(void) {
   cli();
   kproc_detach(boot);
   list_del(&boot->all_link);
-  dead_task = boot; /* freed by the idle task, once off the boot thread */
+  curcpu()->ci_dead = boot; /* freed by the idle task, once off the boot thread */
+  cpu_release();
   switch_stack(&boot->ksp, t->ksp);
   panic("boot thread resumed");
 }
@@ -542,4 +652,4 @@ int kstack_order(void) { return KSTACK_ORDER; }
 uint64_t task_kstack_top(struct task *t) { return (uint64_t)t->kstack + (PAGE_SIZE << KSTACK_ORDER); }
 void reset_pids(void);
 
-void task_set_dead(struct task *t) { dead_task = t; }
+void task_set_dead(struct task *t) { curcpu()->ci_dead = t; }

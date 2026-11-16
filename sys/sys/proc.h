@@ -253,6 +253,8 @@ int sleep_on(struct waitq *q, uint64_t deadline_ns, bool interruptible);
 int sleep_ns(uint64_t ns);
 void timer_tick(bool user);     /* the boot processor's clock interrupt */
 void cpu_tick(bool user);       /* every processor's tick */
+void idle_tick(void);           /* an idle processor's, without the kernel lock */
+NORETURN void ap_idle(void);    /* an application processor enters the scheduler */
 struct task *kthread_create(const char *name, long (*fn)(void *), void *arg);
 void make_runnable(struct task *t);
 int task_prio(struct task *t); /* 0 normal, 1..99 real-time */
