@@ -465,7 +465,7 @@ static char state_char(struct proc *p) {
   bool sleeping = true;
   list_for_each(q, &p->threads) {
     struct task *t = list_entry(q, struct task, thread_link);
-    if (t->is_kthread && t->tid == 0)
+    if (t->is_idle)
       continue; /* the idle task is always running */
     if (t->state == T_RUNNING)
       return 'R';

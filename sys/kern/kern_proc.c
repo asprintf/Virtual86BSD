@@ -110,6 +110,8 @@ struct task *task_alloc(struct proc *p) {
   t->regs = (struct regs *)((char *)t->kstack + (PAGE_SIZE << kstack_order()) - sizeof(struct regs));
   t->proc = p;
   t->tid = alloc_pid();
+  t->oncpu = -1;
+  t->cpus_allowed = ~0UL;
   list_init(&t->thread_link);
   list_init(&t->run_link);
   list_init(&t->wait_link);
@@ -131,6 +133,7 @@ struct task *idle_task_alloc(void) {
   last_pid = keep;
   t->tid = 0;
   t->is_kthread = true;
+  t->is_idle = true;
   t->state = T_RUNNING;
   list_del(&t->all_link);
   return t;
@@ -350,6 +353,7 @@ long do_fork(uint64_t flags, uint64_t stack, uint64_t ptid, uint64_t ctid, uint6
   t->blocked = current->blocked;
   t->policy = current->policy;
   t->rtprio = current->rtprio;
+  t->cpus_allowed = current->cpus_allowed;
   ss_copy(t, current);
   memcpy(t->fpu, current->fpu, 512);
   t->fsbase = (flags & CLONE_SETTLS) ? tls : current->fsbase;

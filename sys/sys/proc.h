@@ -69,6 +69,9 @@ struct task {
   uint64_t fsbase;
   void *fpu;               /* fxsave area */
   bool is_kthread;
+  bool is_idle;            /* a processor's idle task: never on the run queue */
+  int oncpu;               /* the processor it runs on, -1 when none */
+  uint64_t cpus_allowed;   /* bit i: it may run on cpu i */
 
   sigset_t blocked, saved_mask;
   bool restore_mask;

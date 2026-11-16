@@ -85,6 +85,7 @@ struct cpu_info *cpu_alloc(int index, uint32_t apicid) {
   ci->ci_self = ci;
   ci->ci_idle = idle;
   ci->ci_curtask = idle;
+  idle->oncpu = index;
   cpu_tss_init(ci, (uint64_t)P2V(df) + 2 * PAGE_SIZE);
   cpu_info_list[index] = ci;
   return ci;

@@ -43,7 +43,6 @@ void reset_pids(void);
 
 static struct list runq = LIST_INIT(runq);
 static struct list timed = LIST_INIT(timed);
-static struct task *idle_task;
 static struct task *dead_task; /* to free once off its stack */
 
 /* the effective priority: real-time policies have 1..99, others 0; a
@@ -219,7 +218,7 @@ void task_prio_changed(struct task *t) {
 }
 
 void make_runnable(struct task *t) {
-  if (t->run_link.next == &t->run_link && t != idle_task)
+  if (t->run_link.next == &t->run_link && !t->is_idle)
     list_add_tail(&runq, &t->run_link);
 }
 
@@ -269,7 +268,12 @@ void schedule_tail(void) {
   finish_switch();
 }
 
+static bool can_run(const struct cpu_info *ci, const struct task *t) {
+  return t->cpus_allowed >> ci->ci_index & 1;
+}
+
 void schedule(void) {
+  struct cpu_info *ci = curcpu();
   struct task *prev = current;
   need_resched = false;
   if (prev->state == T_RUNNING)
@@ -277,20 +281,25 @@ void schedule(void) {
   else if (prev->ss)
     ss_stop(prev->ss, monotonic_ns()); /* it blocks */
   /* the first of the highest priority (FIFO among equals) */
-  struct task *next = idle_task;
+  struct task *next = ci->ci_idle;
   int best = -1;
   list_for_each(p, &runq) {
     struct task *t = list_entry(p, struct task, run_link);
+    if (!can_run(ci, t))
+      continue;
     int pr = task_prio(t);
     if (pr > best) {
       best = pr;
       next = t;
     }
   }
-  if (next != idle_task)
+  if (!next->is_idle)
     list_del(&next->run_link);
   if (next == prev)
     return;
+  KASSERT(next->oncpu == -1);
+  prev->oncpu = -1;
+  next->oncpu = ci->ci_index;
   next->slice = SLICE;
   if (!prev->is_kthread && prev->fpu)
     fxsave(prev->fpu);
@@ -374,7 +383,7 @@ void timer_tick(void) {
     }
   }
   struct task *c = current;
-  if (c && c != idle_task) {
+  if (c && !c->is_idle) {
     /* SCHED_FIFO (and a sporadic server) runs until it blocks or yields,
        but not while real-time tasks are throttled (they are not then) */
     bool throttled = rt_ticks >= 950 * HZ / 1000;
@@ -390,10 +399,10 @@ void account_tick(bool user) {
   if (!list_empty(&ss_list)) {
     uint64_t now = monotonic_ns();
     ss_tick(now);
-    if (c && c != idle_task && c->ss)
+    if (c && !c->is_idle && c->ss)
       ss_charge(c, 1000000000UL / HZ, now);
   }
-  if (!c || c == idle_task)
+  if (!c || c->is_idle)
     return;
   if (task_prio(c) > 0 && ++rt_ticks >= 950 * HZ / 1000)
     need_resched = true;
@@ -483,13 +492,16 @@ void kthread_exit(long code) {
 void sched_init(void) {
   static uint64_t boot_ksp;
   proc_init_kernel();
-  idle_task = task_alloc(NULL);
-  idle_task->tid = 0; /* the idle task is thread 0 of kernel_task; init will be pid 1 */
+  struct task *idle = task_alloc(NULL);
+  idle->tid = 0; /* the idle task is thread 0 of kernel_task; init will be pid 1 */
   reset_pids();
-  idle_task->is_kthread = true;
-  kproc_attach(idle_task);
-  idle_task->state = T_RUNNING;
-  current = idle_task;
+  idle->is_kthread = true;
+  idle->is_idle = true;
+  kproc_attach(idle);
+  idle->state = T_RUNNING;
+  idle->oncpu = 0;
+  curcpu()->ci_idle = idle;
+  current = idle;
   (void)boot_ksp;
 }
 
@@ -499,9 +511,12 @@ NORETURN void cpu_idle(void) {
   struct task *t = task_kernel(idle_fn, NULL);
   t->tid = 0;
   t->is_kthread = true;
+  t->is_idle = true;
   t->state = T_RUNNING;
-  struct task *boot = idle_task;
-  idle_task = t;
+  t->oncpu = 0;
+  struct task *boot = curcpu()->ci_idle;
+  boot->oncpu = -1;
+  curcpu()->ci_idle = t;
   current = t;
   set_kernel_stack((uint64_t)t->kstack + (PAGE_SIZE << KSTACK_ORDER));
   boot->state = T_ZOMBIE;
