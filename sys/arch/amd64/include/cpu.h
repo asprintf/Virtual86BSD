@@ -124,6 +124,18 @@ extern uint64_t lapic_pa; /* 0: no ACPI */
 extern bool acpimadt_pcat;
 void acpimadt_init(void);
 
+/* arch/lapic.c: the local APIC; IPI_VEC_* are the vectors it delivers to
+   handlers registered with ipi_register (the rest below 0xff is unused) */
+#define IPI_VEC_FIRST 0xf0
+#define IPI_VEC_LAST 0xfe
+extern bool lapic_enabled;
+extern uint64_t lapic_hz;
+void lapic_init(const char *name);
+void lapic_eoi(void);
+void lapic_ipi_self(int vec);
+void ipi_register(int vec, void (*fn)(void));
+void lapic_intr(int vec);
+
 /* arch/x86.c */
 void arch_init(void);
 void cpu_initclocks(void);

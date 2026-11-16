@@ -78,7 +78,7 @@ static void set_dtr(uint16_t d[5], size_t limit, uint64_t base) {
     d[1 + i] = (uint16_t)(base >> 16 * i);
 }
 
-extern uint64_t isr_table[48];
+extern uint64_t isr_table[48], isr_ipi_table[IPI_VEC_LAST - IPI_VEC_FIRST + 1];
 void isr255(void);
 
 static void set_gate(int n, uint64_t fn, int dpl, int ist) {
@@ -150,6 +150,8 @@ void arch_init(void) {
   for (int i = 0; i < 48; i++)
     set_gate(i, isr_table[i], 0, i == 8 ? 1 : 0);
   set_gate(3, isr_table[3], 3, 0); /* int3 from user mode */
+  for (int i = IPI_VEC_FIRST; i <= IPI_VEC_LAST; i++)
+    set_gate(i, isr_ipi_table[i - IPI_VEC_FIRST], 0, 0);
   set_gate(255, (uint64_t)isr255, 0, 0);
   uint16_t d[5];
   set_dtr(d, sizeof(idt) - 1, (uint64_t)idt);
@@ -198,6 +200,10 @@ void trap_handler(struct regs *r) {
     for (int i = 0; i < IRQ_SHARE && irq_fn[irq][i]; i++)
       irq_fn[irq][i]();
     ci->ci_irq_nesting--;
+    return;
+  }
+  if (v >= IPI_VEC_FIRST && v <= IPI_VEC_LAST) {
+    lapic_intr((int)v);
     return;
   }
   if (v == 255)

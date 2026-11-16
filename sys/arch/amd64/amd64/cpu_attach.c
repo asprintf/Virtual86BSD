@@ -73,6 +73,7 @@ static void cpu_attach(struct device *parent, struct device *self, void *aux) {
   uint64_t mhz100 = (tsc_frequency() + 5000) / 10000;
   printf("%s: %s, %lu.%02lu MHz, %02x-%02x-%02x\n", self->dv_xname, *s ? s : "unknown processor", mhz100 / 100,
          mhz100 % 100, family, model, step);
+  lapic_init(self->dv_xname);
 }
 
 struct cfdriver cpu_cd = {NULL, "cpu", DV_CPU, 0};

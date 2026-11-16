@@ -114,6 +114,21 @@ isr\n:	pushq $\n
 	STUB_NOERR 46
 	STUB_NOERR 47
 	STUB_NOERR 255
+	STUB_NOERR 240
+	STUB_NOERR 241
+	STUB_NOERR 242
+	STUB_NOERR 243
+	STUB_NOERR 244
+	STUB_NOERR 245
+	STUB_NOERR 246
+	STUB_NOERR 247
+	STUB_NOERR 248
+	STUB_NOERR 249
+	STUB_NOERR 250
+	STUB_NOERR 251
+	STUB_NOERR 252
+	STUB_NOERR 253
+	STUB_NOERR 254
 
 	.data
 	.globl isr_table
@@ -124,6 +139,10 @@ isr_table:
 	.quad isr24, isr25, isr26, isr27, isr28, isr29, isr30, isr31
 	.quad isr32, isr33, isr34, isr35, isr36, isr37, isr38, isr39
 	.quad isr40, isr41, isr42, isr43, isr44, isr45, isr46, isr47
+	.globl isr_ipi_table
+isr_ipi_table:
+	.quad isr240, isr241, isr242, isr243, isr244, isr245, isr246, isr247
+	.quad isr248, isr249, isr250, isr251, isr252, isr253, isr254
 	.text
 
 # (cs of the interrupted code is at 24(%rsp): from user mode, swap in the
