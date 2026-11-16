@@ -36,6 +36,7 @@
 struct mainbus_attach_args {
   const char *maa_name; /* "cpu" or "pci" */
   int maa_bus;          /* pci: the bus number */
+  uint32_t maa_apicid;  /* cpu: its APIC id */
 };
 
 #endif

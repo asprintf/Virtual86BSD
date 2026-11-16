@@ -88,6 +88,24 @@ static void parse_multiboot(uint32_t magic, uint64_t mbi) {
     panic("no memory map");
 }
 
+/* A page below 1 MiB (where a start-up IPI can send a processor) that the
+   firmware's map calls usable and the loader's hand-over does not use; 0 if
+   there is none. */
+uint64_t lowmem_page(void) {
+  for (uint64_t a = 0x9e000; a >= 0x10000; a -= PAGE_SIZE) {
+    bool ok = false;
+    for (int i = 0; i < nranges; i++)
+      if (a >= ranges[2 * i] && a + PAGE_SIZE <= ranges[2 * i + 1])
+        ok = true;
+    for (int k = 0; k + 1 < nreserved; k += 2)
+      if (a + PAGE_SIZE > reserved[k] && a < reserved[k + 1])
+        ok = false;
+    if (ok)
+      return a;
+  }
+  return 0;
+}
+
 void init_x86_64(uint32_t magic, uint32_t mbi) {
   serial_init();
   vga_init();

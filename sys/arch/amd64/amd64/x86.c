@@ -38,8 +38,8 @@
 
 void account_tick(bool user);
 
-/* GDT: the layout of Linux (selectors in arch.h), TSS at 0x40 */
-static uint64_t gdt[10] = {
+/* GDT: the layout of Linux (selectors in arch.h), a TSS for each processor from 0x40 */
+static uint64_t gdt[8 + 2 * MAXCPUS] = {
     0,
     0x00cf9a000000ffff, /* 0x08 kernel 32-bit code (unused) */
     0x00af9a000000ffff, /* 0x10 kernel code */
@@ -48,20 +48,18 @@ static uint64_t gdt[10] = {
     0x00cff2000000ffff, /* 0x2b user data */
     0x00affa000000ffff, /* 0x33 user code */
     0,
-    0, 0,               /* 0x40 TSS (16 bytes) */
 };
 
-/* the 64-bit TSS (104 bytes, 4-byte aligned fields): kept as 32-bit words
-   because the 64-bit fields are unaligned */
-static uint32_t tss[26];
+/* the 64-bit TSS of a processor (104 bytes) is ci_tss, as 32-bit words */
 #define TSS_RSP0 1
 #define TSS_IST1 9
-static void tss_set64(int word, uint64_t v) {
-  tss[word] = (uint32_t)v;
-  tss[word + 1] = (uint32_t)(v >> 32);
+static void tss_set64(struct cpu_info *ci, int word, uint64_t v) {
+  ci->ci_tss[word] = (uint32_t)v;
+  ci->ci_tss[word + 1] = (uint32_t)(v >> 32);
 }
 static uint64_t df_stack[1024];
 struct cpu_info cpu_info_primary;
+struct cpu_info *cpu_info_list[MAXCPUS] = {&cpu_info_primary};
 
 struct idt_entry {
   uint16_t off0, sel;
@@ -92,8 +90,9 @@ static void set_gate(int n, uint64_t fn, int dpl, int ist) {
 }
 
 void set_kernel_stack(uint64_t top) {
-  tss_set64(TSS_RSP0, top);
-  curcpu()->ci_kstack_top = top;
+  struct cpu_info *ci = curcpu();
+  tss_set64(ci, TSS_RSP0, top);
+  ci->ci_kstack_top = top;
 }
 
 /* 8259 PICs, remapped to vectors 32..47 */
@@ -134,39 +133,49 @@ void pic_eoi(int irq) {
   outb(0x20, 0x20);
 }
 
-void arch_init(void) {
-  uint64_t t = (uint64_t)tss;
-  gdt[8] = (sizeof(tss) - 1) | (t & 0xffffff) << 16 | 0x89UL << 40 | ((t >> 24) & 0xff) << 56;
-  gdt[9] = t >> 32;
-  tss[25] = (uint32_t)sizeof(tss) << 16; /* no I/O permission map */
-  tss_set64(TSS_IST1, (uint64_t)df_stack + sizeof(df_stack));
-  uint16_t g[5];
+/* the TSS of ci, with df_top the top of its stack for double faults, in the GDT */
+void cpu_tss_init(struct cpu_info *ci, uint64_t df_top) {
+  uint64_t t = (uint64_t)ci->ci_tss;
+  int i = 8 + 2 * ci->ci_index;
+  gdt[i] = (sizeof(ci->ci_tss) - 1) | (t & 0xffffff) << 16 | 0x89UL << 40 | ((t >> 24) & 0xff) << 56;
+  gdt[i + 1] = t >> 32;
+  ci->ci_tss[25] = (uint32_t)sizeof(ci->ci_tss) << 16; /* no I/O permission map */
+  tss_set64(ci, TSS_IST1, df_top);
+}
+
+/* this processor's tables, %gs and system call entry (ci is its own) */
+void cpu_tables_load(struct cpu_info *ci) {
+  uint16_t g[5], d[5];
   set_dtr(g, sizeof(gdt) - 1, (uint64_t)gdt);
   lgdt_reload(g);
-  cpu_info_primary.ci_self = &cpu_info_primary;
-  gs_init(&cpu_info_primary); /* (the reload cleared the base) */
-  ltr(TSS_SEL);
-
-  for (int i = 0; i < 48; i++)
-    set_gate(i, isr_table[i], 0, i == 8 ? 1 : 0);
-  set_gate(3, isr_table[3], 3, 0); /* int3 from user mode */
-  for (int i = IPI_VEC_FIRST; i <= IPI_VEC_LAST; i++)
-    set_gate(i, isr_ipi_table[i - IPI_VEC_FIRST], 0, 0);
-  set_gate(255, (uint64_t)isr255, 0, 0);
-  uint16_t d[5];
+  gs_init(ci); /* (the reload cleared the base) */
+  ltr(TSS_SEL(ci->ci_index));
   set_dtr(d, sizeof(idt) - 1, (uint64_t)idt);
   lidt(d);
-  pic_init();
-
-  /* SSE for user programs: CR0.MP, !EM; CR4.OSFXSR, OSXMMEXCPT */
-  write_cr0((read_cr0() & ~4UL) | 2);
-  write_cr4(read_cr4() | 0x600);
 
   /* system calls */
   wrmsr(MSR_EFER, rdmsr(MSR_EFER) | 1); /* SCE */
   wrmsr(MSR_STAR, (uint64_t)KERNEL_CS << 32 | (uint64_t)(USER32_CS - 3) << 48);
   wrmsr(MSR_LSTAR, (uint64_t)syscall_entry);
   wrmsr(MSR_SFMASK, 0x47700); /* IF, TF, DF, AC, NT, IOPL cleared on entry */
+}
+
+void arch_init(void) {
+  struct cpu_info *ci = &cpu_info_primary;
+  ci->ci_self = ci;
+  cpu_tss_init(ci, (uint64_t)df_stack + sizeof(df_stack));
+  for (int i = 0; i < 48; i++)
+    set_gate(i, isr_table[i], 0, i == 8 ? 1 : 0);
+  set_gate(3, isr_table[3], 3, 0); /* int3 from user mode */
+  for (int i = IPI_VEC_FIRST; i <= IPI_VEC_LAST; i++)
+    set_gate(i, isr_ipi_table[i - IPI_VEC_FIRST], 0, 0);
+  set_gate(255, (uint64_t)isr255, 0, 0);
+  cpu_tables_load(ci);
+  pic_init();
+
+  /* SSE for user programs: CR0.MP, !EM; CR4.OSFXSR, OSXMMEXCPT */
+  write_cr0((read_cr0() & ~4UL) | 2);
+  write_cr4(read_cr4() | 0x600);
 }
 
 static void dump_regs(struct regs *r) {

@@ -514,6 +514,7 @@ NORETURN void cpu_idle(void) {
 }
 
 int kstack_order(void) { return KSTACK_ORDER; }
+uint64_t task_kstack_top(struct task *t) { return (uint64_t)t->kstack + (PAGE_SIZE << KSTACK_ORDER); }
 void reset_pids(void);
 
 void task_set_dead(struct task *t) { dead_task = t; }

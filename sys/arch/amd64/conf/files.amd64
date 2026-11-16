@@ -11,6 +11,8 @@ file arch/amd64/amd64/entry.s
 file arch/amd64/amd64/machdep.c
 file arch/amd64/amd64/acpimadt.c
 file arch/amd64/amd64/lapic.c
+file arch/amd64/amd64/mptramp.s
+file arch/amd64/amd64/cpu_boot.c
 file arch/amd64/amd64/x86.c
 file arch/amd64/amd64/syscall.c
 file arch/amd64/amd64/autoconf.c

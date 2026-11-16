@@ -61,7 +61,7 @@ multiboot_header:
 	# address)
 	.text
 	.code32
-	.globl _start32
+	.globl _start32, boot_gdt_ptr, boot_pdpt_low
 _start32:
 	cli
 	movl %eax, %edi                 # multiboot magic -> init_x86_64's 1st argument

@@ -49,7 +49,7 @@ struct regs {
 #define USER32_CS 0x23
 #define USER_DS 0x2b
 #define USER_CS 0x33
-#define TSS_SEL 0x40
+#define TSS_SEL(i) (0x40 + 16 * (i)) /* the TSS of processor i */
 
 #define MSR_EFER 0xC0000080
 #define MSR_STAR 0xC0000081
@@ -90,6 +90,14 @@ int rdrand64(uint64_t *out, int seed); /* 1: out is the processor's random numbe
    gs_init); the user's %gs base is kept in the other base register and swapped
    in and out by swapgs on every entry and exit (entry.s, which reads the first
    three fields by their offsets). */
+#define MAXCPUS 64
+
+/* ci_state: a processor is started once */
+#define CPU_NOTSTARTED 0
+#define CPU_STARTING 1
+#define CPU_RUNNING 2
+#define CPU_FAILED 3
+
 struct task;
 struct cpu_info {
   struct cpu_info *ci_self; /* 0 */
@@ -98,8 +106,17 @@ struct cpu_info {
   struct task *ci_curtask;  /* the task running here: current (sys/proc.h) */
   bool ci_need_resched;     /* schedule() before returning to user mode */
   int ci_irq_nesting;       /* > 0 in an interrupt handler */
+  int ci_index;             /* cpuN: 0 is the boot processor */
+  uint32_t ci_apicid;       /* the APIC id the firmware lists */
+  volatile int ci_state;    /* CPU_* */
+  struct task *ci_idle;     /* its idle task (ci_curtask until the first switch) */
+  uint32_t ci_signature;    /* what the processor says it is (CPUID 1: family, model, stepping) */
+  uint32_t ci_apicid_seen;  /* its own APIC id (CPUID 1) */
+  char ci_brand[49];
+  uint32_t ci_tss[26];      /* the 64-bit TSS, as words: the 64-bit fields are unaligned */
 };
 extern struct cpu_info cpu_info_primary;
+extern struct cpu_info *cpu_info_list[MAXCPUS]; /* by ci_index, NULL for none */
 struct cpu_info *curcpu(void);
 void gs_init(struct cpu_info *ci);
 
@@ -118,7 +135,6 @@ extern char user_access_begin[], user_access_end[], user_access_fault[];
 void init_x86_64(uint32_t magic, uint32_t mbi);
 
 /* arch/acpimadt.c: the processors the firmware lists (ncpufound: systm.h) */
-#define MAXCPUS 64
 extern uint32_t cpu_apicid[MAXCPUS], bsp_apicid;
 extern uint64_t lapic_pa; /* 0: no ACPI */
 extern bool acpimadt_pcat;
@@ -135,9 +151,20 @@ void lapic_eoi(void);
 void lapic_ipi_self(int vec);
 void ipi_register(int vec, void (*fn)(void));
 void lapic_intr(int vec);
+bool lapic_ipi(uint32_t apicid, uint32_t cmd);
+void lapic_init_ap(void);
+
+/* arch/cpu_boot.c: the application processors, started by the boot processor */
+void cpu_identify(struct cpu_info *ci);
+struct cpu_info *cpu_alloc(int index, uint32_t apicid);
+int cpu_boot(struct cpu_info *ci);
+void ap_main(struct cpu_info *ci);
+uint64_t lowmem_page(void); /* arch/machdep.c: a free page below 1 MiB, 0 if none */
 
 /* arch/x86.c */
 void arch_init(void);
+void cpu_tss_init(struct cpu_info *ci, uint64_t df_top);
+void cpu_tables_load(struct cpu_info *ci);
 void cpu_initclocks(void);
 void set_kernel_stack(uint64_t top);
 void irq_register(int irq, void (*fn)(void));

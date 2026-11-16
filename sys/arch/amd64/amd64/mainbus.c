@@ -55,11 +55,27 @@ static int mainbus_match(struct device *parent, void *match, void *aux) {
 static void mainbus_attach(struct device *parent, struct device *self, void *aux) {
   (void)parent;
   (void)aux;
-  struct mainbus_attach_args ma = {"cpu", 0};
+  struct mainbus_attach_args ma = {"cpu", 0, 0};
   printf("\n");
   acpimadt_init();
   if (lapic_pa)
-    printf("acpimadt0 at mainbus0 addr 0x%lx%s\n", lapic_pa, acpimadt_pcat ? ": PC-AT compat" : "");  config_found(self, &ma, mainbus_print);
+    printf("acpimadt0 at mainbus0 addr 0x%lx%s\n", lapic_pa, acpimadt_pcat ? ": PC-AT compat" : "");
+  ma.maa_apicid = bsp_apicid;
+  config_found(self, &ma, mainbus_print); /* cpu0: the one running */
+  int others = 0;
+  for (int i = 0; i < ncpufound; i++)
+    if (cpu_apicid[i] != bsp_apicid)
+      others++;
+  if (others && !lapic_enabled)
+    printf("%d other processor%s not started: no usable local APIC\n", others, others == 1 ? "" : "s");
+  else
+    for (int i = 0, n = 1; i < ncpufound && n < MAXCPUS; i++) {
+      if (cpu_apicid[i] == bsp_apicid)
+        continue;
+      ma.maa_apicid = cpu_apicid[i];
+      config_found(self, &ma, mainbus_print);
+      n++;
+    }
   ma.maa_name = "pci";
   config_found(self, &ma, mainbus_print);
 }

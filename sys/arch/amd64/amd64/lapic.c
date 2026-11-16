@@ -28,9 +28,9 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* lapic.c - the local APIC of the boot processor: enabled beside the 8259
+/* lapic.c - the local APIC: the boot processor's enabled beside the 8259
    (which keeps delivering the devices' interrupts through LINT0), its timer
-   measured, and the inter-processor interrupt vectors. */
+   measured, the inter-processor interrupts, and the others' set-up. */
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <uvm/uvm.h>
@@ -82,7 +82,46 @@ static uint64_t lapic_calibrate(void) {
   return (uint64_t)(0xffffffffU - left) * tsc_frequency() / (t1 - t0);
 }
 
+/* the registers every local APIC is given: the 8259's interrupts come to the
+   boot processor's LINT0 only */
+static void lapic_setup(bool boot) {
+  lapic_write(LAPIC_TPR, 0);
+  lapic_write(LAPIC_LVT_LINT0, boot ? LAPIC_DM_EXTINT : LAPIC_LVT_MASKED | LAPIC_DM_EXTINT);
+  lapic_write(LAPIC_LVT_LINT1, LAPIC_DM_NMI);
+  lapic_write(LAPIC_LVT_TIMER, LAPIC_LVT_MASKED);
+  lapic_write(LAPIC_LVT_ERROR, LAPIC_LVT_MASKED);
+  lapic_write(LAPIC_ESR, 0);
+  lapic_write(LAPIC_ESR, 0);
+  lapic_write(LAPIC_SVR, LAPIC_SVR_ENABLE | 0xff);
+}
 
+/* an application processor's own local APIC, at the address the boot processor mapped */
+void lapic_init_ap(void) { lapic_setup(false); }
+
+/* wait for the APIC to have sent the last IPI (100 ms at most) */
+static bool lapic_icr_idle(void) {
+  uint64_t end = rdtsc64() + tsc_frequency() / 10;
+  while (lapic_read(LAPIC_ICR_LO) & LAPIC_ICR_PENDING) {
+    if (rdtsc64() > end)
+      return false;
+    cpu_pause();
+  }
+  return true;
+}
+
+/* an IPI to the processor with this APIC id; cmd is the ICR's low word (delivery
+   mode, vector ...); false if the APIC did not send it */
+bool lapic_ipi(uint32_t apicid, uint32_t cmd) {
+  uint64_t f = irq_save();
+  bool ok = lapic_icr_idle();
+  if (ok) {
+    lapic_write(LAPIC_ICR_HI, apicid << 24);
+    lapic_write(LAPIC_ICR_LO, cmd);
+    ok = lapic_icr_idle();
+  }
+  irq_restore(f);
+  return ok;
+}
 
 /* Switch the local APIC on, when it is there and in the mode we use; when it
    is not, the processor stays as it was (8259 only). */
@@ -109,14 +148,7 @@ void lapic_init(const char *name) {
     printf("%s: cannot map the local APIC\n", name);
     return;
   }
-  lapic_write(LAPIC_TPR, 0);
-  lapic_write(LAPIC_LVT_LINT0, LAPIC_DM_EXTINT); /* the 8259 goes on delivering */
-  lapic_write(LAPIC_LVT_LINT1, LAPIC_DM_NMI);
-  lapic_write(LAPIC_LVT_TIMER, LAPIC_LVT_MASKED);
-  lapic_write(LAPIC_LVT_ERROR, LAPIC_LVT_MASKED);
-  lapic_write(LAPIC_ESR, 0);
-  lapic_write(LAPIC_ESR, 0);
-  lapic_write(LAPIC_SVR, LAPIC_SVR_ENABLE | 0xff);
+  lapic_setup(true);
   lapic_enabled = true;
 
   lapic_hz = lapic_calibrate();

@@ -18,7 +18,7 @@ option		COMPAT_LINUX		# Linux's system calls and ABI (compat/linux, later)
 config		bsd root on disk0s1
 
 mainbus0	at root
-cpu0		at mainbus0
+cpu*		at mainbus0
 pci*		at mainbus0
 pchb*		at pci?
 pcib*		at pci?

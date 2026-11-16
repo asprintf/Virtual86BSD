@@ -121,6 +121,21 @@ struct task *task_alloc(struct proc *p) {
   return t;
 }
 
+/* a processor's idle task: thread 0 of kernel_task, on none of its lists and
+   with no process id taken (sched_init's does the same by hand) */
+struct task *idle_task_alloc(void) {
+  pid_t keep = last_pid;
+  struct task *t = task_alloc(kernel_proc);
+  if (!t)
+    return NULL;
+  last_pid = keep;
+  t->tid = 0;
+  t->is_kthread = true;
+  t->state = T_RUNNING;
+  list_del(&t->all_link);
+  return t;
+}
+
 static void pending_clear(struct sigpending *sp) {
   list_for_each_safe(p, n, &sp->queue) {
     list_del(p);

@@ -259,6 +259,8 @@ void return_to_user(struct regs *r);
 
 /* kern/proc.c */
 struct task *task_alloc(struct proc *p);
+struct task *idle_task_alloc(void);          /* a processor's idle task */
+uint64_t task_kstack_top(struct task *t);
 void task_free(struct task *t);
 struct proc *proc_alloc(void);
 void proc_init_kernel(void);
