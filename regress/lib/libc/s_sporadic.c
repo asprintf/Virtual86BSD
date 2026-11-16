@@ -1,9 +1,11 @@
 /* Self-checking: the sporadic server (SCHED_SPORADIC, [SS] and [TSP]),
  * where the kernel has it (V86BSD's: sysconf says so; Linux: not tested).
- * A server with a budget of 20 ms every 100 ms, competing with a busy
- * SCHED_FIFO thread whose priority lies between the server's two, gets
- * about a fifth of the processor; as plain SCHED_FIFO it would get all
- * of it.  Needs permission for real-time priorities (root). */
+ * A server with a budget of 20 ms every 100 ms, competing with busy
+ * SCHED_FIFO threads whose priority lies between the server's two, gets
+ * about a fifth of a processor; as plain SCHED_FIFO it would get all
+ * of it.  There are enough busy threads for every processor: a server at
+ * its low priority runs on a processor that has nothing better to do.
+ * Needs permission for real-time priorities (root). */
 #define _XOPEN_SOURCE 800
 #include <errno.h>
 #include <pthread.h>
@@ -16,7 +18,8 @@
 #include "out.h"
 
 static volatile int stop;
-static volatile long spins[2];
+#define NFILL 8 /* at least the processors there are (no more than 8 are tested) */
+static volatile long spins[NFILL + 1];
 
 static void *busy(void *p)
 {
@@ -53,7 +56,8 @@ int main(void)
 {
 	struct sched_param p, q;
 	pthread_attr_t a;
-	pthread_t ts, tf;
+	pthread_t ts, tf[NFILL];
+	double cf = 0;
 	int pol;
 
 	if (sysconf(_SC_SPORADIC_SERVER) < 0) {
@@ -119,15 +123,19 @@ int main(void)
 	pthread_attr_setschedpolicy(&a, SCHED_FIFO);
 	p.sched_priority = 30;
 	CHECK(pthread_attr_setschedparam(&a, &p) == 0);
-	CHECK(pthread_create(&tf, &a, busy, (void *)1) == 0);
+	for (int i = 0; i < NFILL; i++)
+		CHECK(pthread_create(&tf[i], &a, busy, (void *)(long)(i + 1)) == 0);
 	{
 		struct timespec d = {1, 0};
 		nanosleep(&d, 0);
 	}
-	double cs = cpu(ts), cf = cpu(tf);
+	double cs = cpu(ts);
+	for (int i = 0; i < NFILL; i++)
+		cf += cpu(tf[i]);
 	stop = 1;
 	pthread_join(ts, 0);
-	pthread_join(tf, 0);
+	for (int i = 0; i < NFILL; i++)
+		pthread_join(tf[i], 0);
 	os("server cpu ");
 	oi((long long)(cs * 1000));
 	os(" ms, fifo ");
