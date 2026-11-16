@@ -43,6 +43,7 @@ t "the release is uname's" "$(uname -r)" 0 "$U" -n kern.osrelease
 t "the version is uname's" "$(uname -v)" 0 "$U" -n kern.osversion
 t "the machine" "hw.machine=amd64" 0 "$U" hw.machine
 t "an int" "1" 0 "$U" -n hw.ncpu
+t "the processors found are at least the ones running" "ok" 0 sh -c 'f=$("$1" -n hw.ncpufound) && n=$("$1" -n hw.ncpu) && [ "$f" -ge "$n" ] && echo ok' sh "$U"
 t "byte order" "1234" 0 "$U" -n hw.byteorder
 t "the page size is getconf's" "$(getconf PAGE_SIZE)" 0 "$U" -n hw.pagesize
 t "a quad" "ok" 0 sh -c 'v=$("$1" -n hw.physmem) && [ "$v" -ge 67108864 ] && echo ok' sh "$U"
