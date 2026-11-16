@@ -206,6 +206,7 @@ struct proc {
 
   int exit_status;            /* wait status */
   bool group_exit;
+  struct task *exec_task;  /* the thread executing a program: the others end */
   int group_status;
   bool did_exec;              /* for setpgid's EACCES */
   int stop_sig;               /* group stop in progress/done: the signal */
@@ -278,6 +279,7 @@ struct task *find_task(pid_t tid);
 struct proc *find_proc(pid_t pid);
 NORETURN void do_exit(int status);         /* this thread */
 NORETURN void do_group_exit(int status);   /* the whole process */
+bool task_ending(struct task *t);          /* its process exits, or another thread executes */
 void proc_vfork_release(struct proc *p);
 bool in_group(gid_t g);
 void orphan_check_exit(struct proc *p);

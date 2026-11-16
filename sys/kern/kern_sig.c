@@ -52,9 +52,14 @@ bool sig_ignored(struct proc *p, int sig) {
 bool signal_pending(struct task *t) {
   if (!t->proc)
     return false;
-  if (t->proc->group_exit || (t->proc->stopped && !t->exiting))
+  if ((t->proc->exec_task && t->proc->exec_task != t) || t->proc->group_exit || (t->proc->stopped && !t->exiting))
     return true;
   return ((t->pending.set | t->proc->pending.set) & ~t->blocked) != 0;
+}
+
+bool task_ending(struct task *t) {
+  struct proc *p = t->proc;
+  return p->group_exit || (p->exec_task && p->exec_task != t) || (t->pending.set & SIGBIT(SIGKILL));
 }
 
 static void signal_wake(struct task *t, bool kill) {
@@ -492,7 +497,7 @@ static void do_signal_stop(int sig) {
 
 static void stop_here(void) {
   struct proc *p = cur_proc();
-  while (p->stopped && !p->group_exit && !(current->pending.set & SIGBIT(SIGKILL))) {
+  while (p->stopped && !task_ending(current)) {
     current->state = T_STOPPED;
     schedule();
   }
@@ -635,6 +640,8 @@ static void restart_syscall(struct regs *r) {
 void do_signals(struct regs *r) {
   struct proc *p = cur_proc();
   for (;;) {
+    if (p->exec_task && p->exec_task != current)
+      do_exit(0);
     if (p->group_exit || (current->pending.set & SIGBIT(SIGKILL)))
       do_group_exit(p->group_exit ? p->group_status : SIGKILL);
     if (p->stopped) {

@@ -328,15 +328,20 @@ static int script_args(struct args *a, const char *head, size_t n, const char *p
   return 0;
 }
 
-static void de_thread(void) {
+/* The other threads of the process end (each by itself: the process goes on),
+   those it makes meanwhile too.  Fails when another thread is executing
+   (this one ends then) and when the process is killed meanwhile. */
+static int de_thread(void) {
   struct proc *p = cur_proc();
   if (p->nthreads == 1)
-    return;
+    return 0;
+  if (p->exec_task)
+    return -EAGAIN;
   uint64_t f = irq_save();
+  p->exec_task = current;
   list_for_each(q, &p->threads) {
     struct task *t = list_entry(q, struct task, thread_link);
     if (t != current) {
-      t->pending.set |= SIGBIT(SIGKILL);
       wake_task(t);
       if (t->state == T_STOPPED) {
         t->state = T_RUNNING;
@@ -344,10 +349,14 @@ static void de_thread(void) {
       }
     }
   }
+  while (p->nthreads > 1 && !task_ending(current))
+    sleep_on(NULL, sat_add(monotonic_ns(), 1000000), false);
+  p->exec_task = NULL;
   irq_restore(f);
-  while (p->nthreads > 1)
-    sleep_ns(1000000);
+  if (p->nthreads > 1)
+    return -EINTR;
   current->tid = p->pid; /* the survivor takes over the process id */
+  return 0;
 }
 
 static uint64_t hwcap(void) {
@@ -559,7 +568,11 @@ static int exec_file(struct file *f, struct args *a, const char *execfn, const c
   }
 
   /* the point of no return */
-  de_thread();
+  e = de_thread();
+  if (e) {
+    mm_put(mm);
+    goto out;
+  }
   struct task *t = current;
   futex_clear_tid(t);
   t->clear_child_tid = 0;

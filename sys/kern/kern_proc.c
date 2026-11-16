@@ -386,7 +386,7 @@ long do_fork(uint64_t flags, uint64_t stack, uint64_t ptid, uint64_t ctid, uint6
   irq_restore(f);
   if (flags & CLONE_VFORK) {
     f = irq_save();
-    while (!p->vfork_done)
+    while (!p->vfork_done && !task_ending(current))
       sleep_on(&p->vfork_wait, 0, false);
     irq_restore(f);
   }
