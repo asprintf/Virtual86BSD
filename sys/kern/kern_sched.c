@@ -32,8 +32,7 @@
    kernel threads.  The kernel is not preemptive: a task switches only in
    schedule(), which runs with interrupts off, by the processor that holds
    the kernel lock (arch lock_machdep.c).  Every processor has its own idle
-   task; a user task runs on the boot processor only (kernel threads on any),
-   and the others wait without the lock until a waker kicks them. */
+   task and waits without the lock until a waker kicks it. */
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -215,10 +214,9 @@ int task_prio(struct task *t) {
 /* the priority t counts for on ci: the real-time ones do not while it is throttled */
 static int cpu_prio(const struct cpu_info *ci, struct task *t) { return rt_throttled(ci) ? 0 : task_prio(t); }
 
-/* a user task runs on the boot processor only (its translations are not
-   yet shot down on the others); a kernel thread where cpus_allowed says */
+/* t may run on ci (the run queue has no idle tasks) */
 static bool can_run(const struct cpu_info *ci, const struct task *t) {
-  return (t->cpus_allowed >> ci->ci_index & 1) && (ci->ci_index == 0 || t->is_kthread);
+  return t->cpus_allowed >> ci->ci_index & 1;
 }
 
 /* A processor in idle_loop's wait is told by ci_kick and an IPI (the kernel
@@ -291,13 +289,15 @@ void task_prio_changed(struct task *t) {
 }
 
 static void runq_add(struct task *t) {
-  if (t->run_link.next == &t->run_link && !t->is_idle)
+  KASSERT(!t->is_idle);
+  if (t->run_link.next == &t->run_link)
     list_add_tail(&runq, &t->run_link);
 }
 
 /* put t in the run queue, and wake a processor that is idle for it */
 void make_runnable(struct task *t) {
-  if (t->run_link.next == &t->run_link && !t->is_idle) {
+  KASSERT(!t->is_idle);
+  if (t->run_link.next == &t->run_link) {
     list_add_tail(&runq, &t->run_link);
     kick_idle(t);
   }
@@ -354,9 +354,10 @@ void schedule(void) {
   struct task *prev = current;
   KASSERT(bkl_held());
   need_resched = false;
-  if (prev->state == T_RUNNING)
-    runq_add(prev);
-  else if (prev->ss)
+  if (prev->state == T_RUNNING) {
+    if (!prev->is_idle)
+      runq_add(prev);
+  } else if (prev->ss)
     ss_stop(prev->ss, monotonic_ns()); /* it blocks */
   /* the first of the highest priority (FIFO among equals) */
   struct task *next = ci->ci_idle;
@@ -379,13 +380,16 @@ void schedule(void) {
   if (prev->state == T_RUNNING && !prev->is_idle)
     kick_idle(prev); /* (it stays in the run queue) */
   KASSERT(next->oncpu == -1);
+  KASSERT(next->is_idle ? next == ci->ci_idle : can_run(ci, next));
   prev->oncpu = -1;
   next->oncpu = ci->ci_index;
   next->slice = SLICE;
   if (!prev->is_kthread && prev->fpu)
     fxsave(prev->fpu);
   current = next;
-  mm_switch(next->proc ? next->proc->mm : NULL); /* (tasks without an address space: the kernel's tables) */
+  struct mm *nm = next->proc ? next->proc->mm : NULL; /* (tasks without an address space: the kernel's tables) */
+  mm_switch(nm);
+  KASSERT(ci->ci_mm == nm && (!nm || (nm->cpus >> ci->ci_index & 1)));
   set_kernel_stack((uint64_t)next->kstack + (PAGE_SIZE << KSTACK_ORDER));
   if (!next->is_kthread && next->fpu) {
     fxrstor(next->fpu);
