@@ -92,6 +92,7 @@ struct mm {
   int nvmas;         /* VMAs, for MAX_MAP_COUNT */
   uint64_t alloc_lo; /* where vma_free_area last placed a mapping */
   struct vma *alloc_hint; /* the VMA made there (NULL when gone) */
+  uint64_t cpus;     /* bit i: processor i has this address space in CR3 (kernel lock) */
 };
 #define MAX_MAP_COUNT 65530 /* mappings per process (as Linux's default) */
 

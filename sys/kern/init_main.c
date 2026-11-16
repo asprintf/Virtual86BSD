@@ -74,6 +74,12 @@ void bootargs_init(const char *args) {
       const char *w = s;
       while (*s && *s != ' ')
         s++;
+#ifdef DIAGNOSTIC
+      if (s - w == 7 && !strncmp(w, "tlbdiag", 7)) { /* every TLB flush goes to every processor */
+        tlb_diag = true;
+        continue;
+      }
+#endif
       printf("boot argument %.*s is not supported\n", (int)(s - w), w);
     }
   }

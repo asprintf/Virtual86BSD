@@ -50,7 +50,8 @@ bool bkl_held(void) {
 }
 
 /* With interrupts off.  The panic comes when the lock has not been passed on
-   for BKL_PANIC_SECS: a long queue of short holds is no reason. */
+   for BKL_PANIC_SECS: a long queue of short holds is no reason.  A processor
+   that waits answers TLB flush requests: the holder may be waiting for it. */
 void bkl_lock(void) {
   int me = curcpu()->ci_index;
   KASSERT(!(read_rflags() & 0x200));
@@ -63,6 +64,7 @@ void bkl_lock(void) {
       for (;;)
         hlt();
     cpu_pause();
+    tlb_poll(); /* (the holder may be waiting for this processor to flush) */
     if (bkl_serving != seen) {
       seen = bkl_serving;
       deadline = 0;

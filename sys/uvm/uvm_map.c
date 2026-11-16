@@ -71,16 +71,11 @@ void vm_init(void) {
 
 void flush_tlb(void) { write_cr3(read_cr3()); }
 
-/* A processor holds translations of an address space only while it is loaded
-   (CR3), so these reach no other processor yet. */
+/* This processor only: for a mapping just made or made more permissive (an
+   old entry faults once and is dropped).  One removed or restricted: tlb_shootdown. */
 void tlb_flush_page(struct mm *mm, uint64_t va) {
   if (read_cr3() == mm->pml4)
     invlpg(va);
-}
-
-void tlb_flush_mm(struct mm *mm) {
-  if (read_cr3() == mm->pml4)
-    flush_tlb();
 }
 
 uint64_t *pte_get(uint64_t pml4, uint64_t va, bool create) {
@@ -142,12 +137,17 @@ int map_page(struct mm *mm, uint64_t va, uint64_t phys, uint64_t flags) {
   uint64_t *pte = pte_get(mm->pml4, va, true);
   if (!pte)
     return -ENOMEM;
+  uint64_t old = 0;
   if (*pte & PTE_P)
-    page_put(*pte & PTE_ADDR);
+    old = *pte & PTE_ADDR;
   else
     mm->rss++;
   *pte = phys | flags;
-  tlb_flush_page(mm, va);
+  if (old) {
+    tlb_shootdown(mm);
+    page_put(old);
+  } else
+    tlb_flush_page(mm, va);
   return 0;
 }
 
@@ -171,8 +171,13 @@ static void free_table(uint64_t t, int level, uint64_t base, uint64_t start, uin
   }
 }
 
-/* drop the pages of [start, end) (page aligned) */
+#define UNMAP_BATCH 64
+
+/* drop the pages of [start, end) (page aligned); they are freed only when no
+   processor can reach them through an old translation */
 void unmap_range(struct mm *mm, uint64_t start, uint64_t end) {
+  uint64_t gone[UNMAP_BATCH];
+  int n = 0;
   for (uint64_t a = start; a < end;) {
     uint64_t *pde = NULL;
     /* skip quickly over missing upper levels */
@@ -191,12 +196,21 @@ void unmap_range(struct mm *mm, uint64_t start, uint64_t end) {
     }
     pde = &t[(a >> 12) & 511];
     if (*pde & PTE_P) {
-      page_put(*pde & PTE_ADDR);
+      gone[n++] = *pde & PTE_ADDR;
       *pde = 0;
       mm->rss--;
-      tlb_flush_page(mm, a);
+      if (n == UNMAP_BATCH) {
+        tlb_shootdown(mm);
+        while (n > 0)
+          page_put(gone[--n]);
+      }
     }
     a += PAGE_SIZE;
+  }
+  if (n > 0) {
+    tlb_shootdown(mm);
+    while (n > 0)
+      page_put(gone[--n]);
   }
 }
 
@@ -241,8 +255,7 @@ static void vma_release(struct vma *v) {
 void mm_put(struct mm *mm) {
   if (--mm->ref > 0)
     return;
-  if (read_cr3() == mm->pml4)
-    write_cr3(kernel_pml4);
+  KASSERT(mm->cpus == 0); /* no processor has it: tasks without one load the kernel's tables */
   list_for_each_safe(p, n, &mm->vmas) {
     struct vma *v = list_entry(p, struct vma, link);
     list_del(&v->link);
@@ -253,10 +266,18 @@ void mm_put(struct mm *mm) {
   kfree(mm);
 }
 
+/* With the kernel lock.  NULL: the kernel's tables. */
 void mm_switch(struct mm *mm) {
+  struct cpu_info *ci = curcpu();
+  struct mm *old = ci->ci_mm;
   uint64_t p = mm ? mm->pml4 : kernel_pml4;
+  if (mm)
+    mm->cpus |= 1UL << ci->ci_index;
   if (read_cr3() != p)
     write_cr3(p);
+  ci->ci_mm = mm;
+  if (old && old != mm)
+    old->cpus &= ~(1UL << ci->ci_index);
 }
 
 static struct vma *vma_copy(struct vma *v) {
@@ -315,10 +336,10 @@ struct mm *mm_dup(struct mm *old) {
       mm->rss++;
     }
   }
-  tlb_flush_mm(old);
+  tlb_shootdown(old); /* (before the child runs, and before another thread writes again) */
   return mm;
 fail:
-  tlb_flush_mm(old);
+  tlb_shootdown(old);
   mm_put(mm);
   return NULL;
 }
@@ -496,15 +517,16 @@ static int do_cow(struct mm *mm, uint64_t *pte, uint64_t addr) {
   uint64_t old = *pte & PTE_ADDR;
   if (phys_page(old)->ref == 1) {
     *pte = (*pte | PTE_W) & ~PTE_COW;
-  } else {
-    uint64_t n = alloc_page();
-    if (!n)
-      return -ENOMEM;
-    memcpy(P2V(n), P2V(old), PAGE_SIZE);
-    *pte = n | ((*pte | PTE_W) & ~PTE_COW & ~PTE_ADDR);
-    page_put(old);
+    tlb_flush_page(mm, PAGE_DOWN(addr));
+    return 0;
   }
-  tlb_flush_page(mm, PAGE_DOWN(addr));
+  uint64_t n = alloc_page();
+  if (!n)
+    return -ENOMEM;
+  memcpy(P2V(n), P2V(old), PAGE_SIZE);
+  *pte = n | ((*pte | PTE_W) & ~PTE_COW & ~PTE_ADDR);
+  tlb_shootdown(mm);
+  page_put(old);
   return 0;
 }
 
@@ -776,6 +798,7 @@ struct vma *vma_split_at(struct mm *mm, uint64_t addr) {
 }
 
 void vma_protect_range(struct mm *mm, uint64_t start, uint64_t end, unsigned prot) {
+  bool changed = false;
   vma_split_at(mm, start);
   vma_split_at(mm, end);
   list_for_each(p, &mm->vmas) {
@@ -801,7 +824,9 @@ void vma_protect_range(struct mm *mm, uint64_t start, uint64_t end, unsigned pro
       if (!(prot & (VM_READ | VM_WRITE | VM_EXEC)))
         e &= ~PTE_U; /* PROT_NONE: the page stays, user access faults */
       *pte = e;
-      tlb_flush_page(mm, a);
+      changed = true;
     }
   }
+  if (changed)
+    tlb_shootdown(mm);
 }

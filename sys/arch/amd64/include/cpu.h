@@ -103,6 +103,7 @@ int rdrand64(uint64_t *out, int seed); /* 1: out is the processor's random numbe
 #define CPU_FAILED 3
 
 struct task;
+struct mm;
 struct cpu_info {
   struct cpu_info *ci_self; /* 0 */
   uint64_t ci_kstack_top;   /* 8: the kernel stack of the task running here, for system calls */
@@ -124,6 +125,9 @@ struct cpu_info {
   uint32_t ci_apicid_seen;  /* its own APIC id (CPUID 1) */
   char ci_brand[49];
   uint32_t ci_tss[26];      /* the 64-bit TSS, as words: the 64-bit fields are unaligned */
+  struct mm *ci_mm;         /* the user address space in CR3 (NULL: the kernel's) */
+  volatile int ci_tlb_req;  /* TLB flushes asked of this processor (arch/ipifuncs.c) */
+  volatile int ci_tlb_ack;  /* ... and done */
 };
 extern struct cpu_info cpu_info_primary;
 extern struct cpu_info *cpu_info_list[MAXCPUS]; /* by ci_index, NULL for none */
@@ -168,6 +172,7 @@ void acpimadt_init(void);
 #define IPI_VEC_LAST 0xfe
 #define IPI_VEC_TIMER 0xf0  /* the local APIC timer: the processor's clock tick (not the boot processor's) */
 #define IPI_VEC_RESCHED 0xf1 /* look at the run queue: the interrupt is the whole message */
+#define IPI_VEC_TLB 0xf2     /* flush the TLB: its own entry (isr_tlb), no kernel lock */
 extern bool lapic_enabled;
 extern uint64_t lapic_hz;
 void lapic_init(const char *name);
@@ -179,6 +184,10 @@ bool lapic_ipi(uint32_t apicid, uint32_t cmd);
 void lapic_init_ap(void);
 void lapic_timer_start(void);
 void ipi_resched(struct cpu_info *ci);
+
+/* arch/ipifuncs.c: TLB shootdown (tlb_shootdown: uvm/uvm_extern.h) */
+void tlb_poll(void);        /* answer a request: no lock, any context with %gs set */
+extern bool tlb_diag;       /* DIAGNOSTIC (boot argument tlbdiag): shoot at every running processor */
 
 /* arch/cpu_boot.c: the application processors, started by the boot processor */
 void cpu_identify(struct cpu_info *ci);

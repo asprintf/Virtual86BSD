@@ -314,19 +314,22 @@ long sys_mremap(long oaddr, long olen, long nlen, long flags, long naddr) {
     shmobj_get(n->shm);
   n->shm_off = v->shm_off;
   uint64_t copy = MIN(os, ns);
+  long err = 0;
   for (uint64_t a = 0; a < copy; a += PAGE_SIZE) {
     uint64_t *pte = pte_get(mm->pml4, old + a, false);
     if (!pte || !(*pte & PTE_P))
       continue;
-    uint64_t e = *pte;
-    *pte = 0;
-    tlb_flush_page(mm, old + a);
     uint64_t *npte = pte_get(mm->pml4, na + a, true);
-    if (!npte)
-      return -ENOMEM;
-    *npte = e;
-    tlb_flush_page(mm, na + a);
+    if (!npte) {
+      err = -ENOMEM;
+      break;
+    }
+    *npte = *pte;
+    *pte = 0;
   }
+  tlb_shootdown(mm); /* (the old addresses must not be reachable when this returns) */
+  if (err)
+    return err;
   vma_unmap(mm, old, old + os);
   return (long)na;
 }

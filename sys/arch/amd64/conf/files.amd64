@@ -11,6 +11,7 @@ file arch/amd64/amd64/entry.s
 file arch/amd64/amd64/machdep.c
 file arch/amd64/amd64/acpimadt.c
 file arch/amd64/amd64/lapic.c
+file arch/amd64/amd64/ipifuncs.c
 file arch/amd64/amd64/lock_machdep.c
 file arch/amd64/amd64/mptramp.s
 file arch/amd64/amd64/cpu_boot.c

@@ -75,6 +75,7 @@ static void set_dtr(uint16_t d[5], size_t limit, uint64_t base) {
 }
 
 extern uint64_t isr_table[48], isr_ipi_table[IPI_VEC_LAST - IPI_VEC_FIRST + 1];
+extern char isr_tlb[];
 void isr255(void);
 
 static void set_gate(int n, uint64_t fn, int dpl, int ist) {
@@ -171,6 +172,7 @@ void arch_init(void) {
   set_gate(3, isr_table[3], 3, 0); /* int3 from user mode */
   for (int i = IPI_VEC_FIRST; i <= IPI_VEC_LAST; i++)
     set_gate(i, isr_ipi_table[i - IPI_VEC_FIRST], 0, 0);
+  set_gate(IPI_VEC_TLB, (uint64_t)isr_tlb, 0, 0);
   set_gate(255, (uint64_t)isr255, 0, 0);
   cpu_tables_load(ci);
   bkl_armed = true;

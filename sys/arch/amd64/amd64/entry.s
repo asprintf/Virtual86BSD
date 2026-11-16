@@ -200,6 +200,40 @@ trap_return:
 	swapgs
 2:	iretq
 
+# IPI_VEC_TLB: another processor asks for a TLB flush.  This must be answered
+# whatever the kernel lock is doing, even from user mode, so it has a gate of
+# its own: no frame, no lock, only the flush and the acknowledgement.  The
+# interrupt has no error code: the cs of the interrupted code is at 8(%rsp).
+	.globl isr_tlb
+isr_tlb:
+	testb $3, 8(%rsp)
+	jz 1f
+	swapgs
+1:	pushq %rax
+	pushq %rcx
+	pushq %rdx
+	pushq %rsi
+	pushq %rdi
+	pushq %r8
+	pushq %r9
+	pushq %r10
+	pushq %r11
+	cld
+	call tlb_intr
+	popq %r11
+	popq %r10
+	popq %r9
+	popq %r8
+	popq %rdi
+	popq %rsi
+	popq %rdx
+	popq %rcx
+	popq %rax
+	testb $3, 8(%rsp)
+	jz 2f
+	swapgs
+2:	iretq
+
 # NMI, double fault, machine check: whichever %gs base is loaded, make it the
 # kernel's (these never return to kernel mode, they panic)
 isr_paranoid:

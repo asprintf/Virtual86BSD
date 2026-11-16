@@ -385,8 +385,7 @@ void schedule(void) {
   if (!prev->is_kthread && prev->fpu)
     fxsave(prev->fpu);
   current = next;
-  if (next->proc && next->proc->mm)
-    mm_switch(next->proc->mm);
+  mm_switch(next->proc ? next->proc->mm : NULL); /* (tasks without an address space: the kernel's tables) */
   set_kernel_stack((uint64_t)next->kstack + (PAGE_SIZE << KSTACK_ORDER));
   if (!next->is_kthread && next->fpu) {
     fxrstor(next->fpu);
@@ -501,6 +500,7 @@ void cpu_tick(bool user) {
 
 /* on every return to user mode, with interrupts off */
 void return_to_user(struct regs *r) {
+  KASSERT(curcpu()->ci_mm == (current->proc ? current->proc->mm : NULL));
   for (;;) {
     if (need_resched) {
       schedule();
