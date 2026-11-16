@@ -561,12 +561,8 @@ static int exec_file(struct file *f, struct args *a, const char *execfn, const c
   /* the point of no return */
   de_thread();
   struct task *t = current;
-  if (t->clear_child_tid) {
-    int32_t z = 0;
-    if (copy_to_user((void *)t->clear_child_tid, &z, 4) == 0)
-      futex_wake_addr(t->clear_child_tid, 1);
-    t->clear_child_tid = 0;
-  }
+  futex_clear_tid(t);
+  t->clear_child_tid = 0;
   t->robust_list = 0;
   struct mm *old = p->mm;
   p->mm = mm;

@@ -292,7 +292,7 @@ int do_execve(const char *path, char *const *argv, char *const *envp, int dirfd,
 int kernel_execve(const char *path, const char *const *argv, const char *const *envp);
 
 /* kern/futex.c */
-void futex_wake_addr(uint64_t uaddr, int n);
+void futex_clear_tid(struct task *t);
 void exit_robust_list(struct task *t);
 
 /* kern/time.c */

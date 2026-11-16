@@ -290,9 +290,15 @@ kthread_start:
 # long user_strnlen(const char *s, size_t max): length, max if no NUL within
 #   max bytes, -1 on a fault
 # long user_set(void *dst, int c, size_t n): 0 or -1
+# long user_load32(const uint32_t *u, uint32_t *v): *v = *u; 0 or -1
+# long user_xchg32(uint32_t *u, uint32_t *v): swap *u and *v; 0 or -1
+# long user_cmpxchg32(uint32_t *u, uint32_t *old, uint32_t nv): 0 if *u was
+#   *old and is now nv, 1 if not (*old = *u), -1 on a fault.  *u is aligned.
 # A fault inside [user_access_begin, user_access_end) that the page fault
-# handler cannot resolve resumes at user_access_fault.
+# handler cannot resolve resumes at user_access_fault: the functions in the
+# range keep the stack as it is and need no cleanup there.
 	.globl user_copy, user_strnlen, user_set, user_access_begin, user_access_end, user_access_fault
+	.globl user_load32, user_xchg32, user_cmpxchg32
 user_access_begin:
 user_copy:
 	movq %rdx, %rcx
@@ -314,6 +320,26 @@ user_strnlen:
 	incq %rax
 	jmp 1b
 2:	ret
+user_load32:
+	movl (%rdi), %eax
+	movl %eax, (%rsi)
+	xorl %eax, %eax
+	ret
+user_xchg32:
+	movl (%rsi), %eax
+	xchgl %eax, (%rdi)
+	movl %eax, (%rsi)
+	xorl %eax, %eax
+	ret
+user_cmpxchg32:
+	movl (%rsi), %eax
+	lock cmpxchgl %edx, (%rdi)
+	jne 1f
+	xorl %eax, %eax
+	ret
+1:	movl %eax, (%rsi)
+	movl $1, %eax
+	ret
 user_access_end:
 user_access_fault:
 	movq $-1, %rax

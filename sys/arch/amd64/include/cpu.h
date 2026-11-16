@@ -147,6 +147,9 @@ void syscall_entry(void);
 long user_copy(void *dst, const void *src, size_t n);
 long user_strnlen(const char *s, size_t max);
 long user_set(void *dst, int c, size_t n);
+long user_load32(const uint32_t *u, uint32_t *v);
+long user_xchg32(uint32_t *u, uint32_t *v);
+long user_cmpxchg32(uint32_t *u, uint32_t *old, uint32_t nv);
 extern char user_access_begin[], user_access_end[], user_access_fault[];
 
 /* arch/machdep.c */

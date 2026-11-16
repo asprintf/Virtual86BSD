@@ -507,11 +507,7 @@ NORETURN void do_exit(int status) {
   struct task *t = current;
   struct proc *p = t->proc;
   t->exiting = true;
-  if (t->clear_child_tid) {
-    int32_t z = 0;
-    if (copy_to_user((void *)t->clear_child_tid, &z, 4) == 0)
-      futex_wake_addr(t->clear_child_tid, 1);
-  }
+  futex_clear_tid(t);
   exit_robust_list(t);
   cli();
   list_del(&t->thread_link);

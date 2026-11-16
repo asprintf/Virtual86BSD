@@ -29,10 +29,9 @@
  */
 
 /* futex.c - fast user-space locking: wait/wake/requeue/wake_op, the
-   priority-inheritance protocol (ownership hand-over only: one processor and
-   no priorities to inherit), and robust lists at thread exit.  The kernel is
-   not preemptive and runs on one processor, so reading and writing a futex
-   word here is atomic with respect to user threads. */
+   priority-inheritance protocol, and robust lists at thread exit.  User
+   threads change a futex word without the kernel, so the kernel reads and
+   writes it only with the atomic instructions of user_load32 and the like. */
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
@@ -107,12 +106,24 @@ static int get_key(uint64_t uaddr, bool priv, uint64_t *k1, uint64_t *k2) {
   return 0;
 }
 
-static int read_word(uint64_t uaddr, uint32_t *v) { return copy_from_user(v, (void *)uaddr, 4); }
+/* the word accesses: 0, or -EFAULT (not user memory, not aligned, not mapped) */
+static bool word_ok(uint64_t uaddr) { return !(uaddr & 3) && user_range_ok(uaddr, 4); }
 
-static int write_word(uint64_t uaddr, uint32_t v) {
-  if (copy_to_user((void *)uaddr, &v, 4))
+static int load_word(uint64_t uaddr, uint32_t *v) {
+  return word_ok(uaddr) && user_load32((uint32_t *)uaddr, v) == 0 ? 0 : -EFAULT;
+}
+
+/* swap *v and the word */
+static int xchg_word(uint64_t uaddr, uint32_t *v) {
+  return word_ok(uaddr) && user_xchg32((uint32_t *)uaddr, v) == 0 ? 0 : -EFAULT;
+}
+
+/* the word becomes nv if it is *old: 0; if it is not, 1 and *old is the word */
+static int cas_word(uint64_t uaddr, uint32_t *old, uint32_t nv) {
+  if (!word_ok(uaddr))
     return -EFAULT;
-  return 0;
+  long r = user_cmpxchg32((uint32_t *)uaddr, old, nv);
+  return r < 0 ? -EFAULT : (int)r;
 }
 
 /* the waiters woken are those of the highest priority, the longest waiting
@@ -174,7 +185,7 @@ static void wake_retry(uint64_t uaddr) {
   }
 }
 
-void futex_wake_addr(uint64_t uaddr, int n) {
+static void futex_wake_addr(uint64_t uaddr, int n) {
   uint64_t k1, k2;
   if (get_key(uaddr, false, &k1, &k2) == 0)
     wake(k1, k2, n, ~0U);
@@ -216,7 +227,7 @@ static long futex_wait(uint64_t uaddr, bool priv, uint32_t val, uint64_t deadlin
     return e;
   uint64_t f = irq_save();
   uint32_t cur;
-  if (read_word(uaddr, &cur)) {
+  if (load_word(uaddr, &cur)) {
     irq_restore(f);
     return -EFAULT;
   }
@@ -257,7 +268,7 @@ static long requeue(uint64_t u1, uint64_t u2, bool priv, int nwake, int nreq, bo
   uint64_t f = irq_save();
   if (cmp) {
     uint32_t cur;
-    if (read_word(u1, &cur)) {
+    if (load_word(u1, &cur)) {
       irq_restore(f);
       return -EFAULT;
     }
@@ -282,6 +293,35 @@ static long requeue(uint64_t u1, uint64_t u2, bool priv, int nwake, int nreq, bo
   return woken + moved;
 }
 
+/* the word becomes (old OP arg) in one atomic step; 0 with its old value */
+static int word_op(uint64_t uaddr, int opc, uint32_t arg, uint32_t *old) {
+  uint32_t o = arg, nv;
+  if (opc == 0) {
+    if (xchg_word(uaddr, &o))
+      return -EFAULT;
+    *old = o;
+    return 0;
+  }
+  if (load_word(uaddr, &o))
+    return -EFAULT;
+  for (;;) {
+    switch (opc) {
+    case 1: nv = o + arg; break;
+    case 2: nv = o | arg; break;
+    case 3: nv = o & ~arg; break;
+    case 4: nv = o ^ arg; break;
+    default: return -ENOSYS;
+    }
+    int r = cas_word(uaddr, &o, nv);
+    if (r < 0)
+      return r;
+    if (r == 0) {
+      *old = o;
+      return 0;
+    }
+  }
+}
+
 static long wake_op(uint64_t u1, uint64_t u2, bool priv, int n1, int n2, uint32_t op) {
   uint64_t a1, a2, b1, b2;
   int e = get_key(u1, priv, &a1, &a2);
@@ -295,24 +335,11 @@ static long wake_op(uint64_t u1, uint64_t u2, bool priv, int n1, int n2, uint32_
   if (op & 0x80000000U)
     oparg = 1U << (oparg & 31);
   uint64_t f = irq_save();
-  uint32_t old, nv;
-  if (read_word(u2, &old)) {
+  uint32_t old;
+  e = word_op(u2, opc, oparg, &old);
+  if (e) {
     irq_restore(f);
-    return -EFAULT;
-  }
-  switch (opc) {
-  case 0: nv = oparg; break;
-  case 1: nv = old + oparg; break;
-  case 2: nv = old | oparg; break;
-  case 3: nv = old & ~oparg; break;
-  case 4: nv = old ^ oparg; break;
-  default:
-    irq_restore(f);
-    return -ENOSYS;
-  }
-  if (write_word(u2, nv)) {
-    irq_restore(f);
-    return -EFAULT;
+    return e;
   }
   int r = wake(a1, a2, n1, ~0U);
   bool c;
@@ -348,7 +375,7 @@ static long lock_pi(uint64_t uaddr, bool priv, uint64_t deadline, bool try) {
   uint64_t f = irq_save();
   for (;;) {
     uint32_t w;
-    if (read_word(uaddr, &w)) {
+    if (load_word(uaddr, &w)) {
       irq_restore(f);
       return -EFAULT;
     }
@@ -364,26 +391,31 @@ static long lock_pi(uint64_t uaddr, bool priv, uint64_t deadline, bool try) {
         nw |= FUTEX_OWNER_DIED;
       else if (w & FUTEX_OWNER_DIED)
         nw |= FUTEX_OWNER_DIED;
-      if (write_word(uaddr, nw)) {
-        irq_restore(f);
-        return -EFAULT;
-      }
+      int r = cas_word(uaddr, &w, nw);
+      if (r > 0) /* a thread changed the word meanwhile: look again */
+        continue;
       irq_restore(f);
-      return 0;
+      return r;
     }
     if (try) {
       irq_restore(f);
       return -EBUSY;
+    }
+    if (!(w & FUTEX_WAITERS)) {
+      /* the owner's unlock must now come here: fails if it unlocked already */
+      int r = cas_word(uaddr, &w, w | FUTEX_WAITERS);
+      if (r > 0)
+        continue;
+      if (r < 0) {
+        irq_restore(f);
+        return r;
+      }
     }
     /* priority inheritance: the owner runs at least at our priority */
     struct task *o = find_task((pid_t)owner);
     if (o && task_prio(current) > task_prio(o)) {
       o->boost = task_prio(current);
       task_prio_changed(o);
-    }
-    if (!(w & FUTEX_WAITERS) && write_word(uaddr, w | FUTEX_WAITERS)) {
-      irq_restore(f);
-      return -EFAULT;
     }
     struct task *t = current;
     t->fkey1 = k1;
@@ -418,7 +450,7 @@ static long unlock_pi(uint64_t uaddr, bool priv) {
   uint32_t tid = (uint32_t)current->tid;
   uint64_t f = irq_save();
   uint32_t w;
-  if (read_word(uaddr, &w)) {
+  if (load_word(uaddr, &w)) {
     irq_restore(f);
     return -EFAULT;
   }
@@ -437,14 +469,17 @@ static long unlock_pi(uint64_t uaddr, bool priv) {
       count++;
     }
   }
-  uint32_t nw = 0;
+  uint32_t nw = next ? (uint32_t)next->tid | (count > 1 ? FUTEX_WAITERS : 0) : 0;
+  while ((e = cas_word(uaddr, &w, nw)) > 0)
+    if ((w & FUTEX_TID_MASK) != tid) { /* a thread took the word from us */
+      irq_restore(f);
+      return -EPERM;
+    }
   if (next) {
-    nw = (uint32_t)next->tid | (count > 1 ? FUTEX_WAITERS : 0);
     unqueue(next);
     next->fwoken = true;
     wake_task(next);
   }
-  e = write_word(uaddr, nw);
   /* the inherited priority goes; the new owner inherits from the rest */
   if (current->boost) {
     current->boost = 0;
@@ -517,12 +552,15 @@ long sys_futex(long uaddr, long op, long val, long uts, long uaddr2, long val3) 
 static void robust_one(uint64_t entry, int64_t off, bool pi) {
   uint64_t uaddr = entry + (uint64_t)off;
   uint32_t w;
-  if (read_word(uaddr, &w))
+  int r;
+  if (load_word(uaddr, &w))
     return;
-  if ((w & FUTEX_TID_MASK) != (uint32_t)current->tid)
-    return;
-  uint32_t nw = (w & FUTEX_WAITERS) | FUTEX_OWNER_DIED;
-  if (write_word(uaddr, nw))
+  do {
+    if ((w & FUTEX_TID_MASK) != (uint32_t)current->tid)
+      return;
+    r = cas_word(uaddr, &w, (w & FUTEX_WAITERS) | FUTEX_OWNER_DIED);
+  } while (r > 0);
+  if (r)
     return;
   if (w & FUTEX_WAITERS) {
     if (pi)
@@ -551,4 +589,12 @@ void exit_robust_list(struct task *t) {
   }
   if (h[2])
     robust_one(h[2] & ~1UL, off, h[2] & 1);
+}
+
+/* thread exit and exec: zero the clear_child_tid word and wake one waiter */
+void futex_clear_tid(struct task *t) {
+  uint64_t a = t->clear_child_tid;
+  uint32_t z = 0;
+  if (a && xchg_word(a, &z) == 0)
+    futex_wake_addr(a, 1);
 }
