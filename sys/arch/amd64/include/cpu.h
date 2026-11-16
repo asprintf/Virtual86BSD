@@ -95,6 +95,9 @@ struct cpu_info {
   struct cpu_info *ci_self; /* 0 */
   uint64_t ci_kstack_top;   /* 8: the kernel stack of the task running here, for system calls */
   uint64_t ci_user_rsp;     /* 16: the user %rsp, saved by syscall_entry */
+  struct task *ci_curtask;  /* the task running here: current (sys/proc.h) */
+  bool ci_need_resched;     /* schedule() before returning to user mode */
+  int ci_irq_nesting;       /* > 0 in an interrupt handler */
 };
 extern struct cpu_info cpu_info_primary;
 struct cpu_info *curcpu(void);

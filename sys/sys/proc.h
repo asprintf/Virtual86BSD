@@ -34,6 +34,7 @@
 
 #include <sys/systm.h>
 #include <sys/signalvar.h>
+#include <machine/cpu.h>
 
 struct regs;
 struct mm;
@@ -218,11 +219,11 @@ struct proc {
   int nice;
 };
 
-extern struct task *current;
+#define current (curcpu()->ci_curtask) /* the task running on this CPU */
+#define need_resched (curcpu()->ci_need_resched)
 extern struct proc *init_proc;
 extern struct proc *kernel_proc; /* pid 0, kernel_task: owns the kernel threads */
 extern struct list all_tasks, all_procs;
-extern bool need_resched;
 
 /* SCHED_SPORADIC: POSIX's sporadic server (kern/sched.c); the policy
    number is one Linux does not use, and struct sched_param the long form */

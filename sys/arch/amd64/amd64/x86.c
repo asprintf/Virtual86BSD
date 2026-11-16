@@ -190,14 +190,14 @@ void trap_handler(struct regs *r) {
   }
   if (v >= 32 && v < 48) {
     int irq = (int)v - 32;
-    extern int irq_nesting;
-    irq_nesting++;
+    struct cpu_info *ci = curcpu();
+    ci->ci_irq_nesting++;
     pic_eoi(irq);
     if (irq == 0)
       account_tick((r->cs & 3) == 3);
     for (int i = 0; i < IRQ_SHARE && irq_fn[irq][i]; i++)
       irq_fn[irq][i]();
-    irq_nesting--;
+    ci->ci_irq_nesting--;
     return;
   }
   if (v == 255)

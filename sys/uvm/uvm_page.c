@@ -80,14 +80,12 @@ static void free_block(uint64_t pfn, int order) {
   fl_add(order, (uint32_t)pfn);
 }
 
-int irq_nesting; /* > 0 in an interrupt handler (arch/x86.c) */
-
 uint64_t alloc_pages(int order) {
   uint64_t f = irq_save();
   int o = order;
   while (o < MAX_ORDER && free_head[o] == NIL)
     o++;
-  if (o == MAX_ORDER && !irq_nesting) {
+  if (o == MAX_ORDER && !curcpu()->ci_irq_nesting) {
     /* out of memory: the buffer cache gives some back (it may write
        buffers, so not in an interrupt) */
     irq_restore(f);

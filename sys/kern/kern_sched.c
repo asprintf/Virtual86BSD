@@ -41,8 +41,6 @@
 void reset_pids(void);
 #define SLICE (10 * HZ / 1000 ? 10 * HZ / 1000 : 1) /* 10 ms */
 
-struct task *current;
-bool need_resched;
 static struct list runq = LIST_INIT(runq);
 static struct list timed = LIST_INIT(timed);
 static struct task *idle_task;
