@@ -251,7 +251,8 @@ void wake_up(struct waitq *q);
 void wake_up_one(struct waitq *q);
 int sleep_on(struct waitq *q, uint64_t deadline_ns, bool interruptible);
 int sleep_ns(uint64_t ns);
-void timer_tick(void);
+void timer_tick(bool user);     /* the boot processor's clock interrupt */
+void cpu_tick(bool user);       /* every processor's tick */
 struct task *kthread_create(const char *name, long (*fn)(void *), void *arg);
 void make_runnable(struct task *t);
 int task_prio(struct task *t); /* 0 normal, 1..99 real-time */

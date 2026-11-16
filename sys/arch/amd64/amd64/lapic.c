@@ -98,6 +98,13 @@ static void lapic_setup(bool boot) {
 /* an application processor's own local APIC, at the address the boot processor mapped */
 void lapic_init_ap(void) { lapic_setup(false); }
 
+/* this processor's timer: HZ interrupts a second on IPI_VEC_TIMER, at the rate the boot processor measured */
+void lapic_timer_start(void) {
+  lapic_write(LAPIC_TIMER_DCR, LAPIC_TIMER_DIV_1);
+  lapic_write(LAPIC_LVT_TIMER, LAPIC_LVT_PERIODIC | IPI_VEC_TIMER);
+  lapic_write(LAPIC_TIMER_ICR, (uint32_t)(lapic_hz / HZ));
+}
+
 /* wait for the APIC to have sent the last IPI (100 ms at most) */
 static bool lapic_icr_idle(void) {
   uint64_t end = rdtsc64() + tsc_frequency() / 10;

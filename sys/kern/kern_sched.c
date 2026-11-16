@@ -45,11 +45,10 @@ static struct list runq = LIST_INIT(runq);
 static struct list timed = LIST_INIT(timed);
 static struct task *dead_task; /* to free once off its stack */
 
-/* the effective priority: real-time policies have 1..99, others 0; a
-   priority inherited through a PI futex counts too */
 /* real-time throttling, as Linux's sched_rt_runtime_us: real-time tasks
-   get at most 950 ms of every second */
-static unsigned rt_ticks;
+   get at most 950 ms of every second on a processor (ci_rt_ticks) */
+#define RT_LIMIT (950 * HZ / 1000)
+static bool rt_throttled(const struct cpu_info *ci) { return ci->ci_rt_ticks >= RT_LIMIT; }
 
 /* ---- SCHED_SPORADIC (POSIX XSH 2.8.4) ----
    A sporadic server runs as SCHED_FIFO at sched_priority while it has
@@ -201,17 +200,21 @@ void ss_free(struct task *t) {
   }
 }
 
+/* the priority: real-time policies have 1..99, others 0; a priority
+   inherited through a PI futex counts too */
 int task_prio(struct task *t) {
-  if (rt_ticks >= 950 * HZ / 1000)
-    return 0;
   int p = (t->policy == 1 || t->policy == 2) ? t->rtprio : 0;
   if (t->policy == SCHED_SPORADIC && t->ss)
     p = t->ss->low ? t->ss->lo : t->ss->hi;
   return t->boost > p ? t->boost : p;
 }
 
+/* the priority t counts for on ci: the real-time ones do not while it is throttled */
+static int cpu_prio(const struct cpu_info *ci, struct task *t) { return rt_throttled(ci) ? 0 : task_prio(t); }
+
 void task_prio_changed(struct task *t) {
-  if (current && t != current && t->state == T_RUNNING && task_prio(t) > task_prio(current))
+  struct cpu_info *ci = curcpu();
+  if (current && t != current && t->state == T_RUNNING && cpu_prio(ci, t) > cpu_prio(ci, current))
     need_resched = true;
   if (t == current)
     need_resched = true; /* a lower priority may let another run */
@@ -229,7 +232,8 @@ void wake_task(struct task *t) {
     if (t->ss)
       ss_activate(t->ss, monotonic_ns());
     make_runnable(t);
-    if (!current || task_prio(t) >= task_prio(current))
+    struct cpu_info *ci = curcpu();
+    if (!current || cpu_prio(ci, t) >= cpu_prio(ci, current))
       need_resched = true;
   }
   irq_restore(f);
@@ -284,11 +288,12 @@ void schedule(void) {
   /* the first of the highest priority (FIFO among equals) */
   struct task *next = ci->ci_idle;
   int best = -1;
+  bool throttled = rt_throttled(ci);
   list_for_each(p, &runq) {
     struct task *t = list_entry(p, struct task, run_link);
     if (!can_run(ci, t))
       continue;
-    int pr = task_prio(t);
+    int pr = throttled ? 0 : task_prio(t);
     if (pr > best) {
       best = pr;
       next = t;
@@ -368,13 +373,13 @@ int sleep_ns(uint64_t ns) {
   return r == -ETIMEDOUT ? 0 : r;
 }
 
-void timer_tick(void) {
+/* the clock interrupt of the boot processor, with the frame of what it
+   interrupted: time, sleeps with a timeout, interval timers, and its own tick */
+void timer_tick(bool user) {
+  if (!list_empty(&ss_list))
+    ss_tick(monotonic_ns());
+  cpu_tick(user);
   jiffies++;
-  if (jiffies % HZ == 0) {
-    if (rt_ticks >= 950 * HZ / 1000)
-      need_resched = true; /* the throttle ends: real-time priorities count again */
-    rt_ticks = 0;
-  }
   uint64_t now = monotonic_ns();
   list_for_each_safe(p, n, &timed) {
     struct task *t = list_entry(p, struct task, timer_link);
@@ -383,29 +388,26 @@ void timer_tick(void) {
       wake_task(t);
     }
   }
-  struct task *c = current;
-  if (c && !c->is_idle) {
-    /* SCHED_FIFO (and a sporadic server) runs until it blocks or yields,
-       but not while real-time tasks are throttled (they are not then) */
-    bool throttled = rt_ticks >= 950 * HZ / 1000;
-    if (--c->slice <= 0 && (throttled || (c->policy != 1 && c->policy != SCHED_SPORADIC)))
-      need_resched = true;
-  }
   itimer_tick();
 }
 
-/* accounting: called from the timer interrupt with the interrupted frame */
-void account_tick(bool user) {
-  struct task *c = current;
-  if (!list_empty(&ss_list)) {
-    uint64_t now = monotonic_ns();
-    ss_tick(now);
-    if (c && !c->is_idle && c->ss)
-      ss_charge(c, 1000000000UL / HZ, now);
+/* every processor's tick, with the frame of what it interrupted: the time
+   slice, the throttle and who gets the time */
+void cpu_tick(bool user) {
+  struct cpu_info *ci = curcpu();
+  uint64_t sec = jiffies / HZ;
+  if (sec != ci->ci_rt_sec) {
+    if (rt_throttled(ci))
+      need_resched = true; /* the throttle ends: real-time priorities count again */
+    ci->ci_rt_sec = sec;
+    ci->ci_rt_ticks = 0;
   }
+  struct task *c = current;
   if (!c || c->is_idle)
     return;
-  if (task_prio(c) > 0 && ++rt_ticks >= 950 * HZ / 1000)
+  if (c->ss)
+    ss_charge(c, 1000000000UL / HZ, monotonic_ns());
+  if (!rt_throttled(ci) && task_prio(c) > 0 && ++ci->ci_rt_ticks >= RT_LIMIT)
     need_resched = true;
   if (user) {
     c->utime++;
@@ -416,6 +418,10 @@ void account_tick(bool user) {
     if (c->proc)
       c->proc->stime++;
   }
+  /* SCHED_FIFO (and a sporadic server) runs until it blocks or yields,
+     but not while real-time tasks are throttled (they are not then) */
+  if (--c->slice <= 0 && (rt_throttled(ci) || (c->policy != 1 && c->policy != SCHED_SPORADIC)))
+    need_resched = true;
 }
 
 /* on every return to user mode, with interrupts off */

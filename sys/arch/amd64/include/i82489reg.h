@@ -51,6 +51,7 @@
 
 #define LAPIC_SVR_ENABLE 0x100    /* software enable; the low byte is the spurious vector */
 #define LAPIC_LVT_MASKED 0x10000
+#define LAPIC_LVT_PERIODIC 0x20000 /* timer mode (LVT bit 17): periodic */
 #define LAPIC_DM_NMI     0x400    /* delivery modes (LVT bits 10:8, ICR bits 10:8) */
 #define LAPIC_DM_INIT    0x500
 #define LAPIC_DM_STARTUP 0x600

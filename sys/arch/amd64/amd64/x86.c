@@ -36,8 +36,6 @@
 #include <uvm/uvm.h>
 #include <machine/cpu.h>
 
-void account_tick(bool user);
-
 /* GDT: the layout of Linux (selectors in arch.h), a TSS for each processor from 0x40 */
 static uint64_t gdt[8 + 2 * MAXCPUS] = {
     0,
@@ -112,6 +110,13 @@ static void pic_init(void) {
   outb(0xa1, 0xff);
 }
 
+static void irq_unmask(int irq) {
+  if (irq < 8)
+    outb(0x21, inb(0x21) & ~(1 << irq));
+  else
+    outb(0xa1, inb(0xa1) & ~(1 << (irq - 8)));
+}
+
 /* fn is called on every interrupt of the line, with the others sharing it:
    it looks at its own device and does nothing when that was not the one */
 void irq_register(int irq, void (*fn)(void)) {
@@ -121,10 +126,7 @@ void irq_register(int irq, void (*fn)(void)) {
   if (i == IRQ_SHARE)
     panic("irq_register: too many devices on irq %d", irq);
   irq_fn[irq][i] = fn;
-  if (irq < 8)
-    outb(0x21, inb(0x21) & ~(1 << irq));
-  else
-    outb(0xa1, inb(0xa1) & ~(1 << (irq - 8)));
+  irq_unmask(irq);
 }
 
 void pic_eoi(int irq) {
@@ -206,14 +208,21 @@ static void trap_dispatch(struct regs *r) {
     ci->ci_irq_nesting++;
     pic_eoi(irq);
     if (irq == 0)
-      account_tick((r->cs & 3) == 3);
+      timer_tick((r->cs & 3) == 3);
     for (int i = 0; i < IRQ_SHARE && irq_fn[irq][i]; i++)
       irq_fn[irq][i]();
     ci->ci_irq_nesting--;
     return;
   }
   if (v >= IPI_VEC_FIRST && v <= IPI_VEC_LAST) {
-    lapic_intr((int)v);
+    struct cpu_info *ci = curcpu();
+    ci->ci_irq_nesting++;
+    if (v == IPI_VEC_TIMER) {
+      lapic_eoi();
+      cpu_tick((r->cs & 3) == 3);
+    } else
+      lapic_intr((int)v);
+    ci->ci_irq_nesting--;
     return;
   }
   if (v == 255)
@@ -270,5 +279,5 @@ void cpu_initclocks(void) {
   outb(0x43, 0x34);
   outb(0x40, div & 0xff);
   outb(0x40, div >> 8);
-  irq_register(0, timer_tick);
+  irq_unmask(0);
 }

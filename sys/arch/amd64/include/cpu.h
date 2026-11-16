@@ -114,6 +114,8 @@ struct cpu_info {
   uint32_t ci_apicid;       /* the APIC id the firmware lists */
   volatile int ci_state;    /* CPU_* */
   struct task *ci_idle;     /* its idle task (ci_curtask until the first switch) */
+  uint32_t ci_rt_ticks;     /* ticks of real-time work in the second ci_rt_sec (kern/sched.c) */
+  uint64_t ci_rt_sec;
   uint32_t ci_signature;    /* what the processor says it is (CPUID 1: family, model, stepping) */
   uint32_t ci_apicid_seen;  /* its own APIC id (CPUID 1) */
   char ci_brand[49];
@@ -157,6 +159,7 @@ void acpimadt_init(void);
    handlers registered with ipi_register (the rest below 0xff is unused) */
 #define IPI_VEC_FIRST 0xf0
 #define IPI_VEC_LAST 0xfe
+#define IPI_VEC_TIMER 0xf0 /* the local APIC timer: the processor's clock tick (not the boot processor's) */
 extern bool lapic_enabled;
 extern uint64_t lapic_hz;
 void lapic_init(const char *name);
@@ -166,6 +169,7 @@ void ipi_register(int vec, void (*fn)(void));
 void lapic_intr(int vec);
 bool lapic_ipi(uint32_t apicid, uint32_t cmd);
 void lapic_init_ap(void);
+void lapic_timer_start(void);
 
 /* arch/cpu_boot.c: the application processors, started by the boot processor */
 void cpu_identify(struct cpu_info *ci);
