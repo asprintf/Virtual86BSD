@@ -171,6 +171,7 @@ void arch_init(void) {
     set_gate(i, isr_ipi_table[i - IPI_VEC_FIRST], 0, 0);
   set_gate(255, (uint64_t)isr255, 0, 0);
   cpu_tables_load(ci);
+  bkl_armed = true;
   pic_init();
 
   /* SSE for user programs: CR0.MP, !EM; CR4.OSFXSR, OSXMMEXCPT */
@@ -193,7 +194,7 @@ static const char *exc_name[32] = {
     "page fault", "15", "x87 error", "alignment check", "machine check", "SIMD error",
     "virtualization", "control protection"};
 
-void trap_handler(struct regs *r) {
+static void trap_dispatch(struct regs *r) {
   uint64_t v = r->vector;
   if (v == 14) {
     page_fault(r);
@@ -235,6 +236,26 @@ void trap_handler(struct regs *r) {
   printf("\nkernel: %s trap, code=%lx\n", v < 32 ? exc_name[v] : "unknown", r->err);
   dump_regs(r);
   panic("trap type %lu in kernel mode", v);
+}
+
+/* Every entry from user mode takes the kernel lock (trap_return gives it back).
+   One from kernel mode already has it, except in the idle halt; a fatal
+   exception in the kernel may come anywhere, and takes none. */
+void trap_handler(struct regs *r) {
+  uint64_t v = r->vector;
+  bool user = (r->cs & 3) == 3, took = false;
+  struct cpu_info *ci = curcpu();
+  if (user)
+    bkl_lock();
+  else if (v == 2 || v == 8 || v == 18)
+    ci->ci_nolock = true;
+  else if (!bkl_held()) {
+    bkl_lock();
+    took = true;
+  }
+  trap_dispatch(r);
+  if (took)
+    bkl_unlock();
 }
 
 void kernel_fault(struct regs *r, uint64_t addr) {

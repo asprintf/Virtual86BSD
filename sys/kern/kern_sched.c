@@ -275,6 +275,7 @@ static bool can_run(const struct cpu_info *ci, const struct task *t) {
 void schedule(void) {
   struct cpu_info *ci = curcpu();
   struct task *prev = current;
+  KASSERT(bkl_held());
   need_resched = false;
   if (prev->state == T_RUNNING)
     make_runnable(prev);
@@ -439,8 +440,11 @@ static long idle_fn(void *arg) {
     cli();
     if (!list_empty(&runq))
       schedule();
-    else
+    else {
+      bkl_unlock();
       sti_hlt();
+      bkl_lock();
+    }
   }
   return 0;
 }

@@ -136,7 +136,7 @@ void printf(const char *fmt, ...) {
   uint64_t f = irq_save();
   log_write(buf, n);
   console_write(buf, n);
-  if (klog_users && !klog_waking) {
+  if (klog_users && !klog_waking && !panicking) {
     klog_waking = true;
     wake_up(&klog_wq);
     poll_wake();
@@ -186,12 +186,21 @@ static void panic_trace(void) {
   }
 }
 
+volatile int panicking;
+static volatile int panic_cpu = -1;
+
 void panic(const char *fmt, ...) {
-  static bool panicking;
   char buf[512];
   cli();
-  bool again = panicking;
-  panicking = true;
+  int me = bkl_armed ? curcpu()->ci_index : 0;
+  bool again = false;
+  if (xchg32(&panicking, 1)) {
+    if (panic_cpu != me)
+      for (;;) /* another processor is panicking */
+        hlt();
+    again = true;
+  } else
+    panic_cpu = me;
   va_list ap;
   va_start(ap, fmt);
   vsnprintf(buf, sizeof(buf), fmt, ap);
@@ -201,7 +210,7 @@ void panic(const char *fmt, ...) {
     printf("(a panic while panicking: no more is said)\n");
   } else {
     if (current && current->proc)
-      printf("cpu0 pid %d (%s), up %lu s\n", (int)current->proc->pid, current->proc->comm,
+      printf("cpu%d pid %d (%s), up %lu s\n", me, (int)current->proc->pid, current->proc->comm,
              (unsigned long)(monotonic_ns() / 1000000000UL));
     panic_trace();
     outb(0x505, 1); /* QEMU's pvpanic: bit 0, the guest panicked (nothing there: nothing happens) */

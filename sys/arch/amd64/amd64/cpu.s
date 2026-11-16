@@ -231,3 +231,16 @@ mb:	mfence
 	ret
 cpu_pause:	pause
 	ret
+
+# int cas32(volatile int *p, int old, int new): the value that was at p (old if it
+# was replaced); void store32(volatile int *p, int v): an ordered store;
+# int xchg32(volatile int *p, int v): store v, return the old value
+	.globl cas32, store32, xchg32
+cas32:	movl %esi, %eax
+	lock cmpxchgl %edx, (%rdi)
+	ret
+store32:	movl %esi, (%rdi)
+	ret
+xchg32:	movl %esi, %eax
+	xchgl %eax, (%rdi)
+	ret

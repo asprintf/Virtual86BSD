@@ -73,6 +73,7 @@ extern int boothowto; /* RB_* of <sys/reboot.h> */
 extern int boot_drive, boot_part; /* the BIOS drive and the partition (from 0) the loader booted from, or -1 */
 void bootargs_init(const char *args);
 extern int panic_reboot_wait_time; /* kern.panic_reboot_wait_time */
+extern volatile int panicking;     /* a processor is panicking: the others stop at the kernel lock */
 
 /* assertions, on with "option DIAGNOSTIC" (-DDIAGNOSTIC); KDASSERT is the
    expensive kind, on with "option DEBUG" */

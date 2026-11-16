@@ -75,6 +75,9 @@ void wrmsr(uint32_t msr, uint64_t v);
 uint64_t rdtsc64(void);
 void mb(void);        /* mfence */
 void cpu_pause(void); /* pause */
+int cas32(volatile int *p, int old, int nv); /* the value found at p; nv was stored if it was old */
+void store32(volatile int *p, int v);
+int xchg32(volatile int *p, int v); /* store v, return the old value */
 void lgdt_reload(void *ptr);
 void lidt(void *ptr);
 void ltr(uint16_t sel);
@@ -106,6 +109,7 @@ struct cpu_info {
   struct task *ci_curtask;  /* the task running here: current (sys/proc.h) */
   bool ci_need_resched;     /* schedule() before returning to user mode */
   int ci_irq_nesting;       /* > 0 in an interrupt handler */
+  bool ci_nolock;           /* in a fatal exception: it does not hold the kernel lock */
   int ci_index;             /* cpuN: 0 is the boot processor */
   uint32_t ci_apicid;       /* the APIC id the firmware lists */
   volatile int ci_state;    /* CPU_* */
@@ -119,6 +123,15 @@ extern struct cpu_info cpu_info_primary;
 extern struct cpu_info *cpu_info_list[MAXCPUS]; /* by ci_index, NULL for none */
 struct cpu_info *curcpu(void);
 void gs_init(struct cpu_info *ci);
+
+/* arch/lock_machdep.c: the big kernel lock, held by the processor that is in kernel mode */
+extern bool bkl_armed; /* %gs is set up: irq_save may check */
+bool bkl_held(void);   /* by this processor */
+void bkl_lock(void), bkl_unlock(void); /* interrupts off */
+void bkl_irq_check(void);
+#ifdef DIAGNOSTIC
+#define irq_save() (bkl_irq_check(), irq_save())
+#endif
 
 void switch_stack(uint64_t *save_sp, uint64_t new_sp);
 void ret_from_fork(void);

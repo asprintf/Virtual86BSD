@@ -177,6 +177,8 @@ trap_return:
 	cli
 	movq %rsp, %rdi
 	call return_to_user             # signals, rescheduling (interrupts off)
+	cli
+	call bkl_unlock                 # user mode again: the kernel lock goes
 1:	popq %r15
 	popq %r14
 	popq %r13
@@ -244,6 +246,7 @@ syscall_entry:
 	pushq %r13
 	pushq %r14
 	pushq %r15
+	call bkl_lock                   # (interrupts are off)
 	sti
 	cld
 	movq %rsp, %rdi
