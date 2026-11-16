@@ -61,6 +61,7 @@ static void tss_set64(int word, uint64_t v) {
   tss[word + 1] = (uint32_t)(v >> 32);
 }
 static uint64_t df_stack[1024];
+struct cpu_info cpu_info_primary;
 
 struct idt_entry {
   uint16_t off0, sel;
@@ -92,7 +93,7 @@ static void set_gate(int n, uint64_t fn, int dpl, int ist) {
 
 void set_kernel_stack(uint64_t top) {
   tss_set64(TSS_RSP0, top);
-  kstack_top = top;
+  curcpu()->ci_kstack_top = top;
 }
 
 /* 8259 PICs, remapped to vectors 32..47 */
@@ -142,6 +143,8 @@ void arch_init(void) {
   uint16_t g[5];
   set_dtr(g, sizeof(gdt) - 1, (uint64_t)gdt);
   lgdt_reload(g);
+  cpu_info_primary.ci_self = &cpu_info_primary;
+  gs_init(&cpu_info_primary); /* (the reload cleared the base) */
   ltr(TSS_SEL);
 
   for (int i = 0; i < 48; i++)

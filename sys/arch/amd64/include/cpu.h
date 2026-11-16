@@ -86,8 +86,21 @@ void fxsave(void *area), fxrstor(void *area), fninit_sse(void);
 void cpuid4(uint32_t leaf, uint32_t sub, uint32_t out[4]);
 int rdrand64(uint64_t *out, int seed); /* 1: out is the processor's random number (seed: RDSEED, else RDRAND) */
 
+/* Per-CPU data.  In the kernel %gs:0 is the CPU's own struct (cpu.s curcpu,
+   gs_init); the user's %gs base is kept in the other base register and swapped
+   in and out by swapgs on every entry and exit (entry.s, which reads the first
+   three fields by their offsets). */
+struct task;
+struct cpu_info {
+  struct cpu_info *ci_self; /* 0 */
+  uint64_t ci_kstack_top;   /* 8: the kernel stack of the task running here, for system calls */
+  uint64_t ci_user_rsp;     /* 16: the user %rsp, saved by syscall_entry */
+};
+extern struct cpu_info cpu_info_primary;
+struct cpu_info *curcpu(void);
+void gs_init(struct cpu_info *ci);
+
 void switch_stack(uint64_t *save_sp, uint64_t new_sp);
-extern uint64_t kstack_top;
 void ret_from_fork(void);
 void kthread_start(void);
 void trap_return(void);

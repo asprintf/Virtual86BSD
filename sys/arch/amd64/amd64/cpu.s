@@ -155,6 +155,23 @@ irq_restore:
 	sti
 1:	ret
 
+# struct cpu_info *curcpu(void): this CPU's data; void gs_init(ci): ci becomes
+# the kernel %gs base and the user's (what swapgs swaps in) is 0
+	.globl curcpu, gs_init
+curcpu:	movq %gs:0, %rax
+	ret
+gs_init:
+	movl $0xC0000101, %ecx		# MSR_GS_BASE
+	movl %edi, %eax
+	movq %rdi, %rdx
+	shrq $32, %rdx
+	wrmsr
+	movl $0xC0000102, %ecx		# MSR_KERNEL_GS_BASE
+	xorl %eax, %eax
+	xorl %edx, %edx
+	wrmsr
+	ret
+
 	.globl fxsave, fxrstor, fninit_sse
 fxsave:	fxsave (%rdi)
 	ret

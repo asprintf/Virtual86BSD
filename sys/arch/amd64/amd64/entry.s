@@ -51,16 +51,29 @@ isr\n:	pushq $0
 isr\n:	pushq $\n
 	jmp isr_common
 	.endm
+# NMI, double fault and machine check can arrive with either %gs base loaded
+# (just before or after a swapgs): isr_paranoid looks at the base itself
+	.macro STUB_PARANOID_NOERR n
+	.globl isr\n
+isr\n:	pushq $0
+	pushq $\n
+	jmp isr_paranoid
+	.endm
+	.macro STUB_PARANOID_ERR n
+	.globl isr\n
+isr\n:	pushq $\n
+	jmp isr_paranoid
+	.endm
 
 	STUB_NOERR 0
 	STUB_NOERR 1
-	STUB_NOERR 2
+	STUB_PARANOID_NOERR 2
 	STUB_NOERR 3
 	STUB_NOERR 4
 	STUB_NOERR 5
 	STUB_NOERR 6
 	STUB_NOERR 7
-	STUB_ERR 8
+	STUB_PARANOID_ERR 8
 	STUB_NOERR 9
 	STUB_ERR 10
 	STUB_ERR 11
@@ -70,7 +83,7 @@ isr\n:	pushq $\n
 	STUB_NOERR 15
 	STUB_NOERR 16
 	STUB_ERR 17
-	STUB_NOERR 18
+	STUB_PARANOID_NOERR 18
 	STUB_NOERR 19
 	STUB_NOERR 20
 	STUB_ERR 21
@@ -113,7 +126,13 @@ isr_table:
 	.quad isr40, isr41, isr42, isr43, isr44, isr45, isr46, isr47
 	.text
 
+# (cs of the interrupted code is at 24(%rsp): from user mode, swap in the
+# kernel %gs base)
 isr_common:
+	testb $3, 24(%rsp)
+	jz isr_save
+	swapgs
+isr_save:
 	pushq %rdi
 	pushq %rsi
 	pushq %rdx
@@ -155,17 +174,37 @@ trap_return:
 	popq %rsi
 	popq %rdi
 	addq $16, %rsp
-	iretq
+	testb $3, 8(%rsp)               # cs: to user mode? give it its %gs base back
+	jz 2f
+	swapgs
+2:	iretq
+
+# NMI, double fault, machine check: whichever %gs base is loaded, make it the
+# kernel's (these never return to kernel mode, they panic)
+isr_paranoid:
+	pushq %rax
+	pushq %rcx
+	pushq %rdx
+	movl $0xC0000101, %ecx          # MSR_GS_BASE
+	rdmsr
+	testl %edx, %edx                # the kernel's base has bit 63 set
+	popq %rdx
+	popq %rcx
+	popq %rax
+	js isr_save
+	swapgs
+	jmp isr_save
 
 # system call entry (MSR_LSTAR).  rcx = user rip, r11 = user rflags,
-# interrupts are off (SFMASK).  Single processor: the kernel stack and a
-# scratch slot are plain globals.
+# interrupts are off (SFMASK).  The kernel stack and a scratch slot are the
+# CPU's own (struct cpu_info, offsets 8 and 16).
 	.globl syscall_entry
 syscall_entry:
-	movq %rsp, syscall_user_rsp(%rip)
-	movq kstack_top(%rip), %rsp
+	swapgs
+	movq %rsp, %gs:16
+	movq %gs:8, %rsp
 	pushq $0x2b                     # ss
-	pushq syscall_user_rsp(%rip)    # rsp
+	pushq %gs:16                    # rsp
 	pushq %r11                      # rflags
 	pushq $0x33                     # cs
 	pushq %rcx                      # rip
@@ -191,12 +230,6 @@ syscall_entry:
 	movq %rsp, %rdi
 	call syscall_dispatch
 	jmp trap_return
-
-	.data
-	.globl kstack_top
-kstack_top:	.quad 0
-syscall_user_rsp:	.quad 0
-	.text
 
 # void switch_stack(uint64_t *save_sp, uint64_t new_sp)
 	.globl switch_stack
