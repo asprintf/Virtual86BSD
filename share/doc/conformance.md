@@ -31,26 +31,31 @@ A test that fails is not always a fault in the system it tests. For each suite, 
 
 Every header test and every namespace test of os-test passes on V86BSD. glibc passes 3471 of the 3758 header tests and 130 of the 159 namespace tests.
 
-## On the FreeBSD kernel (17 November 2026)
+## On the FreeBSD kernel (18 November 2026)
 
-The numbers above are those of V86BSD's own kernel. V86BSD now runs on FreeBSD's kernel (releng/15.2, `sys/amd64/conf/V86`) with this libc built for its ABI, and os-test and the Open POSIX Test Suite were run again in QEMU with KVM: `sh lib/libc/tools/gate.sh ost|pts WORKDIR` builds the tests on the host with clang and runs them one by one in the VM (a time limit each); `ONLY=file` runs only the tests named in the file.
+The numbers above are those of V86BSD's own kernel. V86BSD now runs on FreeBSD's kernel (releng/15.2, `sys/amd64/conf/V86`, with the patches of `distrib/freebsd/patches-sys/`) and this libc built for its ABI. os-test and the Open POSIX Test Suite were run again in QEMU with KVM: `sh lib/libc/tools/gate.sh ost|pts WORKDIR` builds the tests on the host with clang and runs them one by one in the VM (a time limit each); `ONLY=file` runs only the tests named in the file.
 
 | suite | V86BSD on FreeBSD's kernel | on V86BSD's kernel |
 |---|---|---|
-| os-test | 5620 / 5816 | 5666 / 5816 |
-| Open POSIX Test Suite | about 1807 / 1875 that compile | 1812 / 1848 |
+| os-test | **5667 / 5816** | 5666 / 5816 |
+| Open POSIX Test Suite | **1805 / 1876** that compile | 1812 / 1848 |
+| `regress/lib/libc` | 47 / 47 (static, dynamic, `-smp 4`) | |
 
-os-test, by suite: basic 1162/1187, fnmatch 61/67, include 3758/3758, io 23/55, limits 124/126, malloc 3/3, namespace 159/159, paths 48/48, process 21/24, pty 26/29, regex 93/96, signal 26/32, stdio 25/25, udp 91/207. The ones that differ from the table above, with their cause:
+os-test, by suite: basic 1162/1187, fnmatch 61/67, include 3758/3758, io 55/55, limits 124/126, malloc 3/3, namespace 159/159, paths 48/48, process 24/24, pty 29/29, regex 93/96, signal 31/32, stdio 25/25, udp 95/207.
 
-* **io, 32:** the `F_OFD_*` open file description locks; FreeBSD 15.2's kernel has none (`grep` finds nothing in `sys/`). A kernel patch is planned.
-* **process, 3:** `waitpid(-pgid)` sleeps on the parent and only a child's exit or stop wakes it (`sys/kern/kern_exit.c`, `kern_wait6`); no `setpgid` or `setsid` wakes it, so a wait on a group that has just become empty never returns `ECHILD`.
-* **pty, 3:** a controller that was closed makes the terminal read `POLLIN|POLLHUP` without `POLLERR` and `write` fail with `ENXIO` (`ttydev_poll`, `ttydev_enter` in `sys/kern/tty.c`), where POSIX wants `POLLERR` and `EIO`; a new process group is not marked orphaned (`enterpgrp` in `sys/kern/kern_proc.c` starts with `pg_flags = 0`), so `tcsetpgrp` from it sends `SIGTTOU`.
-* **signal, 6:** `ppoll` and `pselect` restore the signal mask before a signal that was pending could be delivered when a descriptor is ready already (`kern_poll_kfds`, `sys/kern/sys_generic.c`, on purpose); a signal action keeps `SA_ONSTACK` over `exec` (`execsigs`, `sys/kern/kern_sig.c`).
-* **udp, 116 are not good** (a first run had 134): connecting to the broadcast address needs `net.inet.ip.connect_inaddr_wild` (`sys/netinet/in_pcb.c`), and sending after `shutdown(SHUT_WR)` raises `SIGPIPE` before the error is reported, in an order os-test has no expectation for. Not analysed further.
+Kernel patches (`distrib/freebsd/patches-sys/`) that the gates asked for, each from a read of FreeBSD's source:
 
-The libc fixes the gates found: `connect(AF_UNSPEC)` on a datagram socket (the kernel dissolves the association and then refuses the family), `accept()` on a datagram socket (`EOPNOTSUPP`), `shm_open()` and `shm_unlink()` take names without a slash (the kernel wants one) and refuse components over `NAME_MAX`, `munmap()` refuses an unaligned address (the kernel rounds it down), `clock_nanosleep()` and `posix_fadvise()` return the error number the kernel puts in the result (`kern_posix_error`), `MQ_PRIO_MAX` is 64 and `SIGQUEUE_MAX` 128 as the kernel has them, `_POSIX_SPORADIC_SERVER` is -1, and `statfs()`, `fstatfs()` and `getfsstat()` exist.
+* **0002, io 32:** FreeBSD 15.2 has no `F_OFD_*` locks. They are `fcntl` commands 25 to 27 now: byte ranges owned by the open file description, with `flock(2)`'s ownership and its release at the last close (`kern_descrip.c`, `kern_lockf.c`).
+* **0003, process 3 and pty 1:** `waitpid(-pgid)` sleeps on the parent and only a child's exit woke it, so a wait on a group that had just become empty never returned `ECHILD`; `setpgid` and `setsid` wake the parent now. A new process group was not marked orphaned (`enterpgrp` began with `pg_flags = 0`), so `tcsetpgrp` from it sent `SIGTTOU` instead of failing with `EIO`.
+* **0004, signal 2:** a signal action kept `SA_ONSTACK` over `exec` (`execsigs`).
+* **0005, pty 2:** a pseudoterminal whose controller was closed read `POLLIN|POLLHUP` without `POLLERR` and `write` failed with `ENXIO`; POSIX wants `POLLERR` and `EIO`.
+* **0006, signal 3:** `ppoll` and `pselect` restored the signal mask before a pending signal could be delivered when a descriptor was ready already; they deliver it now.
 
-Open POSIX tests that do not pass for a reason in the kernel or in the test: no `SCHED_SPORADIC` (7), `sched_setaffinity` helpers that exist for Linux only (`affinity.h`, 2), `seteuid()` leaves the real user ID, which the scheduler checks first (`p_cansched`, 4), the priority of `SCHED_OTHER` is the scheduler's own (`ksched_getparam`, 3), `sem_wait()` is not restarted after a signal with `SA_RESTART` (`_umtx_op` wait maps `ERESTART` to `EINTR`, 1), `SA_NOCLDSTOP` is kept for `SIGCHLD` only (1), negative clock IDs are CPU-time clocks (`kern_clock_getres`, 1), and an unlock by a thread that is not the owner (`pthread_cond_timedwait/2-3`, undefined). About 40 more (aio, timers, `mlockall`, `mmap`, the thread guard page) have no proven cause yet; `mmap/24-1` maps until the VM stops.
+The libc fixes the gates found: `connect(AF_UNSPEC)` on a datagram socket (the kernel dissolves the association and then refuses the family), `accept()` on a datagram socket (`EOPNOTSUPP`), `shm_open()` and `shm_unlink()` take names without a slash (the kernel wants one) and refuse components over `NAME_MAX`, `munmap()` refuses an unaligned address (the kernel rounds it down), `mmap()` of more than the address space fails with `ENOMEM` (the kernel says `EINVAL`), `raise()` does not queue a non-real-time signal that is pending already (`thr_kill` queues every instance), `clock_nanosleep()` and `posix_fadvise()` return the error number the kernel puts in the result (`kern_posix_error`), `MQ_PRIO_MAX` is 64 and `SIGQUEUE_MAX` 128 as the kernel has them, `_POSIX_SPORADIC_SERVER` is -1, and `statfs()`, `fstatfs()` and `getfsstat()` exist. `/etc/sysctl.conf` sets `net.inet.ip.connect_inaddr_wild=1`, which the 4 broadcast `connect` tests of the udp suite need.
+
+What is not good in os-test: udp has 112 (connecting after a `shutdown(SHUT_WR)` raises `SIGPIPE` before the error is reported, in an order os-test has no expectation for; many have no expected outcome at all), basic 25 (the `complex` and a few `long double` tests as before), fnmatch 6, regex 3, limits 2 and signal 1 (`sigaction-exec-flags`, no expected outcome).
+
+Open POSIX tests that do not pass, for a reason in the kernel or in the test: no `SCHED_SPORADIC` (7), `sched_setaffinity` helpers that exist for Linux only (`affinity.h`, 2), `seteuid()` leaves the real user ID, which the scheduler checks first (`p_cansched`, 4), the priority of `SCHED_OTHER` is the scheduler's own (`ksched_getparam`, 3), `sem_wait()` is not restarted after a signal with `SA_RESTART` (the `_umtx_op` wait maps `ERESTART` to `EINTR`, 1), `SA_NOCLDSTOP` is kept for `SIGCHLD` only (1), negative clock IDs are CPU-time clocks (`kern_clock_getres`, 1), kernel timers exist for `CLOCK_REALTIME`, `CLOCK_MONOTONIC` and `CLOCK_TAI` only (`itimer_start`; `timer_create` of a CPU-time clock, 3), `sigwaitinfo` of `raise()` has `si_code` `SI_LWP` where the test wants `SI_USER` (1), `mmap/24-1` maps shared memory until FreeBSD runs out of kernel memory, as it has no limit on the number of mappings, and stops the VM (the gate skips it), and an unlock by a thread that is not the owner (`pthread_cond_timedwait/2-3`, undefined). About 28 more (aio on sockets, `timer_getoverrun`, `mlockall`, `mmap` past the end of a file, the thread guard page, `sem_post` order, `clock_settime` timers) have no proven cause yet.
 
 ## How the suites were run
 
