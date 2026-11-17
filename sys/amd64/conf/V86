@@ -27,6 +27,11 @@ options 	SCSI_DELAY=5000
 options 	KTRACE
 options 	STACK
 options 	_KPOSIX_PRIORITY_SCHEDULING
+options 	P1003_1B_SEMAPHORES
+options 	P1003_1B_MQUEUE
+options 	SYSVSHM
+options 	SYSVMSG
+options 	SYSVSEM
 options 	PRINTF_BUFR_SIZE=128
 options 	KBD_INSTALL_CDEV
 options 	CAPABILITY_MODE
