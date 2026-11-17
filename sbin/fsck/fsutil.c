@@ -234,10 +234,9 @@ retry:
 		/* an image file: as it is (and the walk through fstab that
 		   may be going on is not rewound by getfsfile) */
 		return (origname);
-	} else if (S_ISCHR(stblock.st_mode) && !retried) {
-		newname = unrawname(newname);
-		retried++;
-		goto retry;
+	} else if (S_ISCHR(stblock.st_mode)) {
+		/* FreeBSD's disks are character devices, with no raw twin */
+		return (origname);
 	} else if ((fsp = getfsfile(newname)) != 0 && !retried) {
 		newname = fsp->fs_spec;
 		retried++;

@@ -34,7 +34,7 @@
  *   umount -a [-v] [-t type[,type...]]
  *
  * A name is the directory a file system is mounted on or its special file
- * (/dev/disk0s1).  -a unmounts every mount of /proc/self/mounts, the last
+ * (/dev/gpt/rootfs).  -a unmounts every mount of the system, the last
  * first, except /, /dev and /proc, which the kernel keeps; -t keeps to the
  * types listed.  A mount that is busy (something below it, a file open)
  * fails with its reason and the rest go on.  -v names each one.  The status
@@ -59,9 +59,32 @@ static void usage(void)
 	exit(1);
 }
 
+/* the mounts of the system, from getfsstat(2) */
+static int current(struct mnt **l, size_t *n)
+{
+	struct statfs *sf;
+	int i, cnt = getfsstat(NULL, 0, MNT_NOWAIT);
+
+	if (cnt < 0)
+		return -1;
+	sf = calloc((size_t)cnt + 1, sizeof *sf);
+	*l = calloc((size_t)cnt + 1, sizeof **l);
+	if (!sf || !*l || (cnt = getfsstat(sf, (long)(cnt + 1) * (long)sizeof *sf, MNT_NOWAIT)) < 0)
+		return -1;
+	for (i = 0; i < cnt; i++) {
+		(*l)[i].fsname = strdup(sf[i].f_mntfromname);
+		(*l)[i].dir = strdup(sf[i].f_mntonname);
+		(*l)[i].type = strdup(sf[i].f_fstypename);
+		(*l)[i].opts = strdup("");
+	}
+	free(sf);
+	*n = (size_t)cnt;
+	return 0;
+}
+
 static void do_umount(const char *dir)
 {
-	if (umount(dir) == -1) {
+	if (unmount(dir, 0) == -1) {
 		fprintf(stderr, "umount: %s: %s\n", dir, strerror(errno));
 		status = 1;
 	} else if (verbose) {
@@ -73,7 +96,6 @@ int main(int argc, char *argv[])
 {
 	int ch, all = 0;
 	const char *types = NULL;
-	const char *const files[] = { "/proc/self/mounts", NULL };
 	struct mnt *cur;
 	size_t ncur, i;
 
@@ -89,8 +111,8 @@ int main(int argc, char *argv[])
 	argv += optind;
 	if (all ? argc != 0 : (argc == 0 || types))
 		usage();
-	if (!mnt_read(files, &cur, &ncur)) {
-		fprintf(stderr, "umount: %s: %s\n", files[0], strerror(errno));
+	if (current(&cur, &ncur) == -1) {
+		fprintf(stderr, "umount: getfsstat: %s\n", strerror(errno));
 		return 1;
 	}
 	if (all) {

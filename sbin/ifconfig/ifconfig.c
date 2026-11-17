@@ -92,6 +92,7 @@ static void put_in(struct sockaddr *sa, uint32_t host)
 	struct sockaddr_in *s = (struct sockaddr_in *)sa;
 
 	memset(sa, 0, sizeof *sa);
+	s->sin_len = sizeof *s;	/* the FreeBSD kernel wants it */
 	s->sin_family = AF_INET;
 	s->sin_addr.s_addr = htonl(host);
 }
@@ -217,7 +218,7 @@ static void setflags(const char *name, unsigned set, unsigned clear)
 static void params(const char *name, char **av)
 {
 	uint32_t addr = 0, mask = 0, bcast = 0;
-	int have_addr = 0, have_mask = 0, have_bcast = 0, alias = 0, del = 0, mtu = -1, metric = -1;
+	int have_addr = 0, have_mask = 0, have_bcast = 0, del = 0, mtu = -1, metric = -1;
 	unsigned fset = 0, fclear = 0;
 	struct ifreq r;
 
@@ -245,7 +246,7 @@ static void params(const char *name, char **av)
 			else
 				fset |= bit, fclear &= ~bit;
 		} else if (!strcmp(p, "alias")) {
-			alias = 1;
+			; /* an address is added, as always */
 		} else if (!strcmp(p, "-alias") || !strcmp(p, "delete")) {
 			del = 1;
 		} else if (!strcmp(p, "netmask") || !strcmp(p, "broadcast") || !strcmp(p, "mtu") || !strcmp(p, "metric")) {
@@ -299,7 +300,7 @@ static void params(const char *name, char **av)
 		} else
 			put_in(&r.ifr_addr, addr);
 		IOC(SIOCDIFADDR, &r);
-	} else if (have_addr && alias) {
+	} else if (have_addr) {
 		struct ifaliasreq ra;
 
 		memset(&ra, 0, sizeof ra);
@@ -309,21 +310,11 @@ static void params(const char *name, char **av)
 		put_in(&ra.ifra_addr, addr);
 		if (have_mask)
 			put_in(&ra.ifra_mask, mask);
+		if (have_bcast)
+			put_in(&ra.ifra_broadaddr, bcast);
 		IOC(SIOCAIFADDR, &ra);
-	} else if (have_addr) {
-		setname(&r, name);
-		put_in(&r.ifr_addr, addr);
-		IOC(SIOCSIFADDR, &r);
-	}
-	if (have_mask && !(have_addr && alias)) {
-		setname(&r, name);
-		put_in(&r.ifr_addr, mask);
-		IOC(SIOCSIFNETMASK, &r);
-	}
-	if (have_bcast) {
-		setname(&r, name);
-		put_in(&r.ifr_addr, bcast);
-		IOC(SIOCSIFBRDADDR, &r);
+	} else if (have_mask || have_bcast) {
+		bad("needs an address", have_mask ? "netmask" : "broadcast");
 	}
 	if (fset || fclear)
 		setflags(name, fset, fclear);

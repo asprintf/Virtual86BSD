@@ -30,7 +30,7 @@
 
 /* dmesg - show the kernel's messages: what the system printed since it
  * started (the last 64 KiB of it), read from the kernel's log buffer
- * (sysctl kern.msgbuf).  Nothing is taken from the buffer: syslogd(8)
+ * (sysctl kern.msgbuf, a string).  Nothing is taken from the buffer: syslogd(8)
  * and dmesg can both show it. */
 #define _POSIX_C_SOURCE 202405L
 #define _XOPEN_SOURCE 800
@@ -44,8 +44,7 @@
 
 int main(int argc, char *argv[])
 {
-	int mib[2] = {CTL_KERN, KERN_MSGBUFSIZE}, size = 0;
-	size_t len = sizeof size;
+	size_t len = 0;
 	char *buf;
 
 	(void)argv;
@@ -53,21 +52,22 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "usage: dmesg\n");
 		return 1;
 	}
-	if (sysctl(mib, 2, &size, &len, NULL, 0) == -1 || size <= 0) {
-		fprintf(stderr, "dmesg: kern.msgbufsize: %s\n", strerror(errno));
+	if (sysctlbyname("kern.msgbuf", NULL, &len, NULL, 0) == -1 || len == 0) {
+		fprintf(stderr, "dmesg: kern.msgbuf: %s\n", strerror(errno));
 		return 1;
 	}
-	buf = malloc((size_t)size + 1);
+	len += 4096;	/* the buffer grows while it is read */
+	buf = malloc(len + 1);
 	if (!buf) {
 		fprintf(stderr, "dmesg: %s\n", strerror(errno));
 		return 1;
 	}
-	mib[1] = KERN_MSGBUF;
-	len = (size_t)size;
-	if (sysctl(mib, 2, buf, &len, NULL, 0) == -1) {
+	if (sysctlbyname("kern.msgbuf", buf, &len, NULL, 0) == -1) {
 		fprintf(stderr, "dmesg: kern.msgbuf: %s\n", strerror(errno));
 		return 1;
 	}
+	if (len > 0 && buf[len - 1] == '\0')
+		len--;
 	if (len == 0)
 		return 0;
 	if (fwrite(buf, 1, len, stdout) != len)

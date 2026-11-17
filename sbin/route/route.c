@@ -28,47 +28,48 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* route - show and change the routing table.
+
+/* route - show and change the routing table (IPv4), through the routing socket.
  *
  *   route [-nqv] show
  *   route [-nqv] get destination
- *   route [-nqv] add [-net|-host] destination[/prefixlen] [gateway] [options]
- *   route [-nqv] delete [-net|-host] destination[/prefixlen] [options]
+ *   route [-nqv] add [-net|-host] destination[/prefixlen] [gateway] [-netmask mask]
+ *   route [-nqv] delete [-net|-host] destination[/prefixlen] [gateway] [-netmask mask]
  *   route [-nqv] flush
  *
- * The destination is an address or "default"; -netmask mask (dotted, 0xhex
- * or /prefixlen) gives a network's mask, a bare address is a host.  The
- * gateway is an address that is on a network the system is on; -iface says
- * the "gateway" is an interface (its name or one of its addresses) and the
- * route is on that link; -ifp name names the interface, -priority n sets
- * the metric (the lowest wins between routes to the same place).  flush
- * removes the routes through gateways.  Names are never looked up (-n is
- * accepted); the table is the kernel's (sysctl net.route, SIOCADDRT and
- * SIOCDELRT).
- */
+ * The destination is an address or "default"; -netmask mask (dotted, 0xhex or
+ * /prefixlen) gives a network's mask, a bare address is a host.  The gateway is
+ * an address on a network the system is on.  flush removes the routes through
+ * gateways.  Names are never looked up (-n is accepted).  The table is the
+ * kernel's: sysctl net.route (NET_RT_DUMP) and RTM_ADD, RTM_DELETE and RTM_GET
+ * messages on a PF_ROUTE socket. */
 #define _POSIX_C_SOURCE 202405L
 #define _XOPEN_SOURCE 800
 #define _DEFAULT_SOURCE
 #include <arpa/inet.h>
 #include <errno.h>
-#include <ifaddrs.h>
 #include <net/if.h>
 #include <net/route.h>
 #include <netinet/in.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/sysctl.h>
 #include <unistd.h>
 
-static int sock, quiet;
+static int sock = -1, quiet, seq;
+
+struct rt {
+	uint32_t dst, mask, gw;	/* host byte order */
+	int flags;
+	unsigned index;
+};
 
 static void usage(void)
 {
-	fprintf(stderr, "usage: route [-nqv] command [[-net | -host] destination [gateway] [-netmask mask]\n"
-	    "             [-iface] [-ifp interface] [-priority n]]\n"
+	fprintf(stderr, "usage: route [-nqv] command [[-net | -host] destination[/prefixlen] [gateway] [-netmask mask]]\n"
 	    "commands: show, get, add, delete, flush\n");
 	exit(1);
 }
@@ -82,31 +83,29 @@ static void die(const char *what, const char *arg)
 static int parse_ip(const char *s, uint32_t *host)
 {
 	struct in_addr a;
-
 	if (inet_pton(AF_INET, s, &a) != 1)
-		return 0;
+		return -1;
 	*host = ntohl(a.s_addr);
-	return 1;
+	return 0;
 }
 
 static int parse_mask(const char *s, uint32_t *mask)
 {
 	char *end;
 	unsigned long v;
-
 	if (s[0] == '/') {
 		v = strtoul(s + 1, &end, 10);
-		if (!s[1] || *end || v > 32)
-			return 0;
-		*mask = v == 0 ? 0 : ~0U << (32 - v);
-		return 1;
+		if (*end || v > 32)
+			return -1;
+		*mask = v ? 0xffffffffu << (32 - v) : 0;
+		return 0;
 	}
 	if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
 		v = strtoul(s, &end, 16);
 		if (*end || v > 0xffffffffUL)
-			return 0;
+			return -1;
 		*mask = (uint32_t)v;
-		return 1;
+		return 0;
 	}
 	return parse_ip(s, mask);
 }
@@ -114,370 +113,286 @@ static int parse_mask(const char *s, uint32_t *mask)
 static int prefixlen(uint32_t mask)
 {
 	int n = 0;
-
-	while (mask & 0x80000000U)
-		n++, mask <<= 1;
+	while (mask & 0x80000000u) {
+		n++;
+		mask <<= 1;
+	}
 	return n;
-}
-
-static void put_in(struct sockaddr *sa, uint32_t host)
-{
-	struct sockaddr_in *s = (struct sockaddr_in *)sa;
-
-	memset(sa, 0, sizeof *sa);
-	s->sin_family = AF_INET;
-	s->sin_addr.s_addr = htonl(host);
 }
 
 static const char *ip_str(uint32_t host)
 {
+	static char buf[4][INET_ADDRSTRLEN];
+	static int i;
 	struct in_addr a;
-
+	i = (i + 1) & 3;
 	a.s_addr = htonl(host);
-	return inet_ntoa(a);
+	inet_ntop(AF_INET, &a, buf[i], sizeof buf[i]);
+	return buf[i];
 }
 
-/* ---- the table ---- */
-
-static struct rtinfo *dump(int *n)
+/* the table, from the kernel */
+static int dump(struct rt **out)
 {
-	int mib[6] = {CTL_NET, AF_ROUTE, 0, AF_INET, NET_RT_DUMP, 0};
-	size_t len;
-	struct rtinfo *buf;
-	int tries;
+	int mib[6] = {CTL_NET, PF_ROUTE, 0, AF_INET, NET_RT_DUMP, 0};
+	size_t len = 0, n = 0, cap = 0;
+	char *buf, *p, *end;
+	struct rt *t = NULL;
 
-	for (tries = 0; tries < 5; tries++) {
-		if (sysctl(mib, 6, NULL, &len, NULL, 0) == -1)
-			die("net.route", strerror(errno));
-		if (!(buf = malloc(len + sizeof *buf)))
-			die("malloc", strerror(errno));
-		len += sizeof *buf;
-		if (sysctl(mib, 6, buf, &len, NULL, 0) == 0) {
-			*n = (int)(len / sizeof *buf);
-			return buf;
+	if (sysctl(mib, 6, NULL, &len, NULL, 0) == -1)
+		die("net.route", strerror(errno));
+	len += len / 8 + 1024;
+	buf = malloc(len);
+	if (!buf || sysctl(mib, 6, buf, &len, NULL, 0) == -1)
+		die("net.route", strerror(errno));
+	for (p = buf, end = buf + len; p + sizeof(struct rt_msghdr) <= end; ) {
+		struct rt_msghdr *m = (struct rt_msghdr *)p;
+		char *a = (char *)(m + 1);
+		struct rt r;
+		int i;
+		if (m->rtm_msglen == 0)
+			break;
+		memset(&r, 0, sizeof r);
+		r.flags = m->rtm_flags;
+		r.index = m->rtm_index;
+		for (i = 0; i < RTAX_MAX; i++) {
+			struct sockaddr *sa = (struct sockaddr *)a;
+			struct in_addr in;
+			if (!(m->rtm_addrs & (1 << i)))
+				continue;
+			memset(&in, 0, sizeof in);
+			if (i == RTAX_NETMASK) {	/* a mask is cut where its zeros end */
+				size_t k = sa->sa_len > 4 ? sa->sa_len - 4 : 0;
+				if (k > sizeof in)
+					k = sizeof in;
+				memcpy(&in, (char *)sa + 4, k);
+				r.mask = ntohl(in.s_addr);
+			} else if (sa->sa_family == AF_INET) {
+				memcpy(&in, (char *)sa + 4, sizeof in);
+				if (i == RTAX_DST)
+					r.dst = ntohl(in.s_addr);
+				else if (i == RTAX_GATEWAY)
+					r.gw = ntohl(in.s_addr);
+			}
+			a += SA_SIZE(sa);
 		}
-		free(buf);
-		if (errno != ENOMEM)
-			die("net.route", strerror(errno));
+		if (!(r.flags & RTF_HOST) && !(m->rtm_addrs & RTA_NETMASK))
+			r.mask = 0;
+		if (n == cap) {
+			cap = cap ? cap * 2 : 16;
+			t = realloc(t, cap * sizeof *t);
+			if (!t)
+				die("out of memory", NULL);
+		}
+		t[n++] = r;
+		p += m->rtm_msglen;
 	}
-	die("net.route", "the table keeps growing");
-	return NULL;
+	free(buf);
+	*out = t;
+	return (int)n;
 }
 
-static uint32_t ri_dst(const struct rtinfo *r) { return ntohl(r->ri_dst); }
-static uint32_t ri_mask(const struct rtinfo *r) { return ntohl(r->ri_mask); }
-static uint32_t ri_gw(const struct rtinfo *r) { return ntohl(r->ri_gateway); }
-
-/* "default", a host's address, or a network as 10.0.2/24 (the octets the
-   prefix needs) */
-static void dest_str(const struct rtinfo *r, char *out, size_t size)
+static void flags_str(int f, char *out)
 {
-	uint32_t d = ri_dst(r), m = ri_mask(r);
-	int p = prefixlen(m), oct, k;
-	char tmp[32];
+	*out++ = 'U';
+	if (f & RTF_GATEWAY) *out++ = 'G';
+	if (f & RTF_HOST) *out++ = 'H';
+	if (f & RTF_REJECT) *out++ = 'R';
+	if (f & RTF_STATIC) *out++ = 'S';
+	if (f & RTF_BLACKHOLE) *out++ = 'B';
+	if (f & RTF_DYNAMIC) *out++ = 'D';
+	*out = 0;
+}
 
-	if (m == 0) {
+static void dest_str(const struct rt *r, char *out, size_t size)
+{
+	if (r->dst == 0 && r->mask == 0 && !(r->flags & RTF_HOST))
 		snprintf(out, size, "default");
-		return;
-	}
-	if (m == 0xffffffffU) {
-		snprintf(out, size, "%s", ip_str(d));
-		return;
-	}
-	oct = (p + 7) / 8;
-	tmp[0] = 0;
-	for (k = 0; k < oct; k++)
-		snprintf(tmp + strlen(tmp), sizeof tmp - strlen(tmp), "%s%u", k ? "." : "", (d >> (24 - 8 * k)) & 0xff);
-	snprintf(out, size, "%s/%d", tmp, p);
+	else if (r->flags & RTF_HOST)
+		snprintf(out, size, "%s", ip_str(r->dst));
+	else
+		snprintf(out, size, "%s/%d", ip_str(r->dst), prefixlen(r->mask));
 }
 
 static void show(void)
 {
-	int n, i;
-	struct rtinfo *t = dump(&n);
-
-	printf("Routing tables\n\nInternet:\n");
-	printf("%-18s %-18s %-5s %6s  %s\n", "Destination", "Gateway", "Flags", "Metric", "Iface");
+	struct rt *t;
+	int i, n = dump(&t);
+	printf("%-20s %-16s %-6s %s\n", "Destination", "Gateway", "Flags", "Netif");
 	for (i = 0; i < n; i++) {
-		char d[48], g[32], fl[8], name[IF_NAMESIZE];
-		int k = 0;
-
-		dest_str(&t[i], d, sizeof d);
-		if (ri_gw(&t[i]))
-			snprintf(g, sizeof g, "%s", ip_str(ri_gw(&t[i])));
-		else
-			snprintf(g, sizeof g, "link#%d", t[i].ri_index);
-		if (t[i].ri_flags & RTF_UP)
-			fl[k++] = 'U';
-		if (t[i].ri_flags & RTF_GATEWAY)
-			fl[k++] = 'G';
-		if (t[i].ri_flags & RTF_HOST)
-			fl[k++] = 'H';
-		fl[k] = 0;
-		if (!if_indextoname((unsigned)t[i].ri_index, name))
-			strcpy(name, "?");
-		printf("%-18s %-18s %-5s %6d  %s\n", d, g, fl, t[i].ri_metric, name);
+		char dst[64], fl[16], ifn[IF_NAMESIZE] = "";
+		dest_str(&t[i], dst, sizeof dst);
+		flags_str(t[i].flags, fl);
+		if (t[i].index)
+			if_indextoname(t[i].index, ifn);
+		printf("%-20s %-16s %-6s %s\n", dst, t[i].gw ? ip_str(t[i].gw) : "link", fl, ifn);
 	}
 	free(t);
 }
 
-/* the route the kernel would use for host: the longest prefix, then the
-   lowest metric, through an interface that is up */
-static const struct rtinfo *lookup(const struct rtinfo *t, int n, uint32_t host)
+/* one message: RTM_* type with the addresses dst, gateway (gw != 0), netmask (mask given) */
+static int rtsend(int type, uint32_t dst, int havemask, uint32_t mask, int havegw, uint32_t gw, int flags)
 {
-	const struct rtinfo *best = NULL;
-	int i;
+	struct {
+		struct rt_msghdr h;
+		struct sockaddr_in a[3];
+	} m;
+	int n = 0;
 
-	for (i = 0; i < n; i++) {
-		struct ifreq r;
-		char name[IF_NAMESIZE];
-
-		if ((host & ri_mask(&t[i])) != ri_dst(&t[i]))
-			continue;
-		if (!if_indextoname((unsigned)t[i].ri_index, name))
-			continue;
-		memset(&r, 0, sizeof r);
-		strcpy(r.ifr_name, name);
-		if (ioctl(sock, SIOCGIFFLAGS, &r) == -1 || !((unsigned short)r.ifr_flags & IFF_UP))
-			continue;
-		if (!best || ri_mask(&t[i]) > ri_mask(best) ||
-		    (ri_mask(&t[i]) == ri_mask(best) && t[i].ri_metric < best->ri_metric))
-			best = &t[i];
+	memset(&m, 0, sizeof m);
+	m.h.rtm_version = RTM_VERSION;
+	m.h.rtm_type = (unsigned char)type;
+	m.h.rtm_flags = flags | RTF_UP;
+	m.h.rtm_pid = getpid();
+	m.h.rtm_seq = ++seq;
+	m.h.rtm_addrs = RTA_DST;
+	m.a[n].sin_len = sizeof m.a[n]; m.a[n].sin_family = AF_INET; m.a[n].sin_addr.s_addr = htonl(dst); n++;
+	if (havegw) {
+		m.h.rtm_addrs |= RTA_GATEWAY;
+		m.a[n].sin_len = sizeof m.a[n]; m.a[n].sin_family = AF_INET; m.a[n].sin_addr.s_addr = htonl(gw); n++;
 	}
-	return best;
+	if (havemask) {
+		m.h.rtm_addrs |= RTA_NETMASK;
+		m.a[n].sin_len = sizeof m.a[n]; m.a[n].sin_family = AF_INET; m.a[n].sin_addr.s_addr = htonl(mask); n++;
+	}
+	m.h.rtm_msglen = (unsigned short)(sizeof m.h + n * sizeof m.a[0]);
+	return (int)write(sock, &m, m.h.rtm_msglen) == m.h.rtm_msglen ? 0 : -1;
+}
+
+static void say(const char *verb, const char *kind, const char *dest, const char *gw, const char *err)
+{
+	if (err)
+		fprintf(stderr, "route: %s %s %s%s%s: %s\n", verb, kind, dest, gw ? " " : "", gw ? gw : "", err);
+	else if (!quiet)
+		printf("%s %s %s%s%s\n", verb, kind, dest, gw ? ": gateway " : "", gw ? gw : "");
 }
 
 static void get(const char *dest)
 {
-	uint32_t host = 0;
-	int n;
-	struct rtinfo *t;
-	const struct rtinfo *r;
-	char name[IF_NAMESIZE];
-
-	if (strcmp(dest, "default") && !parse_ip(dest, &host))
-		die("invalid destination", dest);
-	t = dump(&n);
-	if (!(r = lookup(t, n, host))) {
-		fprintf(stderr, "route: get host %s: %s\n", dest, strerror(ENETUNREACH));
-		exit(1);
+	uint32_t host;
+	struct rt *t;
+	int i, n, best = -1;
+	if (parse_ip(dest, &host) == -1)
+		die("bad address", dest);
+	n = dump(&t);
+	for (i = 0; i < n; i++)	/* the longest mask that covers it */
+		if ((host & t[i].mask) == (t[i].dst & t[i].mask) && (best < 0 || t[i].mask >= t[best].mask))
+			best = i;
+	if (best < 0)
+		die("not in table", dest);
+	{
+		char ifn[IF_NAMESIZE] = "", d[64], fl[16];
+		dest_str(&t[best], d, sizeof d);
+		if (t[best].index)
+			if_indextoname(t[best].index, ifn);
+		flags_str(t[best].flags, fl);
+		printf("   route to: %s\ndestination: %s\n       mask: %s\n", dest, ip_str(t[best].dst), ip_str(t[best].mask));
+		if (t[best].gw)
+			printf("    gateway: %s\n", ip_str(t[best].gw));
+		printf("  interface: %s\n      flags: %s\n", ifn, fl);
 	}
-	if (!if_indextoname((unsigned)r->ri_index, name))
-		strcpy(name, "?");
-	printf("   route to: %s\n", dest);
-	printf("destination: %s\n", ri_mask(r) ? ip_str(ri_dst(r)) : "default");
-	printf("       mask: %s\n", ri_mask(r) ? ip_str(ri_mask(r)) : "default");
-	if (ri_gw(r))
-		printf("    gateway: %s\n", ip_str(ri_gw(r)));
-	printf("  interface: %s\n", name);
-	printf("      flags: <UP%s%s>\n", (r->ri_flags & RTF_GATEWAY) ? ",GATEWAY" : "", (r->ri_flags & RTF_HOST) ? ",HOST" : "");
 	free(t);
-}
-
-/* ---- add, delete, flush ---- */
-
-static void say(const char *verb, const char *kind, const char *dest, const char *gw, const char *err)
-{
-	if (err) {
-		fprintf(stderr, "route: %s %s %s%s%s: %s\n", verb, kind, dest, gw ? ": gateway " : "", gw ? gw : "", err);
-		return;
-	}
-	if (!quiet)
-		printf("%s %s %s%s%s\n", verb, kind, dest, gw ? ": gateway " : "", gw ? gw : "");
-}
-
-/* the interface that has the address or is called so */
-static const char *iface_of(const char *arg, char *out)
-{
-	struct ifaddrs *list, *a;
-	uint32_t ip;
-	const char *r = NULL;
-
-	if (if_nametoindex(arg)) {
-		strcpy(out, arg);
-		return out;
-	}
-	if (!parse_ip(arg, &ip) || getifaddrs(&list) == -1)
-		return NULL;
-	for (a = list; a && !r; a = a->ifa_next)
-		if (a->ifa_addr && a->ifa_addr->sa_family == AF_INET &&
-		    ntohl(((struct sockaddr_in *)a->ifa_addr)->sin_addr.s_addr) == ip) {
-			strcpy(out, a->ifa_name);
-			r = out;
-		}
-	freeifaddrs(list);
-	return r;
 }
 
 static void change(int add, char **av)
 {
-	const char *pos[2] = {NULL, NULL}, *ifp = NULL;
-	int npos = 0, net = 0, host = 0, iface = 0, prio = -1, have_mask = 0;
+	const char *dest = NULL, *gwarg = NULL, *kind = "net";
 	uint32_t dst = 0, mask = 0, gw = 0;
-	struct rtentry r;
-	char devbuf[IF_NAMESIZE], dtxt[48];
-	const char *kind, *gwtxt = NULL;
-	char *slash;
+	int ishost = -1, havemask = 0, i;
+	char *slash, buf[64];
 
-	for (; *av; av++) {
-		const char *p = *av;
-
-		if (!strcmp(p, "-net"))
-			net = 1;
-		else if (!strcmp(p, "-host"))
-			host = 1;
-		else if (!strcmp(p, "-iface") || !strcmp(p, "-interface"))
-			iface = 1;
-		else if (!strcmp(p, "-netmask") || !strcmp(p, "-ifp") || !strcmp(p, "-priority")) {
-			if (!av[1])
-				die("needs a value", p);
-			av++;
-			if (p[1] == 'n') {
-				if (!parse_mask(*av, &mask))
-					die("invalid netmask", *av);
-				have_mask = 1;
-			} else if (p[1] == 'i')
-				ifp = *av;
-			else {
-				char *end;
-				long v = strtol(*av, &end, 10);
-
-				if (!**av || *end || v < 0 || v > 30000)
-					die("invalid priority", *av);
-				prio = (int)v;
-			}
-		} else if (p[0] == '-' && p[1])
-			die("unknown option", p);
-		else if (npos < 2)
-			pos[npos++] = p;
-		else
-			usage();
+	for (i = 0; av[i]; i++) {
+		if (!strcmp(av[i], "-net")) ishost = 0;
+		else if (!strcmp(av[i], "-host")) ishost = 1;
+		else if (!strcmp(av[i], "-netmask")) {
+			if (!av[++i] || parse_mask(av[i], &mask) == -1)
+				die("bad netmask", av[i]);
+			havemask = 1;
+		} else if (av[i][0] == '-') {
+			die("option not supported", av[i]);
+		} else if (!dest) dest = av[i];
+		else if (!gwarg) gwarg = av[i];
+		else usage();
 	}
-	if (npos == 0 || (add && npos == 1 && !ifp) || net + host > 1 || (host && have_mask))
+	if (!dest)
 		usage();
-	if (!strcmp(pos[0], "default")) {
-		dst = 0, mask = 0, have_mask = 1, net = 1;
-		kind = "net";
-	} else {
-		char *tmp = strdup(pos[0]);
-
-		if (!tmp)
-			die("malloc", strerror(errno));
-		if ((slash = strchr(tmp, '/')) != NULL) {
-			if (host || have_mask || !parse_mask(pos[0] + (slash - tmp), &mask))
-				die("invalid destination", pos[0]);
-			*slash = 0;
-			have_mask = 1;
-		}
-		if (!parse_ip(tmp, &dst))
-			die("invalid destination", pos[0]);
-		free(tmp);
-		if (!net && !have_mask)
-			host = 1; /* (a bare address) */
-		if (host)
-			mask = 0xffffffffU, have_mask = 1;
-		kind = host ? "host" : "net";
+	snprintf(buf, sizeof buf, "%s", dest);
+	if ((slash = strchr(buf, '/')) != NULL) {
+		*slash = 0;
+		if (parse_mask(dest + (slash - buf), &mask) == -1)
+			die("bad prefix length", dest);
+		havemask = 1;
 	}
-	memset(&r, 0, sizeof r);
-	put_in(&r.rt_dst, dst);
-	if (have_mask)
-		put_in(&r.rt_genmask, mask);
-	r.rt_flags = RTF_UP | (host ? RTF_HOST : 0);
-	if (prio >= 0)
-		r.rt_metric = (short)(prio + 1);
-	if (add) {
-		if (npos == 2) {
-			gwtxt = pos[1];
-			if (iface) {
-				if (!iface_of(pos[1], devbuf))
-					die("no such interface or address", pos[1]);
-				ifp = devbuf;
-			} else {
-				if (!parse_ip(pos[1], &gw))
-					die("invalid gateway", pos[1]);
-				put_in(&r.rt_gateway, gw);
-				r.rt_flags |= RTF_GATEWAY;
-			}
-		}
-		if (ifp)
-			r.rt_dev = (char *)ifp;
+	if (!strcmp(buf, "default")) {
+		dst = 0; mask = 0; havemask = 1;
+	} else if (parse_ip(buf, &dst) == -1) {
+		die("bad address", dest);
 	}
-	if (ifp && !add) /* (nothing to match: the destination is the key) */
-		r.rt_dev = NULL;
-	snprintf(dtxt, sizeof dtxt, "%s", !strcmp(pos[0], "default") ? "default" : pos[0]);
-	if (ioctl(sock, add ? SIOCADDRT : SIOCDELRT, &r) == -1) {
-		say(add ? "add" : "delete", kind, dtxt, gwtxt, strerror(errno));
+	if (gwarg && parse_ip(gwarg, &gw) == -1)
+		die("bad gateway", gwarg);
+	if (ishost == -1)
+		ishost = !havemask;
+	if (ishost)
+		kind = "host";
+	if (add && !gwarg)
+		die("a gateway is needed", dest);
+	if (rtsend(add ? RTM_ADD : RTM_DELETE, dst, !ishost && havemask, mask, gwarg != NULL, gw,
+	    (gwarg ? RTF_GATEWAY : 0) | (ishost ? RTF_HOST : 0) | RTF_STATIC) == -1) {
+		say(add ? "add" : "delete", kind, dest, gwarg, strerror(errno));
 		exit(1);
 	}
-	say(add ? "add" : "delete", kind, dtxt, gwtxt, NULL);
+	say(add ? "add" : "delete", kind, dest, gwarg, NULL);
 }
 
 static void flush(void)
 {
-	int n, i;
-	struct rtinfo *t = dump(&n);
-
+	struct rt *t;
+	int i, n = dump(&t);
 	for (i = 0; i < n; i++) {
-		struct rtentry r;
-		char d[48];
-
-		if (!(t[i].ri_flags & RTF_GATEWAY))
+		if (!(t[i].flags & RTF_GATEWAY))
 			continue;
-		memset(&r, 0, sizeof r);
-		put_in(&r.rt_dst, ri_dst(&t[i]));
-		put_in(&r.rt_genmask, ri_mask(&t[i]));
-		r.rt_flags = (unsigned short)t[i].ri_flags;
-		dest_str(&t[i], d, sizeof d);
-		if (ioctl(sock, SIOCDELRT, &r) == -1 && errno != ESRCH) {
-			say("delete", ri_mask(&t[i]) == 0xffffffffU ? "host" : "net", d, ip_str(ri_gw(&t[i])), strerror(errno));
-			exit(1);
+		if (rtsend(RTM_DELETE, t[i].dst, !(t[i].flags & RTF_HOST), t[i].mask, 1, t[i].gw, t[i].flags) == -1) {
+			if (errno != ESRCH)
+				fprintf(stderr, "route: delete %s: %s\n", ip_str(t[i].dst), strerror(errno));
+		} else if (!quiet) {
+			printf("%s\n", ip_str(t[i].dst));
 		}
-		say("delete", ri_mask(&t[i]) == 0xffffffffU ? "host" : "net", d, ip_str(ri_gw(&t[i])), NULL);
 	}
 	free(t);
 }
 
 int main(int argc, char *argv[])
 {
-	int c;
-	const char *cmd;
+	int ch;
 
-	while ((c = getopt(argc, argv, "nqv")) != -1) {
-		switch (c) {
-		case 'n':
-		case 'v':
-			break;
-		case 'q':
-			quiet = 1;
-			break;
-		default:
-			usage();
+	while ((ch = getopt(argc, argv, "nqv")) != -1) {
+		switch (ch) {
+		case 'n': case 'v': break;
+		case 'q': quiet = 1; break;
+		default: usage();
 		}
 	}
 	argc -= optind;
 	argv += optind;
 	if (argc < 1)
 		usage();
-	cmd = argv[0];
-	if ((sock = socket(AF_INET, SOCK_DGRAM | SOCK_CLOEXEC, 0)) == -1)
-		die("socket", strerror(errno));
-	if (!strcmp(cmd, "show") || !strcmp(cmd, "list")) {
-		if (argc != 1)
-			usage();
+	if (!strcmp(argv[0], "show") || !strcmp(argv[0], "get") || !strcmp(argv[0], "flush") ||
+	    !strcmp(argv[0], "add") || !strcmp(argv[0], "delete")) {
+		sock = socket(PF_ROUTE, SOCK_RAW, AF_INET);
+		if (sock == -1)
+			die("socket", strerror(errno));
+	}
+	if (!strcmp(argv[0], "show") && argc == 1)
 		show();
-	} else if (!strcmp(cmd, "get")) {
-		if (argc != 2)
-			usage();
+	else if (!strcmp(argv[0], "get") && argc == 2)
 		get(argv[1]);
-	} else if (!strcmp(cmd, "add")) {
+	else if (!strcmp(argv[0], "add"))
 		change(1, argv + 1);
-	} else if (!strcmp(cmd, "delete") || !strcmp(cmd, "del")) {
+	else if (!strcmp(argv[0], "delete"))
 		change(0, argv + 1);
-	} else if (!strcmp(cmd, "flush")) {
-		if (argc != 1)
-			usage();
+	else if (!strcmp(argv[0], "flush") && argc == 1)
 		flush();
-	} else
+	else
 		usage();
-	return fflush(stdout) == 0 ? 0 : 1;
+	return 0;
 }

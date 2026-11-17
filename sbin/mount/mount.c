@@ -43,8 +43,8 @@
  * after fsck changed its disk) and defaults; the kernel knows no others, so any
  * other word is an error.  -a skips what is already mounted (or, with -u, changes
  * it), and entries of type swap, sw and xx.  With no type a /dev/ special is
- * ffs and anything else tmpfs.  The list is the system's table (/proc/self/mounts):
- *     /dev/disk0s1 on / type ffs (local)
+ * ufs and anything else tmpfs.  The list is the system's table (getfsstat(2)):
+ *     /dev/gpt/rootfs on / type ufs (local)
  * The status is 1 if any mount failed. */
 #define _POSIX_C_SOURCE 202405L
 #define _XOPEN_SOURCE 800
@@ -56,12 +56,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mount.h>
+#include <sys/uio.h>
 #include <unistd.h>
 
 #define PATH_FSTAB "/etc/fstab"
 
 static int status, verbose;
-static const char *const mounts_files[] = { "/proc/self/mounts", NULL };
 static const char *const fstab_files[] = { PATH_FSTAB, NULL };
 
 static void usage(void)
@@ -116,6 +116,33 @@ static int load(const char *const *files, struct mnt **l, size_t *n)
 	return 0;
 }
 
+/* the mounts of the system, from getfsstat(2) */
+static int current(struct mnt **l, size_t *n)
+{
+	struct statfs *sf;
+	int i, cnt = getfsstat(NULL, 0, MNT_NOWAIT);
+
+	if (cnt < 0) {
+		fprintf(stderr, "mount: getfsstat: %s\n", strerror(errno));
+		return -1;
+	}
+	sf = calloc((size_t)cnt + 1, sizeof *sf);
+	*l = calloc((size_t)cnt + 1, sizeof **l);
+	if (!sf || !*l || (cnt = getfsstat(sf, (long)(cnt + 1) * (long)sizeof *sf, MNT_NOWAIT)) < 0) {
+		fprintf(stderr, "mount: getfsstat: %s\n", strerror(errno));
+		return -1;
+	}
+	for (i = 0; i < cnt; i++) {
+		(*l)[i].fsname = strdup(sf[i].f_mntfromname);
+		(*l)[i].dir = strdup(sf[i].f_mntonname);
+		(*l)[i].type = strdup(sf[i].f_fstypename);
+		(*l)[i].opts = strdup(sf[i].f_flags & MNT_RDONLY ? "ro" : "rw");
+	}
+	free(sf);
+	*n = (size_t)cnt;
+	return 0;
+}
+
 /* the last mount (the one that shows) at dir, or whose special file is name */
 static const struct mnt *find_mount(const struct mnt *cur, size_t ncur, const char *name, int by_special)
 {
@@ -130,13 +157,22 @@ static const struct mnt *find_mount(const struct mnt *cur, size_t ncur, const ch
    update that says nothing keeps the mount as it is) */
 static void do_mount(const char *special, const char *dir, const char *type, int ro, int update, int reload)
 {
-	unsigned long flags = ro == 1 ? MS_RDONLY : 0;
+	struct iovec iov[12];
+	int n = 0;
+	unsigned long long flags = (update ? MNT_UPDATE : 0) | (reload ? MNT_RELOAD : 0);
 	int e;
 
-	if (update)
-		e = mount(special, dir, NULL, flags | MS_REMOUNT | (reload ? MS_RELOAD : 0), NULL);
-	else
-		e = mount(special, dir, type, flags, NULL);
+#define NV(name, val) do { iov[n].iov_base = (void *)(name); iov[n++].iov_len = strlen(name) + 1; \
+	iov[n].iov_base = (void *)(val); iov[n++].iov_len = (val) ? strlen(val) + 1 : 0; } while (0)
+	NV("fstype", type ? type : "ufs");
+	NV("fspath", dir);
+	NV("from", special);
+	if (ro == 1)
+		NV("ro", NULL);
+	else if (ro == 0 && update)
+		NV("noro", NULL);
+#undef NV
+	e = nmount(iov, (unsigned)n, flags);
 	if (e == -1) {
 		fprintf(stderr, "mount: %s: %s\n", dir, strerror(errno));
 		status = 1;
@@ -172,7 +208,7 @@ int main(int argc, char *argv[])
 	argv += optind;
 	if (bad)
 		return 1;
-	if (load(mounts_files, &cur, &ncur) == -1)
+	if (current(&cur, &ncur) == -1)
 		return 1;
 
 	if (all) {
@@ -241,6 +277,6 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "mount: %s: not in %s\n", argv[0], PATH_FSTAB);
 		return 1;
 	}
-	do_mount(argv[0], argv[1], types ? types : (strncmp(argv[0], "/dev/", 5) == 0 ? "ffs" : "tmpfs"), cmd.ro, 0, 0);
+	do_mount(argv[0], argv[1], types ? types : (strncmp(argv[0], "/dev/", 5) == 0 ? "ufs" : "tmpfs"), cmd.ro, 0, 0);
 	return status;
 }
