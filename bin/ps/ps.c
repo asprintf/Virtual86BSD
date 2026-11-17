@@ -95,6 +95,10 @@
 #include <sys/types.h>
 #include <time.h>
 #include <unistd.h>
+#ifdef __FreeBSD__
+#include <sys/sysctl.h>
+#include <sys/time.h>
+#endif
 
 static void *xmalloc(size_t n)
 {
@@ -132,6 +136,7 @@ static long hz;
 static long long boot;          /* the boot time, seconds since the Epoch */
 static time_t now;
 
+#ifndef __FreeBSD__
 static char *read_text(const char *path, size_t *len)
 {
     FILE *f = fopen(path, "r");
@@ -243,6 +248,110 @@ static bool read_proc(long pid, struct proc *p)
     return true;
 }
 
+#else /* __FreeBSD__ */
+/* the kernel's process records (struct kinfo_proc, sys/user.h; amd64: these are its offsets) */
+#define KI_SIZE 1088
+#define KI_PID 72
+#define KI_PPID 76
+#define KI_PGID 80
+#define KI_TPGID 84
+#define KI_SID 88
+#define KI_UID 168
+#define KI_RUID 172
+#define KI_SVUID 176
+#define KI_RGID 180
+#define KI_NGROUPS 188
+#define KI_GROUPS 192
+#define KI_START 336
+#define KI_RUNTIME 328
+#define KI_SIZE_VM 256
+#define KI_FLAG 368
+#define KI_STAT 388
+#define KI_NICE 389
+#define KI_WMESG 411
+#define KI_COMM 447
+#define KI_TDEV 560
+#define KI_PRI 604
+
+static bool kinfo_get(const int *mib, unsigned n, char **buf, size_t *len)
+{
+    size_t l = 0;
+    if (sysctl(mib, n, NULL, &l, NULL, 0) != 0)
+        return false;
+    l += l / 8 + 4096;
+    *buf = xmalloc(l);
+    if (sysctl(mib, n, *buf, &l, NULL, 0) != 0) {
+        free(*buf);
+        return false;
+    }
+    *len = l;
+    return true;
+}
+
+#define KI(b, off, type) (*(const type *)((b) + (off)))
+
+static void fill_proc(const char *k, struct proc *p)
+{
+    static const char states[] = " RRSTZDL"; /* SIDL SRUN SSLEEP SSTOP SZOMB SWAIT SLOCK */
+    unsigned char st = KI(k, KI_STAT, unsigned char);
+    long long start = KI(k, KI_START, long long);
+    unsigned long long run = KI(k, KI_RUNTIME, unsigned long long);
+    unsigned long long dev = KI(k, KI_TDEV, unsigned long long);
+    memset(p, 0, sizeof *p);
+    p->pid = KI(k, KI_PID, int);
+    p->ppid = KI(k, KI_PPID, int);
+    p->pgrp = KI(k, KI_PGID, int);
+    p->session = KI(k, KI_SID, int);
+    p->tpgid = KI(k, KI_TPGID, int);
+    p->tty = (dev == ~0ULL || dev == 0xffffffffULL) ? 0 : (long)dev;
+    p->state = st < sizeof states - 1 ? states[st] : '?';
+    p->flags = (unsigned long)KI(k, KI_FLAG, long);
+    p->utime = run / (1000000 / (unsigned long long)hz);
+    p->start = start > boot ? (unsigned long long)(start - boot) * (unsigned long long)hz : 0;
+    p->priority = KI(k, KI_PRI + 1, unsigned char);
+    p->nice = KI(k, KI_NICE, signed char);
+    p->vsize = KI(k, KI_SIZE_VM, unsigned long long);
+    p->ruid = KI(k, KI_RUID, unsigned);
+    p->euid = KI(k, KI_UID, unsigned);
+    p->rgid = KI(k, KI_RGID, unsigned);
+    p->egid = KI(k, KI_NGROUPS, short) > 0 ? (long)KI(k, KI_GROUPS, unsigned) : p->rgid;
+    snprintf(p->comm, sizeof p->comm, "%.20s", k + KI_COMM);
+    for (char *q = p->comm; *q; q++)
+        if ((unsigned char)*q < 32 || *q == 127)
+            *q = '?';
+    snprintf(p->wchan, sizeof p->wchan, "%.8s", k + KI_WMESG);
+    if (!p->wchan[0] || p->state == 'R')
+        strcpy(p->wchan, "-");
+}
+
+static bool read_proc(long pid, struct proc *p)
+{
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, (int)pid};
+    char *k;
+    size_t len;
+    if (!kinfo_get(mib, 4, &k, &len) || len < KI_SIZE)
+        return false;
+    fill_proc(k, p);
+    free(k);
+    int am[4] = {CTL_KERN, KERN_PROC, KERN_PROC_ARGS, (int)pid};
+    char *a;
+    if (kinfo_get(am, 4, &a, &len) && len > 0) {
+        while (len > 0 && a[len - 1] == '\0')
+            len--;
+        for (size_t i = 0; i < len; i++) {
+            unsigned char ch = (unsigned char)a[i];
+            if (ch == '\0' || (ch >= '\t' && ch <= '\r'))
+                a[i] = ' ';
+            else if (ch < 32 || ch == 127)
+                a[i] = '?';
+        }
+        a[len] = '\0';
+        p->args = a;
+    }
+    return true;
+}
+#endif
+
 /* ---- terminals ---- */
 
 struct ttyname {
@@ -297,6 +406,12 @@ static const char *tty_name(long dev)
     if (dev == 0)
         return NULL;
     read_ttys();
+#ifdef __FreeBSD__
+    for (size_t i = 0; i < nttys; i++)
+        if (ttys[i].dev == (unsigned long)dev)
+            return ttys[i].name;
+    return NULL;
+#endif
     /* /proc gives major in bits 8-19 and 31-..., minor in 0-7 and 20-31;
        st_rdev of glibc encodes them its own way: compare both ways */
     unsigned long major = ((unsigned long)dev >> 8) & 0xfff;
@@ -680,10 +795,19 @@ int main(int argc, char *argv[])
     if (hz <= 0)
         hz = 100;
     now = time(NULL);
+#ifdef __FreeBSD__
+    {
+        int bm[2] = {CTL_KERN, KERN_BOOTTIME};
+        struct timeval tv;
+        size_t tl = sizeof tv;
+        boot = sysctl(bm, 2, &tv, &tl, NULL, 0) == 0 ? (long long)tv.tv_sec : 0;
+    }
+#else
     char *st = read_text("/proc/stat", NULL);
     char *bt = st ? strstr(st, "\nbtime ") : NULL;
     boot = bt ? atoll(bt + 7) : 0;
     free(st);
+#endif
 
     struct proc self;
     long my_tty = 0, my_euid = (long)geteuid();
@@ -692,13 +816,28 @@ int main(int argc, char *argv[])
     free(self.args);
 
     /* the process IDs */
+    long *pids = NULL;
+    size_t npids = 0;
+#ifdef __FreeBSD__
+    {
+        int am[3] = {CTL_KERN, KERN_PROC, KERN_PROC_PROC};
+        char *all;
+        size_t alen;
+        if (!kinfo_get(am, 3, &all, &alen)) {
+            fprintf(stderr, "ps: kern.proc: %s\n", strerror(errno));
+            return 1;
+        }
+        pids = xmalloc((alen / KI_SIZE + 1) * sizeof *pids);
+        for (size_t off = 0; off + KI_SIZE <= alen; off += (size_t)KI(all + off, 0, int))
+            pids[npids++] = KI(all + off, KI_PID, int);
+        free(all);
+    }
+#else
     DIR *d = opendir("/proc");
     if (!d) {
         fprintf(stderr, "ps: /proc: %s\n", strerror(errno));
         return 1;
     }
-    long *pids = NULL;
-    size_t npids = 0;
     struct dirent *e;
     while ((e = readdir(d)) != NULL)
         if (is_number(e->d_name)) {
@@ -710,6 +849,7 @@ int main(int argc, char *argv[])
             pids[npids++] = strtol(e->d_name, NULL, 10);
         }
     closedir(d);
+#endif
     qsort(pids, npids, sizeof *pids, cmp_long);
 
     /* the rows */

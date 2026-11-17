@@ -74,6 +74,10 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <unistd.h>
+#ifdef __FreeBSD__
+#include <sys/param.h>
+#include <sys/mount.h>
+#endif
 #include "mnttab.h"
 
 static bool o_k, o_P, o_t;
@@ -100,6 +104,25 @@ static char *xstrdup(const char *s)
 
 static bool read_mounts(void)
 {
+#ifdef __FreeBSD__
+    /* the kernel's table: getfsstat(2) */
+    int cnt = getfsstat(NULL, 0, MNT_NOWAIT);
+    struct statfs *sf = cnt >= 0 ? calloc((size_t)cnt + 1, sizeof *sf) : NULL;
+    if (sf && (cnt = getfsstat(sf, (long)(cnt + 1) * (long)sizeof *sf, MNT_NOWAIT)) >= 0) {
+        mnts = xmalloc(((size_t)cnt + 1) * sizeof *mnts);
+        for (int i = 0; i < cnt; i++) {
+            mnts[i].fsname = xstrdup(sf[i].f_mntfromname);
+            mnts[i].dir = xstrdup(sf[i].f_mntonname);
+            mnts[i].type = xstrdup(sf[i].f_fstypename);
+            mnts[i].opts = xstrdup("");
+        }
+        nmnt = (size_t)cnt;
+        free(sf);
+        return true;
+    }
+    fprintf(stderr, "df: cannot read the mount table\n");
+    return false;
+#endif
     const char *const names[] = { "/proc/self/mounts", "/etc/mtab", "/etc/mnttab", NULL };
     if (!mnt_read(names, &mnts, &nmnt)) {
         fprintf(stderr, errno == ENOMEM ? "df: out of memory\n" : "df: cannot read the mount table\n");
