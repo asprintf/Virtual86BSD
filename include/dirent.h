@@ -40,14 +40,17 @@
 
 typedef struct __dirstream DIR;
 
-/* Both structures have the layout of Linux's struct linux_dirent64, so
- * posix_getdents() is getdents64 and readdir() returns the kernel's
- * records in place. */
+/* Both structures have the layout of the kernel's struct dirent
+ * (getdirentries), so posix_getdents() is getdirentries and readdir()
+ * returns the kernel's records in place. */
 struct dirent {
 	ino_t d_ino;
 	off_t __d_off;
 	reclen_t __d_reclen;
 	unsigned char __d_type;
+	unsigned char __d_pad0;
+	unsigned short __d_namlen;
+	unsigned short __d_pad1;
 	char d_name[256];
 };
 
@@ -56,6 +59,9 @@ struct posix_dent {
 	off_t __d_off;
 	reclen_t d_reclen;
 	unsigned char d_type;
+	unsigned char __d_pad0;
+	unsigned short __d_namlen;
+	unsigned short __d_pad1;
 	char d_name[];
 };
 
@@ -67,7 +73,7 @@ struct posix_dent {
 #define DT_REG     8
 #define DT_LNK     10
 #define DT_SOCK    12
-/* Not distinct file types on Linux: values never returned. */
+/* Not distinct file types: values never returned. */
 #define DT_MQ      32
 #define DT_SEM     33
 #define DT_SHM     34

@@ -72,14 +72,14 @@
 #define DELAYTIMER_MAX      0x7fffffff
 #define HOST_NAME_MAX       255
 #define LOGIN_NAME_MAX      256
-#define MQ_PRIO_MAX         32768
+#define MQ_PRIO_MAX         64
 #define PAGESIZE            4096
 #define PTHREAD_DESTRUCTOR_ITERATIONS 4
 #define PTHREAD_KEYS_MAX    1024
 #define PTHREAD_STACK_MIN   16384
-#define RTSIG_MAX           32
+#define RTSIG_MAX           62
 #define SEM_VALUE_MAX       0x7fffffff
-#define SIGQUEUE_MAX        32
+#define SIGQUEUE_MAX        128   /* kern.sigqueue.max_pending_per_proc */
 #define SYMLOOP_MAX         40
 #define TTY_NAME_MAX        32
 #define TZNAME_MAX          6
@@ -94,8 +94,8 @@
 #define MAX_CANON  255
 #define MAX_INPUT  255
 #define NAME_MAX   255
-#define PATH_MAX   4096
-#define PIPE_BUF   4096
+#define PATH_MAX   1024
+#define PIPE_BUF   512
 #define TEXTDOMAIN_MAX 252
 
 /* ---- Runtime increasable values ---- */
@@ -107,7 +107,7 @@
 #define COLL_WEIGHTS_MAX   2
 #define EXPR_NEST_MAX      32
 #define LINE_MAX           2048
-#define NGROUPS_MAX        65536
+#define NGROUPS_MAX        1023
 #define RE_DUP_MAX         255
 
 /* ---- Maximum values ---- */

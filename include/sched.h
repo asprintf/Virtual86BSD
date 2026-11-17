@@ -47,9 +47,9 @@ struct sched_param {
 	int __pad;
 };
 
-#define SCHED_OTHER    0
 #define SCHED_FIFO     1
-#define SCHED_RR       2
+#define SCHED_OTHER    2
+#define SCHED_RR       3
 #define SCHED_SPORADIC 4   /* where the kernel has it: sysconf(_SC_SPORADIC_SERVER) */
 
 __BEGIN_DECLS

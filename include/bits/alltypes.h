@@ -160,11 +160,11 @@ typedef unsigned int gid_t;
 #define __DEFINED_gid_t
 #endif
 #if defined(__NEED_id_t) && !defined(__DEFINED_id_t)
-typedef unsigned int id_t;
+typedef long id_t;
 #define __DEFINED_id_t
 #endif
 #if defined(__NEED_mode_t) && !defined(__DEFINED_mode_t)
-typedef unsigned int mode_t;
+typedef unsigned short mode_t;
 #define __DEFINED_mode_t
 #endif
 #if defined(__NEED_dev_t) && !defined(__DEFINED_dev_t)
@@ -180,7 +180,7 @@ typedef unsigned long nlink_t;
 #define __DEFINED_nlink_t
 #endif
 #if defined(__NEED_blksize_t) && !defined(__DEFINED_blksize_t)
-typedef long blksize_t;
+typedef int blksize_t;
 #define __DEFINED_blksize_t
 #endif
 #if defined(__NEED_blkcnt_t) && !defined(__DEFINED_blkcnt_t)
@@ -200,7 +200,7 @@ typedef unsigned short reclen_t;
 #define __DEFINED_reclen_t
 #endif
 #if defined(__NEED_key_t) && !defined(__DEFINED_key_t)
-typedef int key_t;
+typedef long key_t;
 #define __DEFINED_key_t
 #endif
 #if defined(__NEED_useconds_t) && !defined(__DEFINED_useconds_t)
@@ -242,7 +242,7 @@ typedef unsigned int socklen_t;
 #define __DEFINED_socklen_t
 #endif
 #if defined(__NEED_sa_family_t) && !defined(__DEFINED_sa_family_t)
-typedef unsigned short sa_family_t;
+typedef unsigned char sa_family_t;
 #define __DEFINED_sa_family_t
 #endif
 #if defined(__NEED_in_port_t) && !defined(__DEFINED_in_port_t)
@@ -272,9 +272,9 @@ typedef struct __locale_struct *locale_t;
 #define __DEFINED_locale_t
 #endif
 
-/* Signals. 1024-bit set, as glibc; the kernel uses the first 64 bits. */
+/* Signals. The kernel's 128-bit set (signals 1-128). */
 #if defined(__NEED_sigset_t) && !defined(__DEFINED_sigset_t)
-typedef struct { unsigned long __bits[16]; } sigset_t;
+typedef struct { unsigned int __bits[4]; } sigset_t;
 #define __DEFINED_sigset_t
 #endif
 

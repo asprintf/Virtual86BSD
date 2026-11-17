@@ -41,6 +41,7 @@
 #include <bits/alltypes.h>
 
 struct sockaddr_in {
+	unsigned char sin_len;
 	sa_family_t sin_family;
 	in_port_t sin_port;
 	struct in_addr sin_addr;
@@ -57,6 +58,7 @@ struct in6_addr {
 #define s6_addr __in6_union.__s6_addr
 
 struct sockaddr_in6 {
+	unsigned char sin6_len;
 	sa_family_t sin6_family;
 	in_port_t sin6_port;
 	uint32_t sin6_flowinfo;
@@ -89,22 +91,22 @@ extern const struct in6_addr in6addr_any, in6addr_loopback;
 #define INET_ADDRSTRLEN  16
 #define INET6_ADDRSTRLEN 46
 
-#define IP_TOS             1
-#define IP_TTL             2
-#define IP_HDRINCL         3
-#define IP_MULTICAST_IF    32
-#define IP_MULTICAST_TTL   33
-#define IP_MULTICAST_LOOP  34
-#define IP_ADD_MEMBERSHIP  35
-#define IP_DROP_MEMBERSHIP 36
+#define IP_HDRINCL         2
+#define IP_TOS             3
+#define IP_TTL             4
+#define IP_MULTICAST_IF    9
+#define IP_MULTICAST_TTL   10
+#define IP_MULTICAST_LOOP  11
+#define IP_ADD_MEMBERSHIP  12
+#define IP_DROP_MEMBERSHIP 13
 
-#define IPV6_UNICAST_HOPS   16
-#define IPV6_MULTICAST_IF   17
-#define IPV6_MULTICAST_HOPS 18
-#define IPV6_MULTICAST_LOOP 19
-#define IPV6_JOIN_GROUP     20
-#define IPV6_LEAVE_GROUP    21
-#define IPV6_V6ONLY         26
+#define IPV6_UNICAST_HOPS   4
+#define IPV6_MULTICAST_IF   9
+#define IPV6_MULTICAST_HOPS 10
+#define IPV6_MULTICAST_LOOP 11
+#define IPV6_JOIN_GROUP     12
+#define IPV6_LEAVE_GROUP    13
+#define IPV6_V6ONLY         27
 
 #define IN6_IS_ADDR_UNSPECIFIED(a) (((const uint32_t *)(a))[0] == 0 && ((const uint32_t *)(a))[1] == 0 && \
 	((const uint32_t *)(a))[2] == 0 && ((const uint32_t *)(a))[3] == 0)

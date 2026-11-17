@@ -41,7 +41,7 @@ struct pollfd {
 	short revents;
 };
 
-typedef unsigned long nfds_t;
+typedef unsigned int nfds_t;
 
 #define POLLIN     0x001
 #define POLLPRI    0x002
@@ -51,8 +51,8 @@ typedef unsigned long nfds_t;
 #define POLLNVAL   0x020
 #define POLLRDNORM 0x040
 #define POLLRDBAND 0x080
-#define POLLWRNORM 0x100
-#define POLLWRBAND 0x200
+#define POLLWRNORM POLLOUT
+#define POLLWRBAND 0x100
 
 __BEGIN_DECLS
 int poll(struct pollfd [], nfds_t, int);

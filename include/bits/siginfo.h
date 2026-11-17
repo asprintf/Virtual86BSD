@@ -40,43 +40,26 @@ union sigval {
 	void *sival_ptr;
 };
 
-/* The kernel's 128-byte siginfo. */
-typedef struct {
-	int si_signo, si_errno, si_code;
+/* The kernel's siginfo (sys/sys/signal.h). */
+typedef struct __siginfo {
+	int si_signo;
+	int si_errno;
+	int si_code;
+	pid_t si_pid;
+	uid_t si_uid;
+	int si_status;
+	void *si_addr;
+	union sigval si_value;
 	union {
-		char __pad[128 - 2 * sizeof(int) - sizeof(long)];
-		struct {
-			union {
-				struct { pid_t __pid; uid_t __uid; } __piduid;
-				struct { int __timerid; int __overrun; } __timer;
-			} __first;
-			union {
-				union sigval __value;
-				struct { int __status; long __utime, __stime; } __sigchld;
-			} __second;
-		} __si_common;
-		struct {
-			void *__addr;
-			short __addr_lsb;
-			union {
-				struct { void *__lower, *__upper; } __addr_bnd;
-				unsigned __pkey;
-			} __first;
-		} __sigfault;
-		struct { long __band; int __fd; } __sigpoll;
-		struct { void *__call_addr; int __syscall; unsigned __arch; } __sigsys;
-	} __si_fields;
+		struct { int _trapno; } _fault;
+		struct { int _timerid; int _overrun; } _timer;
+		struct { int _mqd; } _mesgq;
+		struct { long _band; } _poll;
+		long __spare__[8];
+	} _reason;
 } siginfo_t;
-#define si_pid     __si_fields.__si_common.__first.__piduid.__pid
-#define si_uid     __si_fields.__si_common.__first.__piduid.__uid
-#define si_status  __si_fields.__si_common.__second.__sigchld.__status
-#define si_utime   __si_fields.__si_common.__second.__sigchld.__utime
-#define si_stime   __si_fields.__si_common.__second.__sigchld.__stime
-#define si_value   __si_fields.__si_common.__second.__value
-#define si_addr    __si_fields.__sigfault.__addr
-#define si_band    __si_fields.__sigpoll.__band
-#define si_fd      __si_fields.__sigpoll.__fd
-#define si_timerid __si_fields.__si_common.__first.__timer.__timerid
-#define si_overrun __si_fields.__si_common.__first.__timer.__overrun
+#define si_timerid _reason._timer._timerid
+#define si_overrun _reason._timer._overrun
+#define si_band    _reason._poll._band
 
 #endif

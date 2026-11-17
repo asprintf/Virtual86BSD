@@ -78,7 +78,7 @@
 #define _POSIX_SHELL                    1
 #define _POSIX_SPAWN                    202405L
 #define _POSIX_SPIN_LOCKS               202405L
-#define _POSIX_SPORADIC_SERVER          0       /* sysconf() tells */
+#define _POSIX_SPORADIC_SERVER          (-1)    /* the FreeBSD kernel has no SCHED_SPORADIC */
 #define _POSIX_SYNCHRONIZED_IO          202405L
 #define _POSIX_THREAD_ATTR_STACKADDR    202405L
 #define _POSIX_THREAD_ATTR_STACKSIZE    202405L
@@ -90,7 +90,7 @@
 #define _POSIX_THREAD_ROBUST_PRIO_INHERIT 202405L
 #define _POSIX_THREAD_ROBUST_PRIO_PROTECT 202405L
 #define _POSIX_THREAD_SAFE_FUNCTIONS    202405L
-#define _POSIX_THREAD_SPORADIC_SERVER   0       /* sysconf() tells */
+#define _POSIX_THREAD_SPORADIC_SERVER   (-1)    /* the FreeBSD kernel has no SCHED_SPORADIC */
 #define _POSIX_THREADS                  202405L
 #define _POSIX_TIMEOUTS                 202405L
 #define _POSIX_TIMERS                   202405L
@@ -193,7 +193,7 @@
 #define STDOUT_FILENO 1
 #define STDERR_FILENO 2
 
-#define _POSIX_VDISABLE '\0'
+#define _POSIX_VDISABLE 0xff   /* the FreeBSD kernel's */
 #define POSIX_CLOSE_RESTART 0
 
 #define _CS_PATH                              0

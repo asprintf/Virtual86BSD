@@ -62,58 +62,56 @@ typedef int sig_atomic_t;
 #define SIGQUIT   3
 #define SIGTRAP   5
 #define SIGIOT    SIGABRT
-#define SIGBUS    7
+#define SIGBUS    10
 #define SIGKILL   9
-#define SIGUSR1   10
-#define SIGUSR2   12
+#define SIGSYS    12
 #define SIGPIPE   13
 #define SIGALRM   14
-#define SIGSTKFLT 16
-#define SIGCHLD   17
-#define SIGCONT   18
-#define SIGSTOP   19
-#define SIGTSTP   20
+#define SIGURG    16
+#define SIGSTOP   17
+#define SIGTSTP   18
+#define SIGCONT   19
+#define SIGCHLD   20
 #define SIGTTIN   21
 #define SIGTTOU   22
-#define SIGURG    23
+#define SIGIO     23
+#define SIGPOLL   SIGIO
 #define SIGXCPU   24
 #define SIGXFSZ   25
 #define SIGVTALRM 26
 #define SIGPROF   27
 #define SIGWINCH  28
-#define SIGPOLL   29
-#define SIGIO     SIGPOLL
-#define SIGPWR    30
-#define SIGSYS    31
+#define SIGUSR1   30
+#define SIGUSR2   31
 
 /* 32-34 are reserved for the library (thread cancellation, set*id
- * broadcast, timers); 35-64 are the realtime signals. */
-#define SIGRTMIN  35
-#define SIGRTMAX  64
-#define _NSIG     65
+ * broadcast, timers); 65-126 are the realtime signals. */
+#define SIGRTMIN  65
+#define SIGRTMAX  126
+#define _NSIG     127
 
 #define SIG2STR_MAX 32
 
 #include <bits/siginfo.h>
 
 struct sigevent {
-	union sigval sigev_value;
-	int sigev_signo;
 	int sigev_notify;
+	int sigev_signo;
+	union sigval sigev_value;
 	union {
-		int __pad[12];
 		int __tid;
 		struct {
 			void (*__function)(union sigval);
 			pthread_attr_t *__attr;
 		} __thr;
+		long __pad[8];
 	} __un;
 };
 #define sigev_notify_function   __un.__thr.__function
 #define sigev_notify_attributes __un.__thr.__attr
 
-#define SIGEV_SIGNAL 0
-#define SIGEV_NONE   1
+#define SIGEV_NONE   0
+#define SIGEV_SIGNAL 1
 #define SIGEV_THREAD 2
 
 struct sigaction {
@@ -121,29 +119,28 @@ struct sigaction {
 		void (*__sa_handler)(int);
 		void (*__sa_sigaction)(int, siginfo_t *, void *);
 	} __sa_handler;
-	sigset_t sa_mask;
 	int sa_flags;
-	void (*sa_restorer)(void);
+	sigset_t sa_mask;
 };
 #define sa_handler   __sa_handler.__sa_handler
 #define sa_sigaction __sa_handler.__sa_sigaction
 
-#define SA_NOCLDSTOP 1
-#define SA_NOCLDWAIT 2
-#define SA_SIGINFO   4
-#define SA_ONSTACK   0x08000000
-#define SA_RESTART   0x10000000
-#define SA_NODEFER   0x40000000
-#define SA_RESETHAND 0x80000000
+#define SA_ONSTACK   0x0001
+#define SA_RESTART   0x0002
+#define SA_RESETHAND 0x0004
+#define SA_NOCLDSTOP 0x0008
+#define SA_NODEFER   0x0010
+#define SA_NOCLDWAIT 0x0020
+#define SA_SIGINFO   0x0040
 
-#define SIG_BLOCK   0
-#define SIG_UNBLOCK 1
-#define SIG_SETMASK 2
+#define SIG_BLOCK   1
+#define SIG_UNBLOCK 2
+#define SIG_SETMASK 3
 
 typedef struct {
 	void *ss_sp;
-	int ss_flags;
 	size_t ss_size;
+	int ss_flags;
 } stack_t;
 
 #if __XSI_OB5
@@ -156,36 +153,48 @@ struct sigstack {
 
 #if __XSI_VISIBLE
 #define SS_ONSTACK  1
-#define SS_DISABLE  2
+#define SS_DISABLE  4
 #define MINSIGSTKSZ 2048
-#define SIGSTKSZ    8192
+#define SIGSTKSZ    (MINSIGSTKSZ + 32768)
 #endif
 
-/* Machine context: the kernel's x86-64 sigcontext. */
-typedef struct {
-	long long __gregs[23];
-	void *__fpregs;
-	unsigned long long __reserved[8];
+/* Machine context: the kernel's (sys/amd64/include/ucontext.h). */
+typedef struct __mcontext {
+	long __mc_onstack;
+	long __mc_rdi, __mc_rsi, __mc_rdx, __mc_rcx, __mc_r8, __mc_r9, __mc_rax, __mc_rbx, __mc_rbp;
+	long __mc_r10, __mc_r11, __mc_r12, __mc_r13, __mc_r14, __mc_r15;
+	unsigned int __mc_trapno;
+	unsigned short __mc_fs, __mc_gs;
+	long __mc_addr;
+	unsigned int __mc_flags;
+	unsigned short __mc_es, __mc_ds;
+	long __mc_err, __mc_rip, __mc_cs, __mc_rflags, __mc_rsp, __mc_ss;
+	long __mc_len;
+	long __mc_fpformat;
+	long __mc_ownedfp;
+	long __mc_fpstate[64] __attribute__((aligned(64)));
+	long __mc_fsbase, __mc_gsbase;
+	long __mc_xfpustate, __mc_xfpustate_len;
+	long __mc_spare[4];
 } mcontext_t;
 
 typedef struct __ucontext {
-	unsigned long uc_flags;
+	sigset_t uc_sigmask;
+	mcontext_t uc_mcontext;
 	struct __ucontext *uc_link;
 	stack_t uc_stack;
-	mcontext_t uc_mcontext;
-	sigset_t uc_sigmask;
-	unsigned long __fpregs_mem[64];
+	int uc_flags;
+	int __spare__[4];
 } ucontext_t;
 
 /* si_code values */
-#define SI_USER    0
-#define SI_KERNEL  0x80
-#define SI_QUEUE   (-1)
-#define SI_TIMER   (-2)
-#define SI_MESGQ   (-3)
-#define SI_ASYNCIO (-4)
-#define SI_SIGIO   (-5)
-#define SI_TKILL   (-6)
+#define SI_USER    0x10001
+#define SI_QUEUE   0x10002
+#define SI_TIMER   0x10003
+#define SI_ASYNCIO 0x10004
+#define SI_MESGQ   0x10005
+#define SI_KERNEL  0x10006
+#define SI_LWP     0x10007
 
 #define ILL_ILLOPC 1
 #define ILL_ILLOPN 2
@@ -196,8 +205,8 @@ typedef struct __ucontext {
 #define ILL_COPROC 7
 #define ILL_BADSTK 8
 
-#define FPE_INTDIV 1
-#define FPE_INTOVF 2
+#define FPE_INTOVF 1
+#define FPE_INTDIV 2
 #define FPE_FLTDIV 3
 #define FPE_FLTOVF 4
 #define FPE_FLTUND 5

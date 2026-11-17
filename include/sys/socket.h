@@ -38,16 +38,19 @@
 #define __NEED_struct_iovec
 #include <bits/alltypes.h>
 
-/* Linux x86-64 values and layouts */
+/* FreeBSD's values and layouts (sys/sys/socket.h) */
 struct sockaddr {
+	unsigned char sa_len;
 	sa_family_t sa_family;
 	char sa_data[14];
 };
 
 struct sockaddr_storage {
+	unsigned char ss_len;
 	sa_family_t ss_family;
-	char __ss_pad[118];
-	unsigned long __ss_align;
+	char __ss_pad1[6];
+	long __ss_align;
+	char __ss_pad2[112];
 };
 
 struct msghdr {
@@ -55,16 +58,13 @@ struct msghdr {
 	socklen_t msg_namelen;
 	struct iovec *msg_iov;
 	int msg_iovlen;
-	int __pad1;
 	void *msg_control;
 	socklen_t msg_controllen;
-	int __pad2;
 	int msg_flags;
 };
 
 struct cmsghdr {
 	socklen_t cmsg_len;
-	int __pad1;
 	int cmsg_level;
 	int cmsg_type;
 };
@@ -75,7 +75,7 @@ struct linger {
 };
 
 #define __CMSG_ALIGN(n) (((n) + sizeof(long) - 1) & ~(sizeof(long) - 1))
-#define CMSG_DATA(c) ((unsigned char *)((struct cmsghdr *)(c) + 1))
+#define CMSG_DATA(c) ((unsigned char *)(c) + __CMSG_ALIGN(sizeof(struct cmsghdr)))
 #define CMSG_FIRSTHDR(m) ((size_t)(m)->msg_controllen >= sizeof(struct cmsghdr) ? \
 	(struct cmsghdr *)(m)->msg_control : (struct cmsghdr *)0)
 #define CMSG_NXTHDR(m, c) \
@@ -88,64 +88,62 @@ struct linger {
 
 #define SCM_RIGHTS 1
 #if __EXT_VISIBLE
-#define SCM_CREDENTIALS 2
+#define SCM_CREDS 3
 #endif
 
 #define SOCK_STREAM    1
 #define SOCK_DGRAM     2
 #define SOCK_RAW       3
 #define SOCK_SEQPACKET 5
-#define SOCK_NONBLOCK  04000
-#define SOCK_CLOEXEC   02000000
-#define SOCK_CLOFORK   010000000000   /* native on V86BSD's kernel, else emulated */
+#define SOCK_CLOEXEC   0x10000000
+#define SOCK_NONBLOCK  0x20000000
+#define SOCK_CLOFORK   0x40000000
 
-#define SOL_SOCKET 1
+#define SOL_SOCKET 0xffff
 
-#define SO_DEBUG      1
-#define SO_REUSEADDR  2
-#define SO_TYPE       3
-#define SO_ERROR      4
-#define SO_DONTROUTE  5
-#define SO_BROADCAST  6
-#define SO_SNDBUF     7
-#define SO_RCVBUF     8
-#define SO_KEEPALIVE  9
-#define SO_OOBINLINE  10
-#define SO_LINGER     13
-#define SO_RCVLOWAT   18
-#define SO_SNDLOWAT   19
-#define SO_RCVTIMEO   20
-#define SO_SNDTIMEO   21
-#define SO_ACCEPTCONN 30
-#define SO_PROTOCOL   38
-#define SO_DOMAIN     39
+#define SO_DEBUG      0x0001
+#define SO_ACCEPTCONN 0x0002
+#define SO_REUSEADDR  0x0004
+#define SO_KEEPALIVE  0x0008
+#define SO_DONTROUTE  0x0010
+#define SO_BROADCAST  0x0020
+#define SO_LINGER     0x0080
+#define SO_OOBINLINE  0x0100
+#define SO_SNDBUF     0x1001
+#define SO_RCVBUF     0x1002
+#define SO_SNDLOWAT   0x1003
+#define SO_RCVLOWAT   0x1004
+#define SO_SNDTIMEO   0x1005
+#define SO_RCVTIMEO   0x1006
+#define SO_ERROR      0x1007
+#define SO_TYPE       0x1008
+#define SO_PROTOCOL   0x1016
+#define SO_DOMAIN     0x1019
 #if __EXT_VISIBLE
-#define SO_REUSEPORT  15
-#define SO_PASSCRED   16
-#define SO_PEERCRED   17
+#define SO_REUSEPORT  0x0200
 #endif
 
-#define SOMAXCONN 4096
+#define SOMAXCONN 128
 
 #define MSG_OOB          0x1
 #define MSG_PEEK         0x2
 #define MSG_DONTROUTE    0x4
-#define MSG_CTRUNC       0x8
-#define MSG_TRUNC        0x20
-#define MSG_EOR          0x80
-#define MSG_WAITALL      0x100
-#define MSG_NOSIGNAL     0x4000
-#define MSG_CMSG_CLOEXEC 0x40000000
-#define MSG_CMSG_CLOFORK ((int)0x80000000)   /* native on V86BSD's kernel, else emulated */
+#define MSG_EOR          0x8
+#define MSG_TRUNC        0x10
+#define MSG_CTRUNC       0x20
+#define MSG_WAITALL      0x40
+#define MSG_NOSIGNAL     0x20000
+#define MSG_CMSG_CLOEXEC 0x40000
+#define MSG_CMSG_CLOFORK 0x400000
 /* not POSIX: in the namespace XSI reserves (MSG_, PF_) */
 #if __XSI_VISIBLE
-#define MSG_DONTWAIT     0x40
+#define MSG_DONTWAIT     0x80
 #endif
 
 #define AF_UNSPEC 0
 #define AF_UNIX   1
 #define AF_INET   2
-#define AF_INET6  10
+#define AF_INET6  28
 #if __XSI_VISIBLE
 #define PF_UNSPEC AF_UNSPEC
 #define PF_UNIX   AF_UNIX
@@ -155,9 +153,7 @@ struct linger {
 #if __EXT_VISIBLE
 #define AF_LOCAL   AF_UNIX
 #define PF_LOCAL   AF_UNIX
-#define AF_NETLINK 16
-#define PF_NETLINK AF_NETLINK
-/* the BSDs' numbers: the routing table (sysctl), and link level addresses
+/* the routing table (sysctl, routing sockets), and link level addresses
    (struct sockaddr_dl in <net/if_dl.h>) */
 #define AF_ROUTE 17
 #define PF_ROUTE AF_ROUTE

@@ -34,16 +34,15 @@
 #define WNOHANG    1
 #define WUNTRACED  2
 #define WSTOPPED   2
-#define WEXITED    4
-#define WCONTINUED 8
-#define WNOWAIT    0x1000000
-
-#define WEXITSTATUS(s)  (((s) & 0xff00) >> 8)
-#define WTERMSIG(s)     ((s) & 0x7f)
-#define WSTOPSIG(s)     WEXITSTATUS(s)
-#define WCOREDUMP(s)    ((s) & 0x80)
-#define WIFEXITED(s)    (!WTERMSIG(s))
-#define WIFSTOPPED(s)   ((short)((((s) & 0xffff) * 0x10001U) >> 8) > 0x7f00)
-#define WIFSIGNALED(s)  (((s) & 0xffff) - 1U < 0xffu)
-#define WIFCONTINUED(s) ((s) == 0xffff)
+#define WNOWAIT    8
+#define WCONTINUED 4
+#define WEXITED    16
+#define WEXITSTATUS(s)  (((s) >> 8) & 0xff)
+#define WTERMSIG(s)     ((s) & 0177)
+#define WSTOPSIG(s)     (((s) >> 8) & 0xff)
+#define WCOREDUMP(s)    ((s) & 0200)
+#define WIFEXITED(s)    (((s) & 0177) == 0)
+#define WIFSTOPPED(s)   (((s) & 0177) == 0177)
+#define WIFSIGNALED(s)  (((s) & 0177) != 0177 && ((s) & 0177) != 0 && (s) != 0x13)
+#define WIFCONTINUED(s) ((s) == 0x13)
 #endif

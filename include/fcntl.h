@@ -39,16 +39,12 @@
 #include <bits/stat_mode.h>
 
 struct flock {
-	short l_type;
-	short l_whence;
 	off_t l_start;
 	off_t l_len;
 	pid_t l_pid;
-};
-
-struct f_owner_ex {
-	int type;
-	pid_t pid;
+	short l_type;
+	short l_whence;
+	int l_sysid;
 };
 
 #define F_DUPFD          0
@@ -56,25 +52,32 @@ struct f_owner_ex {
 #define F_SETFD          2
 #define F_GETFL          3
 #define F_SETFL          4
-#define F_GETLK          5
-#define F_SETLK          6
-#define F_SETLKW         7
-#define F_SETOWN         8
-#define F_GETOWN         9
-#define F_SETOWN_EX      15
-#define F_GETOWN_EX      16
-#define F_OFD_GETLK      36
-#define F_OFD_SETLK      37
-#define F_OFD_SETLKW     38
-#define F_DUPFD_CLOEXEC  1030
-#define F_DUPFD_CLOFORK  0x10000  /* native on V86BSD's kernel, else emulated */
+#define F_GETOWN         5
+#define F_SETOWN         6
+#define F_GETLK          11
+#define F_SETLK          12
+#define F_SETLKW         13
+#define F_DUPFD_CLOEXEC  17
+#define F_DUPFD_CLOFORK  23
+/* the kernel has no open file description locks or F_GETOWN_EX: the
+ * library emulates F_SETOWN_EX, F_GETOWN_EX; the F_OFD_ ones fail with EINVAL */
+#define F_OFD_GETLK      64
+#define F_OFD_SETLK      65
+#define F_OFD_SETLKW     66
+#define F_SETOWN_EX      67
+#define F_GETOWN_EX      68
+
+struct f_owner_ex {
+	int type;
+	pid_t pid;
+};
 
 #define FD_CLOEXEC 1
-#define FD_CLOFORK 2              /* native on V86BSD's kernel, else emulated */
+#define FD_CLOFORK 4
 
-#define F_RDLCK 0
-#define F_WRLCK 1
+#define F_RDLCK 1
 #define F_UNLCK 2
+#define F_WRLCK 3
 
 #define F_OWNER_TID  0
 #define F_OWNER_PID  1
@@ -87,10 +90,10 @@ struct f_owner_ex {
 #endif
 
 #define AT_FDCWD            (-100)
-#define AT_SYMLINK_NOFOLLOW 0x100
-#define AT_REMOVEDIR        0x200
-#define AT_EACCESS          0x200
+#define AT_EACCESS          0x100
+#define AT_SYMLINK_NOFOLLOW 0x200
 #define AT_SYMLINK_FOLLOW   0x400
+#define AT_REMOVEDIR        0x800
 
 #define POSIX_FADV_NORMAL     0
 #define POSIX_FADV_RANDOM     1

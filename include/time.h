@@ -75,9 +75,9 @@ struct itimerspec {
 struct sigevent;
 
 #define CLOCK_REALTIME           0
-#define CLOCK_MONOTONIC          1
-#define CLOCK_PROCESS_CPUTIME_ID 2
-#define CLOCK_THREAD_CPUTIME_ID  3
+#define CLOCK_MONOTONIC          4
+#define CLOCK_THREAD_CPUTIME_ID  14
+#define CLOCK_PROCESS_CPUTIME_ID 15
 #define TIMER_ABSTIME            1
 #endif
 

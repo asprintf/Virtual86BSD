@@ -27,25 +27,21 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-/* <net/if_dl.h>: a link level address (AF_LINK), what getifaddrs() gives
-   for an interface's hardware address.  The BSDs' sockaddr_dl without
-   sdl_len (a struct sockaddr here has none): sdl_nlen is 0, the name is the
-   ifa_name, and the address comes first in sdl_data. */
+/* <net/if_dl.h>: a link level address (AF_LINK), as the kernel's routing
+   socket and sysctl(NET_RT_IFLIST) give it (FreeBSD's struct sockaddr_dl):
+   the interface name, then the address, in sdl_data. */
 #ifndef _NET_IF_DL_H_
 #define _NET_IF_DL_H_
 #include <sys/socket.h>
-
 struct sockaddr_dl {
-	sa_family_t sdl_family;  /* AF_LINK */
+	unsigned char sdl_len;
+	sa_family_t sdl_family;   /* AF_LINK */
 	unsigned short sdl_index; /* of the interface */
-	unsigned char sdl_type;  /* IFT_ETHER, IFT_LOOP (<net/if_types.h>) */
-	unsigned char sdl_nlen;  /* the length of the name in sdl_data: 0 */
-	unsigned char sdl_alen;  /* the length of the address: 6, 0 for lo0 */
-	unsigned char sdl_slen;  /* 0 */
-	char sdl_data[12];
+	unsigned char sdl_type;   /* IFT_ETHER, IFT_LOOP (<net/if_types.h>) */
+	unsigned char sdl_nlen;   /* the length of the name in sdl_data */
+	unsigned char sdl_alen;   /* the length of the address after it: 6, 0 for lo0 */
+	unsigned char sdl_slen;   /* the length of the selector after that */
+	char sdl_data[46];
 };
-
 #define LLADDR(s) ((char *)((s)->sdl_data + (s)->sdl_nlen))
-
 #endif
