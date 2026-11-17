@@ -1,0 +1,22 @@
+diff --git a/kern/tty.c b/kern/tty.c
+index 148ea398..bf767d2b 100644
+--- a/kern/tty.c
++++ b/kern/tty.c
+@@ -546,7 +546,7 @@ ttydev_write(struct cdev *dev, struct uio *uio, int ioflag)
+ 
+ 	error = ttydev_enter(tp);
+ 	if (error)
+-		return (error);
++		return (error == ENXIO ? EIO : error);	/* hung up: POSIX says EIO */
+ 
+ 	if (tp->t_termios.c_lflag & TOSTOP) {
+ 		error = tty_wait_background(tp, curthread, SIGTTOU,
+@@ -875,7 +875,7 @@ ttydev_poll(struct cdev *dev, int events, struct thread *td)
+ 
+ 	error = ttydev_enter(tp);
+ 	if (error)
+-		return ((events & (POLLIN|POLLRDNORM)) | POLLHUP);
++		return ((events & (POLLIN|POLLRDNORM)) | POLLHUP | POLLERR);
+ 
+ 	if (events & (POLLIN|POLLRDNORM)) {
+ 		/* See if we can read something. */
