@@ -49,7 +49,7 @@ cd "$root/stand"
 # -k: stand/userboot/test needs a hosted libc and is not wanted
 bmake -k -j$(nproc) obj all
 EOT
-	mk "$@" WITHOUT_CLANG=yes "DESTDIR=$objdir/obj$root/amd64.amd64/tmp" buildenv BUILDENV_DIR="$root" "BUILDENV_SHELL=sh $objdir/stand-build.sh" || true
+	mk "$@" WITHOUT_LOADER_BIOS_TEXTONLY=yes WITHOUT_CLANG=yes "DESTDIR=$objdir/obj$root/amd64.amd64/tmp" buildenv BUILDENV_DIR="$root" "BUILDENV_SHELL=sh $objdir/stand-build.sh" || true
 	exit 0
 fi
 exec python3 -I tools/build/make.py --cross-bindir=/usr/bin \

@@ -92,14 +92,25 @@ console="comconsole,vidconsole"
 boot_serial="YES"
 beastie_disable="YES"
 autoboot_delay="1"
+screen.textmode="0"
 EOF
+
+# the console font: XNU's iso_font (fonts/iso_font_8x16.h) in place of the loader's built-in 8x16
+mkdir -p "$root/boot/fonts"
+clang -O1 -o "$work/mkvtfont" "$here/mkvtfont.c"
+"$work/mkvtfont" "$root/boot/fonts/xnu8x16.fnt"
+echo xnu8x16.fnt > "$root/boot/fonts/INDEX.fonts"
 
 [ -z "$extra" ] || cp -R "$extra"/. "$root"/
 
 # ownership and modes by an mtree spec: the host user must not leak into the image
 (cd "$root" && find . | LC_ALL=C sort) | while read -r p; do
-	if [ -d "$root/$p" ]; then
+	if [ -L "$root/$p" ]; then
+		echo "$p type=link uid=0 gid=0 mode=0777"
+	elif [ -d "$root/$p" ]; then
 		echo "$p type=dir uid=0 gid=0 mode=0755"
+	elif [ "$p" = ./etc/master.passwd ]; then
+		echo "$p type=file uid=0 gid=0 mode=0600"
 	elif [ -x "$root/$p" ]; then
 		echo "$p type=file uid=0 gid=0 mode=0555"
 	else
