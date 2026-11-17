@@ -1,0 +1,12 @@
+diff --git a/contrib/mtree/specspec.c b/contrib/mtree/specspec.c
+index 8e1187b4c..75653bb8c 100644
+--- a/contrib/mtree/specspec.c
++++ b/contrib/mtree/specspec.c
+@@ -44,6 +44,7 @@ __RCSID("$NetBSD: specspec.c,v 1.5 2023/12/02 13:24:00 christos Exp $");
+ #include <unistd.h>
+ #include "mtree.h"
+ #include "extern.h"
++#undef st_mtimespec
+ 
+ #define FF(a, b, c, d) \
+ 	(((a)->flags & (c)) && ((b)->flags & (c)) && ((a)->d) != ((b)->d))

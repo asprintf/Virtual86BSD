@@ -210,6 +210,22 @@ and the Shall code the fork started from (see `LICENSE`).
 | `usr.sbin/makefs/ufs/ufs/quota.h` | NetBSD `sys/ufs/ufs/quota.h` | 1.30 | BSD 3-clause |
 | `usr.sbin/makefs/ufs/ufs/ufs_bswap.h` | NetBSD `sys/ufs/ufs/ufs_bswap.h` | 1.23 | BSD 2-clause |
 
+## The FreeBSD kernel and boot loader
+
+`sys/` and `stand/` are FreeBSD's, imported unchanged from the `releng/15.2`
+branch (commit 71ed2382e0ad, recorded in `freebsd/IMPORTED`) by
+`distrib/import-freebsd.sh`, except for the patches in
+`distrib/freebsd/patches-sys/` (the `kern.ostype` name) and the kernel
+configuration `sys/amd64/conf/V86`. `freebsd/` holds the parts of the
+FreeBSD tree needed to build them (`tools/build`, `share/mk`, bmake, the
+bootstrap tools, headers); its one local change is in
+`distrib/freebsd/patches/`. Every file keeps its own copyright and licence
+notice (mostly the BSD licences of the Regents of the University of
+California and of The FreeBSD Project; ACPICA under its BSD-style licence
+option). Left out: the CDDL parts (ZFS, DTrace, `sys/cddl`, except the
+BSD-licensed `lz4.c` that `vtfontcvt` needs), the device-tree sources and the
+firmware under `sys/contrib/dev`.
+
 ## Not adapted from the BSDs
 
 `sys/dev/wsfont/yee8x16.h` is the 8x16 ISO Latin-1 font by Ka-Ping Yee

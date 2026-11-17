@@ -1,0 +1,14 @@
+# rsync filter for sys/: licence (CDDL) and non-amd64 parts left out of the import
++ /contrib/dev/
++ /contrib/dev/acpica/***
+- /contrib/dev/**
+# BSD-2-Clause lz4 from sys/cddl, needed by the vtfontcvt build tool
++ /cddl/
++ /cddl/contrib/
++ /cddl/contrib/opensolaris/
++ /cddl/contrib/opensolaris/common/
++ /cddl/contrib/opensolaris/common/lz4/***
+- /cddl/**
+- /contrib/openzfs/
+- /contrib/device-tree/
+P /amd64/conf/V86
