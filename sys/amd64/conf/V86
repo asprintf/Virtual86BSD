@@ -43,6 +43,7 @@ device		acpi
 device		pci
 device		ahci			# q35's SATA controller
 device		scbus
+device		ada			# SATA disks on ahci
 device		da
 device		cd
 device		pass
