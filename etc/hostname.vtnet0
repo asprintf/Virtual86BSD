@@ -1,0 +1,2 @@
+# QEMU user networking (-nic user)
+inet 10.0.2.15 netmask 255.255.255.0

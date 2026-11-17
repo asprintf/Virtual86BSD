@@ -3,10 +3,9 @@
 # /etc/rc runs it at boot; by hand: `sh /etc/netstart [interface ...]`
 # (all of them, or just those named: again after a change).
 #
-# The kernel has already brought up lo0 and the first Ethernet interface
-# (DHCP).  Every other interface, and
-# that one too if you want it different, is set up by a file
-# /etc/hostname.INTERFACE (hostname.em1, hostname.vio0 ...): each line is
+# The FreeBSD kernel brings nothing up and has no DHCP client: every
+# interface, lo0 too, is set up by a file
+# /etc/hostname.INTERFACE (hostname.lo0, hostname.vtnet0 ...): each line is
 # what ifconfig(8) gets after the interface's name, for example
 #
 #	inet 192.168.7.2 netmask 255.255.255.0
@@ -14,11 +13,10 @@
 #	mtu 1400
 #
 # Comments (#) and blank lines are ignored; the interface is brought up
-# afterwards unless a line says `down`.  A line `dhcp` leaves the kernel's
-# own DHCP client's work as it is (it serves the first Ethernet interface
-# only).  /etc/mygate holds the default gateway's address, and replaces the
-# one the kernel got from DHCP.  The names of the name servers are in
-# /etc/resolv.conf.
+# afterwards unless a line says `down`.  /etc/mygate holds the default
+# gateway's address.  The names of the name servers are in /etc/resolv.conf.
+# (The files here are those of QEMU's user networking: 10.0.2.15/24, gateway
+# 10.0.2.2, name server 10.0.2.3.)
 
 PATH=/sbin:/bin:/usr/sbin:/usr/bin
 export PATH
@@ -45,7 +43,7 @@ netif() {
 		case $_l in
 		dhcp | "dhcp "*)
 			if ! ifconfig "$_if" 2> /dev/null | grep '^[	 ]inet ' > /dev/null; then
-				echo "$_if: dhcp: the kernel runs DHCP on the first Ethernet interface only"
+				echo "$_if: dhcp: this system has no DHCP client"
 				_st=1
 			fi
 			continue ;;
