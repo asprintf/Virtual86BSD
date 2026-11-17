@@ -41,7 +41,7 @@ void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off)
 {
 	long r;
 	if (off & 4095) { errno = EINVAL; return MAP_FAILED; }
-	if (len >= PTRDIFF_MAX) { errno = ENOMEM; return MAP_FAILED; }
+	if (len >= (1UL << 47)) { errno = ENOMEM; return MAP_FAILED; }	/* more than the address space: the kernel says EINVAL */
 	r = __syscall6x(SYS_mmap, addr, len, prot, flags, fd, off);
 	/* POSIX wants EINVAL for a mapping with neither MAP_SHARED nor MAP_PRIVATE */
 	return (void *)__syscall_ret((unsigned long)r);

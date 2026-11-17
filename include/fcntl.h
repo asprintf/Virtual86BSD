@@ -59,11 +59,11 @@ struct flock {
 #define F_SETLKW         13
 #define F_DUPFD_CLOEXEC  17
 #define F_DUPFD_CLOFORK  23
-/* the kernel has no open file description locks or F_GETOWN_EX: the
- * library emulates F_SETOWN_EX, F_GETOWN_EX; the F_OFD_ ones fail with EINVAL */
-#define F_OFD_GETLK      64
-#define F_OFD_SETLK      65
-#define F_OFD_SETLKW     66
+/* open file description locks are V86BSD's kernel patch (numbers after F_DUP3FD);
+ * the library emulates F_SETOWN_EX and F_GETOWN_EX */
+#define F_OFD_GETLK      25
+#define F_OFD_SETLK      26
+#define F_OFD_SETLKW     27
 #define F_SETOWN_EX      67
 #define F_GETOWN_EX      68
 

@@ -38,6 +38,15 @@ int raise(int sig)
 	/* block everything so the signal is delivered on return from the
 	 * mask restore, i.e. before raise() returns */
 	__syscall3(SYS_sigprocmask, SIG_BLOCK, &all, &old);
+	/* thr_kill queues every instance, even of a signal that is not queued
+	 * (not real-time): one that is pending already is not sent again */
+	if (sig > 0 && sig < 65) {
+		__sm_t pend;
+		if (__syscall1(SYS_sigpending, &pend) == 0 && (pend.__w[(sig - 1) / 64] >> ((sig - 1) % 64) & 1)) {
+			__syscall3(SYS_sigprocmask, SIG_SETMASK, &old, 0);
+			return 0;
+		}
+	}
 	r = __syscall2(SYS_thr_kill, __thr_self(), sig);
 	__syscall3(SYS_sigprocmask, SIG_SETMASK, &old, 0);
 	return (int)__syscall_ret((unsigned long)r);
