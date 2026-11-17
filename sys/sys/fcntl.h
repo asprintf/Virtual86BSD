@@ -308,6 +308,12 @@ typedef	__pid_t		pid_t;
 #define	F_DUPFD_CLOFORK	23		/* Like F_DUPFD, but FD_CLOFORK is set */
 #endif
 
+#if __POSIX_VISIBLE >= 202405
+#define	F_OFD_GETLK	25		/* get open file description lock */
+#define	F_OFD_SETLK	26		/* set open file description lock */
+#define	F_OFD_SETLKW	27		/* F_OFD_SETLK; wait if blocked */
+#endif
+
 #if __BSD_VISIBLE
 #define F_DUP3FD	24		/* Used with dup3() */
 
@@ -343,6 +349,7 @@ typedef	__pid_t		pid_t;
 #define	F_REMOTE	0x080		/* Lock owner is remote NFS client */
 #define	F_NOINTR	0x100		/* Ignore signals when waiting */
 #define	F_FIRSTOPEN	0x200		/* First right to advlock file */
+#define	F_OFD		0x400		/* Open file description lock (with F_FLOCK) */
 #endif
 
 /*

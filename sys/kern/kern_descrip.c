@@ -454,6 +454,9 @@ kern_fcntl_freebsd(struct thread *td, int fd, int cmd, intptr_t arg)
 	case F_SETLK:
 	case F_SETLKW:
 	case F_SETLK_REMOTE:
+	case F_OFD_GETLK:
+	case F_OFD_SETLK:
+	case F_OFD_SETLKW:
 		error = copyin((void *)arg, &fl, sizeof(fl));
 		arg1 = (intptr_t)&fl;
 		break;
@@ -473,7 +476,7 @@ kern_fcntl_freebsd(struct thread *td, int fd, int cmd, intptr_t arg)
 		ofl.l_type = fl.l_type;
 		ofl.l_whence = fl.l_whence;
 		error = copyout(&ofl, (void *)arg, sizeof(ofl));
-	} else if (cmd == F_GETLK) {
+	} else if (cmd == F_GETLK || cmd == F_OFD_GETLK) {
 		error = copyout(&fl, (void *)arg, sizeof(fl));
 	}
 	return (error);
@@ -836,6 +839,103 @@ revert_flags:
 		}
 		fdrop(fp, td);
 		fdrop(fp2, td);
+		break;
+
+	case F_OFD_SETLKW:
+		flg |= F_WAIT;
+		/* FALLTHROUGH F_OFD_SETLK */
+
+	case F_OFD_SETLK:
+		/*
+		 * Open file description locks: byte range locks owned by the
+		 * open file description, so flock(2)'s ownership (and its
+		 * release when the last reference to the file is closed) with
+		 * the ranges of fcntl(2).
+		 */
+		flp = (struct flock *)arg;
+		if (flp->l_pid != 0) {
+			error = EINVAL;
+			break;
+		}
+		error = fget_unlocked(td, fd, &cap_flock_rights, &fp);
+		if (error != 0)
+			break;
+		if (fp->f_type != DTYPE_VNODE || fp->f_ops == &path_fileops) {
+			error = EBADF;
+			fdrop(fp, td);
+			break;
+		}
+		if (flp->l_whence == SEEK_CUR) {
+			foffset = foffset_get(fp);
+			if (foffset < 0 ||
+			    (flp->l_start > 0 &&
+			     foffset > OFF_MAX - flp->l_start)) {
+				error = EOVERFLOW;
+				fdrop(fp, td);
+				break;
+			}
+			flp->l_start += foffset;
+		}
+		vp = fp->f_vnode;
+		flg = (flg & F_WAIT) | F_FLOCK | F_OFD;
+		switch (flp->l_type) {
+		case F_RDLCK:
+			if ((fp->f_flag & FREAD) == 0) {
+				error = EBADF;
+				break;
+			}
+			error = VOP_ADVLOCK(vp, (caddr_t)fp, F_SETLK, flp, flg);
+			break;
+		case F_WRLCK:
+			if ((fp->f_flag & FWRITE) == 0) {
+				error = EBADF;
+				break;
+			}
+			error = VOP_ADVLOCK(vp, (caddr_t)fp, F_SETLK, flp, flg);
+			break;
+		case F_UNLCK:
+			error = VOP_ADVLOCK(vp, (caddr_t)fp, F_UNLCK, flp, flg);
+			break;
+		default:
+			error = EINVAL;
+			break;
+		}
+		if (error == 0 && flp->l_type != F_UNLCK)
+			atomic_set_int(&fp->f_flag, FHASLOCK);
+		fdrop(fp, td);
+		break;
+
+	case F_OFD_GETLK:
+		flp = (struct flock *)arg;
+		if (flp->l_pid != 0 || (flp->l_type != F_RDLCK &&
+		    flp->l_type != F_WRLCK && flp->l_type != F_UNLCK)) {
+			error = EINVAL;
+			break;
+		}
+		error = fget_unlocked(td, fd, &cap_flock_rights, &fp);
+		if (error != 0)
+			break;
+		if (fp->f_type != DTYPE_VNODE || fp->f_ops == &path_fileops) {
+			error = EBADF;
+			fdrop(fp, td);
+			break;
+		}
+		if (flp->l_whence == SEEK_CUR) {
+			foffset = foffset_get(fp);
+			if ((flp->l_start > 0 &&
+			    foffset > OFF_MAX - flp->l_start) ||
+			    (flp->l_start < 0 &&
+			    foffset < OFF_MIN - flp->l_start)) {
+				error = EOVERFLOW;
+				fdrop(fp, td);
+				break;
+			}
+			flp->l_start += foffset;
+		}
+		vp = fp->f_vnode;
+		error = VOP_ADVLOCK(vp, (caddr_t)fp, F_GETLK, flp,
+		    F_FLOCK | F_OFD);
+		fdrop(fp, td);
 		break;
 
 	case F_GETLK:

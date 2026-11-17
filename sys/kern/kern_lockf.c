@@ -1402,6 +1402,7 @@ lf_setlock(struct lockf *state, struct lockf_entry *lock, struct vnode *vp,
 		 * waiting for an exclusive lock.
 		 */
 		if ((lock->lf_flags & F_FLOCK) &&
+		    (lock->lf_flags & F_OFD) == 0 &&
 		    lock->lf_type == F_WRLCK) {
 			lock->lf_type = F_UNLCK;
 			lf_activate_lock(state, lock);

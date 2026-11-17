@@ -1,0 +1,164 @@
+diff --git a/kern/kern_descrip.c b/kern/kern_descrip.c
+index 764368b3..a122a959 100644
+--- a/kern/kern_descrip.c
++++ b/kern/kern_descrip.c
+@@ -454,6 +454,9 @@ kern_fcntl_freebsd(struct thread *td, int fd, int cmd, intptr_t arg)
+ 	case F_SETLK:
+ 	case F_SETLKW:
+ 	case F_SETLK_REMOTE:
++	case F_OFD_GETLK:
++	case F_OFD_SETLK:
++	case F_OFD_SETLKW:
+ 		error = copyin((void *)arg, &fl, sizeof(fl));
+ 		arg1 = (intptr_t)&fl;
+ 		break;
+@@ -473,7 +476,7 @@ kern_fcntl_freebsd(struct thread *td, int fd, int cmd, intptr_t arg)
+ 		ofl.l_type = fl.l_type;
+ 		ofl.l_whence = fl.l_whence;
+ 		error = copyout(&ofl, (void *)arg, sizeof(ofl));
+-	} else if (cmd == F_GETLK) {
++	} else if (cmd == F_GETLK || cmd == F_OFD_GETLK) {
+ 		error = copyout(&fl, (void *)arg, sizeof(fl));
+ 	}
+ 	return (error);
+@@ -838,6 +841,103 @@ revert_flags:
+ 		fdrop(fp2, td);
+ 		break;
+ 
++	case F_OFD_SETLKW:
++		flg |= F_WAIT;
++		/* FALLTHROUGH F_OFD_SETLK */
++
++	case F_OFD_SETLK:
++		/*
++		 * Open file description locks: byte range locks owned by the
++		 * open file description, so flock(2)'s ownership (and its
++		 * release when the last reference to the file is closed) with
++		 * the ranges of fcntl(2).
++		 */
++		flp = (struct flock *)arg;
++		if (flp->l_pid != 0) {
++			error = EINVAL;
++			break;
++		}
++		error = fget_unlocked(td, fd, &cap_flock_rights, &fp);
++		if (error != 0)
++			break;
++		if (fp->f_type != DTYPE_VNODE || fp->f_ops == &path_fileops) {
++			error = EBADF;
++			fdrop(fp, td);
++			break;
++		}
++		if (flp->l_whence == SEEK_CUR) {
++			foffset = foffset_get(fp);
++			if (foffset < 0 ||
++			    (flp->l_start > 0 &&
++			     foffset > OFF_MAX - flp->l_start)) {
++				error = EOVERFLOW;
++				fdrop(fp, td);
++				break;
++			}
++			flp->l_start += foffset;
++		}
++		vp = fp->f_vnode;
++		flg = (flg & F_WAIT) | F_FLOCK | F_OFD;
++		switch (flp->l_type) {
++		case F_RDLCK:
++			if ((fp->f_flag & FREAD) == 0) {
++				error = EBADF;
++				break;
++			}
++			error = VOP_ADVLOCK(vp, (caddr_t)fp, F_SETLK, flp, flg);
++			break;
++		case F_WRLCK:
++			if ((fp->f_flag & FWRITE) == 0) {
++				error = EBADF;
++				break;
++			}
++			error = VOP_ADVLOCK(vp, (caddr_t)fp, F_SETLK, flp, flg);
++			break;
++		case F_UNLCK:
++			error = VOP_ADVLOCK(vp, (caddr_t)fp, F_UNLCK, flp, flg);
++			break;
++		default:
++			error = EINVAL;
++			break;
++		}
++		if (error == 0 && flp->l_type != F_UNLCK)
++			atomic_set_int(&fp->f_flag, FHASLOCK);
++		fdrop(fp, td);
++		break;
++
++	case F_OFD_GETLK:
++		flp = (struct flock *)arg;
++		if (flp->l_pid != 0 || (flp->l_type != F_RDLCK &&
++		    flp->l_type != F_WRLCK && flp->l_type != F_UNLCK)) {
++			error = EINVAL;
++			break;
++		}
++		error = fget_unlocked(td, fd, &cap_flock_rights, &fp);
++		if (error != 0)
++			break;
++		if (fp->f_type != DTYPE_VNODE || fp->f_ops == &path_fileops) {
++			error = EBADF;
++			fdrop(fp, td);
++			break;
++		}
++		if (flp->l_whence == SEEK_CUR) {
++			foffset = foffset_get(fp);
++			if ((flp->l_start > 0 &&
++			    foffset > OFF_MAX - flp->l_start) ||
++			    (flp->l_start < 0 &&
++			    foffset < OFF_MIN - flp->l_start)) {
++				error = EOVERFLOW;
++				fdrop(fp, td);
++				break;
++			}
++			flp->l_start += foffset;
++		}
++		vp = fp->f_vnode;
++		error = VOP_ADVLOCK(vp, (caddr_t)fp, F_GETLK, flp,
++		    F_FLOCK | F_OFD);
++		fdrop(fp, td);
++		break;
++
+ 	case F_GETLK:
+ 		error = fget_unlocked(td, fd, &cap_flock_rights, &fp);
+ 		if (error != 0)
+diff --git a/kern/kern_lockf.c b/kern/kern_lockf.c
+index 2cb02b21..85744ed3 100644
+--- a/kern/kern_lockf.c
++++ b/kern/kern_lockf.c
+@@ -1402,6 +1402,7 @@ lf_setlock(struct lockf *state, struct lockf_entry *lock, struct vnode *vp,
+ 		 * waiting for an exclusive lock.
+ 		 */
+ 		if ((lock->lf_flags & F_FLOCK) &&
++		    (lock->lf_flags & F_OFD) == 0 &&
+ 		    lock->lf_type == F_WRLCK) {
+ 			lock->lf_type = F_UNLCK;
+ 			lf_activate_lock(state, lock);
+diff --git a/sys/fcntl.h b/sys/fcntl.h
+index 44f43f74..9939b946 100644
+--- a/sys/fcntl.h
++++ b/sys/fcntl.h
+@@ -308,6 +308,12 @@ typedef	__pid_t		pid_t;
+ #define	F_DUPFD_CLOFORK	23		/* Like F_DUPFD, but FD_CLOFORK is set */
+ #endif
+ 
++#if __POSIX_VISIBLE >= 202405
++#define	F_OFD_GETLK	25		/* get open file description lock */
++#define	F_OFD_SETLK	26		/* set open file description lock */
++#define	F_OFD_SETLKW	27		/* F_OFD_SETLK; wait if blocked */
++#endif
++
+ #if __BSD_VISIBLE
+ #define F_DUP3FD	24		/* Used with dup3() */
+ 
+@@ -343,6 +349,7 @@ typedef	__pid_t		pid_t;
+ #define	F_REMOTE	0x080		/* Lock owner is remote NFS client */
+ #define	F_NOINTR	0x100		/* Ignore signals when waiting */
+ #define	F_FIRSTOPEN	0x200		/* First right to advlock file */
++#define	F_OFD		0x400		/* Open file description lock (with F_FLOCK) */
+ #endif
+ 
+ /*
