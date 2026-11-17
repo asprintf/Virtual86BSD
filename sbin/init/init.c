@@ -78,8 +78,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mount.h>
 #include <sys/reboot.h>
 #include <sys/stat.h>
+#include <sys/uio.h>
 #include <sys/wait.h>
 #include <syslog.h>
 #include <time.h>
@@ -121,7 +123,7 @@ enum state { RUNCOM, READ_TTYS, MULTI_USER, SINGLE_USER, DEATH, DEATH_SINGLE };
 
 static enum state after_single = RUNCOM; /* where the console shell leads */
 static int single_poweroff;               /* after it: power off */
-static const char console_path[] = "/dev/tty00";
+static const char console_path[] = "/dev/console";
 
 /* what init complains about goes to the console (its stderr) and to
    syslogd (daemon.err; a message sent before syslogd runs is lost, the
@@ -672,8 +674,38 @@ static enum state death_single(void) {
   return SINGLE_USER;
 }
 
+/* the FreeBSD kernel starts init with no descriptors and / read-only */
+static void kernel_start(void) {
+  static char fstype[] = "ufs", fspath[] = "/";
+  int fd = open(console_path, O_RDWR | O_NOCTTY);
+  struct iovec iov[10];
+  struct statfs sf;
+  int n = 0;
+  if (fd < 0)
+    fd = open("/dev/null", O_RDWR);
+  while (fd >= 0 && fd < 3)
+    fd = dup(fd);
+  if (fd > 2)
+    close(fd);
+  if (statfs("/", &sf) < 0)
+    return;
+#define NV(name, val, len) do { iov[n].iov_base = (void *)(name); iov[n++].iov_len = strlen(name) + 1; \
+    iov[n].iov_base = (void *)(val); iov[n++].iov_len = (len); } while (0)
+  NV("fstype", fstype, sizeof fstype);
+  NV("fspath", fspath, sizeof fspath);
+  NV("from", sf.f_mntfromname, strlen(sf.f_mntfromname) + 1);
+  NV("update", NULL, 0);
+  NV("noro", NULL, 0);
+#undef NV
+  if (!(sf.f_flags & MNT_RDONLY))
+    return;
+  if (nmount(iov, n, MNT_UPDATE) < 0)
+    say("cannot make / writable");
+}
+
 int main(int argc, char **argv) {
   enum state s = RUNCOM;
+  kernel_start();
   if (getuid() != 0 || getpid() != 1) {
     say("must be process 1, run by root");
     return 1;
