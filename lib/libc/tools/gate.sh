@@ -148,6 +148,8 @@ EOF
 	while read -r t; do
 		grep -qxF "$t" "$resarg.ids" && continue
 		dir=$(dirname "$t") name=$(basename "$t" .c)
+		# maps shared memory until it fails: with no limit on the number of mappings (Linux's max_map_count) FreeBSD runs out of kernel memory and the VM stops
+		case $t in conformance/interfaces/mmap/24-1.c) echo "$t SYSTEM-STOPPED" >> "$resarg"; echo "$t" >> "$resarg.ids"; continue ;; esac
 		[ -x "$p/$dir/$name" ] && echo "$t /g/pts/$dir ./$name $tmo"
 	done < "$work/pts.list" > "$work/todo"
 	# ONLY=file: run just the tests named in it (one per line)

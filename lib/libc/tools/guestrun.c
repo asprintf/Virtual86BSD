@@ -132,7 +132,9 @@ int main(void)
 	{
 		int zero = 0, rfd = open("/dev/random", O_RDONLY);
 		char c;
+		int one = 1;
 		sysctlbyname("kern.logsigexit", 0, 0, &zero, sizeof zero);
+		sysctlbyname("net.inet.ip.connect_inaddr_wild", 0, 0, &one, sizeof one);
 		if (rfd >= 0) { if (read(rfd, &c, 1) < 0) {} close(rfd); }   /* waits for the "random: unblocking device." message */
 	}
 	ifup("lo0", 0x7f000001, 0xff000000, 0);
@@ -146,7 +148,7 @@ int main(void)
 		int p[2];
 		pid_t pid;
 		size_t len = 0;
-		int tmoms, timedout = 0;
+		int tmoms, timedout = 0, exited;
 		struct timespec t0, t;
 		line[strcspn(line, "\n")] = 0;
 		id = strtok(line, " ");
@@ -174,6 +176,7 @@ int main(void)
 		}
 		close(p[1]);
 		clock_gettime(CLOCK_MONOTONIC, &t0);
+		exited = 0;
 		for (;;) {
 			struct pollfd pf = { p[0], POLLIN, 0 };
 			long left;
@@ -181,9 +184,12 @@ int main(void)
 			clock_gettime(CLOCK_MONOTONIC, &t);
 			left = tmoms - ((long)(t.tv_sec - t0.tv_sec) * 1000 + (t.tv_nsec - t0.tv_nsec) / 1000000);
 			if (left <= 0) { timedout = 1; break; }
-			r = poll(&pf, 1, (int)left);
+			r = poll(&pf, 1, (int)(left > 100 ? 100 : left));
 			if (r < 0 && errno == EINTR) continue;
-			if (r == 0) { timedout = 1; break; }
+			if (r == 0) {	/* the test's process may be gone while a child of it holds the pipe */
+				if (waitpid(pid, &st, WNOHANG) == pid) { exited = 1; break; }
+				continue;
+			}
 			{
 				char b[4096];
 				ssize_t n = read(p[0], b, sizeof b);
@@ -195,9 +201,20 @@ int main(void)
 				}
 			}
 		}
+		if (exited) {	/* what is left in the pipe */
+			char b[4096];
+			ssize_t n;
+			fcntl(p[0], F_SETFL, O_NONBLOCK);
+			while ((n = read(p[0], b, sizeof b)) > 0 && len < CAP) {
+				size_t c = (size_t)n < CAP - len ? (size_t)n : CAP - len;
+				memcpy(buf + len, b, c);
+				len += c;
+			}
+		}
 		if (timedout) { kill(-pid, SIGKILL); kill(pid, SIGKILL); }
 		close(p[0]);
-		while (waitpid(pid, &st, 0) < 0 && errno == EINTR);
+		if (!exited)
+			while (waitpid(pid, &st, 0) < 0 && errno == EINTR);
 		kill(-1, SIGKILL);
 		while (waitpid(-1, 0, WNOHANG) > 0);
 		emit(buf, len);
