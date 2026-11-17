@@ -1093,6 +1093,7 @@ execsigs(struct proc *p)
 	ps = p->p_sigacts;
 	mtx_lock(&ps->ps_mtx);
 	sig_drop_caught(p);
+	SIGEMPTYSET(ps->ps_sigonstack);
 
 	/*
 	 * Reset stack state to the user stack.

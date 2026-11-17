@@ -1,0 +1,12 @@
+diff --git a/kern/kern_sig.c b/kern/kern_sig.c
+index 629ce1c3..886fe12d 100644
+--- a/kern/kern_sig.c
++++ b/kern/kern_sig.c
+@@ -1093,6 +1093,7 @@ execsigs(struct proc *p)
+ 	ps = p->p_sigacts;
+ 	mtx_lock(&ps->ps_mtx);
+ 	sig_drop_caught(p);
++	SIGEMPTYSET(ps->ps_sigonstack);
+ 
+ 	/*
+ 	 * Reset stack state to the user stack.
