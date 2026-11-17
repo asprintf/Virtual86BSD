@@ -1,0 +1,56 @@
+diff --git a/kern/sys_generic.c b/kern/sys_generic.c
+index c6aa06e6..4c1b340d 100644
+--- a/kern/sys_generic.c
++++ b/kern/sys_generic.c
+@@ -116,6 +116,7 @@ MALLOC_DEFINE(M_IOV, "iov", "large iov's");
+ FEATURE(exterr_strings, "Extended error reporting includes message strings");
+ #endif
+ 
++static bool	pselect_signal_pending(struct thread *);
+ static int	pollout(struct thread *, struct pollfd *, struct pollfd *,
+ 		    u_int);
+ static int	pollscan(struct thread *, struct pollfd *, u_int);
+@@ -1123,7 +1124,7 @@ kern_pselect(struct thread *td, int nd, fd_set *in, fd_set *ou, fd_set *ex,
+ 		 * blocked by its signal mask, so we restore the mask before
+ 		 * any signals could be delivered.
+ 		 */
+-		if (error == EINTR) {
++		if (error == EINTR || pselect_signal_pending(td)) {
+ 			ast_sched(td, TDA_SIGSUSPEND);
+ 		} else {
+ 			/* *select(2) should never restart. */
+@@ -1208,6 +1209,25 @@ select_check_badfd(fd_set *fd_in, int nd, int ndu, int abi_nfdbits)
+ 	return (0);
+ }
+ 
++/*
++ * A signal that was pending and that the temporary mask of pselect(2) or
++ * ppoll(2) does not block is delivered, as POSIX asks, even when a
++ * descriptor is ready already.
++ */
++static bool
++pselect_signal_pending(struct thread *td)
++{
++	struct proc *p = td->td_proc;
++	sigset_t set;
++
++	PROC_LOCK(p);
++	set = td->td_siglist;
++	SIGSETOR(set, p->p_siglist);
++	SIGSETNAND(set, td->td_sigmask);
++	PROC_UNLOCK(p);
++	return (!SIGISEMPTY(set));
++}
++
+ int
+ kern_select(struct thread *td, int nd, fd_set *fd_in, fd_set *fd_ou,
+     fd_set *fd_ex, struct timeval *tvp, int abi_nfdbits)
+@@ -1635,7 +1655,7 @@ kern_poll_kfds(struct thread *td, struct pollfd *kfds, u_int nfds,
+ 		 * blocked by its signal mask, so we restore the mask before
+ 		 * any signals could be delivered.
+ 		 */
+-		if (error == EINTR)
++		if (error == EINTR || pselect_signal_pending(td))
+ 			ast_sched(td, TDA_SIGSUSPEND);
+ 		else
+ 			ast_sched(td, TDA_PSELECT);
