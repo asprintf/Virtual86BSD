@@ -99,7 +99,7 @@ EOF
 mkdir -p "$root/boot/fonts"
 clang -O1 -o "$work/mkvtfont" "$here/mkvtfont.c"
 "$work/mkvtfont" "$root/boot/fonts/xnu8x16.fnt"
-echo xnu8x16.fnt > "$root/boot/fonts/INDEX.fonts"
+echo "xnu8x16.fnt:en:XNU iso_font 8x16" > "$root/boot/fonts/INDEX.fonts"
 
 [ -z "$extra" ] || cp -R "$extra"/. "$root"/
 

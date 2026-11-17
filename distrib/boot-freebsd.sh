@@ -16,7 +16,7 @@ cp -R lib/libxcu lib/libcurses "$src/lib/"
 for d in yacc lex; do cp -R usr.bin/$d "$src/yl-$d"; (cd "$src/yl-$d" && make -s CC=clang) > "$out/host-$d.log" 2>&1 || echo "host $d failed"; done
 YL="YACC=$src/yl-yacc/yacc LEX=$src/yl-lex/lex"
 CF="-O2 -w -D_DEFAULT_SOURCE -fPIE"
-for l in libxcu libcurses; do (cd "$src/lib/$l" && make -s CC="$cc" CFLAGS="$CF -fPIC" $YL) > "$out/$l.log" 2>&1 || echo "$l failed"; done
+(cd "$src/lib/libcurses" && make -s CC="$cc" CFLAGS="$CF -fPIC" $YL) > "$out/libcurses.log" 2>&1 || echo "libcurses failed"
 : > "$out/failed"
 # every program of the tree is built and installed (make install) into its directory of the root
 for k in bin sbin libexec usr.bin usr.sbin; do cp -R "$k" "$src/$k"; done
