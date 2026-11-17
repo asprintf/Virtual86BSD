@@ -97,7 +97,7 @@ size_t __stdout_write(FILE *f, const unsigned char *buf, size_t len)
 {
 	struct { unsigned short r, c, x, y; } ws;
 	f->write = __stdio_write;
-	if (!(f->flags & F_SVB) && __syscall3(SYS_ioctl, f->fd, 0x5413 /* TIOCGWINSZ */, &ws))
+	if (!(f->flags & F_SVB) && __syscall3(SYS_ioctl, f->fd, 0x40087468 /* TIOCGWINSZ */, &ws))
 		f->lbf = -1;
 	return __stdio_write(f, buf, len);
 }

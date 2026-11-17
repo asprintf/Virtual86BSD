@@ -138,7 +138,7 @@ static int configured(int family)
 	if (fd < 0)
 		return 0;
 	if (family == AF_INET) {
-		struct sockaddr_in sa = {AF_INET, htons(53), {htonl(0x08080808)}, {0}};
+		struct sockaddr_in sa = {sizeof(struct sockaddr_in), AF_INET, htons(53), {htonl(0x08080808)}, {0}};
 		ok = connect(fd, (struct sockaddr *)&sa, sizeof sa) == 0;
 	} else {
 		struct sockaddr_in6 sa;

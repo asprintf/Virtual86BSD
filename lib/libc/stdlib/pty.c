@@ -32,44 +32,40 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/ioctl.h>
 #include "syscall.h"
-
-#define TIOCGPTN   0x80045430
-#define TIOCSPTLCK 0x40045431
-
-int __openat_flags(int, const char *, int, mode_t);
 
 int posix_openpt(int flags)
 {
 	if (flags & ~(O_RDWR | O_NOCTTY | O_CLOEXEC | O_CLOFORK)) { errno = EINVAL; return -1; }
-	return __openat_flags(AT_FDCWD, "/dev/ptmx", flags, 0);
+	return (int)__sys1(SYS_posix_openpt, flags);
 }
 
+/* the slave's permissions are the user's from the start, and it is not locked: the
+ * calls only check that the descriptor is a master */
 int grantpt(int fd)
 {
-	/* devpts gives the slave the right owner and mode already */
-	int n;
-	return (int)__sys3(SYS_ioctl, fd, TIOCGPTN, &n) < 0 ? -1 : 0;
+	return (int)__sys3(SYS_ioctl, fd, TIOCPTMASTER, 0) < 0 ? -1 : 0;
 }
 
 int unlockpt(int fd)
 {
-	int unlock = 0;
-	return (int)__sys3(SYS_ioctl, fd, TIOCSPTLCK, &unlock);
+	return grantpt(fd);
 }
 
+/* the device name of the master (FIODGNAME) is the slave's: pts/N */
 int ptsname_r(int fd, char *buf, size_t len)
 {
-	unsigned n;
-	char tmp[32], num[12], *p = num + sizeof num;
-	long r = __syscall3(SYS_ioctl, fd, TIOCGPTN, &n);
-	if (r) return r == -ENOTTY ? EINVAL : (int)-r;
-	*--p = 0;
-	do *--p = (char)('0' + n % 10); while (n /= 10);
-	strcpy(tmp, "/dev/pts/");
-	strcat(tmp, p);
-	if (strlen(tmp) >= len) return ERANGE;
-	strcpy(buf, tmp);
+	struct fiodgname_arg a;
+	char name[64];
+	long r;
+	a.len = sizeof name;
+	a.buf = name;
+	if ((r = __syscall3(SYS_ioctl, fd, TIOCPTMASTER, 0)) < 0) return r == -ENOTTY ? EINVAL : (int)-r;
+	if ((r = __syscall3(SYS_ioctl, fd, FIODGNAME, &a)) < 0) return (int)-r;
+	if (strlen(name) + 6 > len) return ERANGE;
+	strcpy(buf, "/dev/");
+	strcat(buf, name);
 	return 0;
 }
 

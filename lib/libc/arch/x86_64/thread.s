@@ -57,51 +57,24 @@ __cp_begin:
 	mov	16(%rsp),%r9
 	syscall
 __cp_end:
-	ret
+	jnc	1f
+	neg	%rax
+1:	ret
 __cp_cancel:
 	jmp	__cancel
 	.size	__syscall_cp_asm,.-__syscall_cp_asm
 
-# int __clone(int (*fn)(void *), void *stack, int flags, void *arg,
-#             int *ptid, void *tls, volatile int *ctid)
-# The child runs fn(arg) on the new stack and exits with its value.
-	.globl	__clone
-	.hidden	__clone
-	.type	__clone,@function
-__clone:
-	mov	$SYS_clone,%eax		# SYS_clone(flags, stack, ptid, ctid, tls)
-	mov	%rdi,%r11
-	mov	%rdx,%rdi
-	mov	%r8,%rdx
-	mov	8(%rsp),%r10
-	mov	%r9,%r8
-	mov	%r11,%r9		# fn survives the system call in %r9
-	and	$-16,%rsi
-	sub	$8,%rsi
-	mov	%rcx,(%rsi)		# arg, popped by the child
-	syscall
-	test	%eax,%eax
-	jnz	1f
-	xor	%ebp,%ebp
-	pop	%rdi
-	call	*%r9
-	mov	%eax,%edi
-	mov	$SYS_exit,%eax		# SYS_exit
-	syscall
-	hlt
-1:	ret
-	.size	__clone,.-__clone
-
 # _Noreturn void __unmapself(void *base, size_t size): unmap the stack
-# the caller runs on, then exit the thread, touching no memory between.
+# the caller runs on, then exit the thread (thr_exit, no state word),
+# touching no memory between.
 	.globl	__unmapself
 	.hidden	__unmapself
 	.type	__unmapself,@function
 __unmapself:
-	mov	$SYS_munmap,%eax		# SYS_munmap
+	mov	$SYS_munmap,%eax
 	syscall
 	xor	%edi,%edi
-	mov	$SYS_exit,%eax		# SYS_exit
+	mov	$SYS_thr_exit,%eax
 	syscall
 	hlt
 	.size	__unmapself,.-__unmapself

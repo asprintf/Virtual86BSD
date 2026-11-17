@@ -39,11 +39,17 @@
 #include "../internal/syscall.h"
 #include "../internal/lock.h"
 
+static long gde(int fd, void *buf, size_t n)
+{
+	long base;
+	return __syscall4(SYS_getdirentries, fd, buf, n, &base);
+}
+
 ssize_t posix_getdents(int fd, void *buf, size_t n, int flags)
 {
 	if (flags) { errno = EINVAL; return -1; }
 	if (n > 0x7ffff000) n = 0x7ffff000;
-	return __sys3(SYS_getdents64, fd, buf, n);
+	return __syscall_ret((unsigned long)gde(fd, buf, n));
 }
 
 DIR *fdopendir(int fd)
@@ -85,7 +91,7 @@ static struct dirent *next(DIR *d)
 {
 	struct dirent *de;
 	if (d->pos >= d->end) {
-		long n = __syscall3(SYS_getdents64, d->fd, d->buf, sizeof d->buf);
+		long n = gde(d->fd, d->buf, sizeof d->buf);
 		if (n <= 0) {
 			/* a removed directory reads as empty */
 			if (n < 0 && n != -ENOENT) errno = (int)-n;

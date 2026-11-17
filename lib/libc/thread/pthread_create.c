@@ -34,7 +34,7 @@
  *                     ^ initial stack pointer
  *
  * (with a stack from pthread_attr_setstack(), only the TSD and TLS are
- * mapped).  The creator blocks all signals around clone(); the child
+ * mapped).  The creator blocks all signals around thr_new(); the child
  * restores the creator's mask once it runs.  With explicit scheduling
  * the child waits (startlock) until the creator has set its policy. */
 #include <errno.h>
@@ -49,20 +49,28 @@
 
 #define DEFAULT_STACK (2UL << 20)
 
-#define CLONE_VM             0x00000100
-#define CLONE_FS             0x00000200
-#define CLONE_FILES          0x00000400
-#define CLONE_SIGHAND        0x00000800
-#define CLONE_THREAD         0x00010000
-#define CLONE_SYSVSEM        0x00040000
-#define CLONE_SETTLS         0x00080000
-#define CLONE_PARENT_SETTID  0x00100000
-#define CLONE_CHILD_CLEARTID 0x00200000
-#define CLONE_DETACHED       0x00400000
+#define PROT_RW 3
+#define MAP_PRIV_ANON 0x1002        /* MAP_PRIVATE | MAP_ANON */
+#define MAP_NORESERVE_ 0x0040
+
+/* the argument of thr_new (sys/sys/thr.h) */
+struct thr_param {
+	void (*start_func)(void *);
+	void *arg;
+	char *stack_base;
+	size_t stack_size;
+	char *tls_base;
+	size_t tls_size;
+	long *child_tid;
+	long *parent_tid;
+	int flags;
+	void *rtp;
+	void *spare[3];
+};
 
 typedef union { long __l[7]; void *__p[7]; } attr_t;   /* pthread_attr_t */
 
-static int start(void *p)
+static void start(void *p)
 {
 	struct __pthread *self = p;
 	if (self->startlock) {
@@ -75,7 +83,6 @@ static int start(void *p)
 	if (self->c11)
 		__pthread_exit((void *)(long)((int (*)(void *))(void *)self->start)(self->start_arg));
 	__pthread_exit(self->start(self->start_arg));
-	return 0;
 }
 
 int __pthread_create(__pthread_t *res, const void *attrp, void *(*fn)(void *), void *arg)
@@ -85,7 +92,8 @@ int __pthread_create(__pthread_t *res, const void *attrp, void *(*fn)(void *), v
 	size_t pg = __libc.page_size, tls = __libc.tls_area_size;
 	size_t tsdsz = PTHREAD_KEYS_MAX * sizeof(void *), size, guard = 0, stacksize;
 	unsigned char *map, *top, *stack;
-	unsigned long set;
+	__sm_t set;
+	struct thr_param tp;
 	long r;
 	int explicit, sched_failed = 0;
 
@@ -100,7 +108,7 @@ int __pthread_create(__pthread_t *res, const void *attrp, void *(*fn)(void *), v
 	explicit = attr._a_sched & 1;
 	if (attr._a_stackaddr) {
 		size = (tls + tsdsz + pg - 1) & -pg;
-		r = __syscall6x(SYS_mmap, 0, size, 3, 0x22, -1, 0);
+		r = __syscall6x(SYS_mmap, 0, size, PROT_RW, MAP_PRIV_ANON, -1, 0);
 		if ((unsigned long)r > -4096UL)
 			return EAGAIN;
 		map = (unsigned char *)r;
@@ -108,11 +116,11 @@ int __pthread_create(__pthread_t *res, const void *attrp, void *(*fn)(void *), v
 	} else {
 		guard = (attr._a_guardsize + pg - 1) & -pg;
 		size = guard + ((stacksize + tls + tsdsz + pg - 1) & -pg);
-		r = __syscall6x(SYS_mmap, 0, size, 0, 0x22 | 0x20000 /* NORESERVE */, -1, 0);
+		r = __syscall6x(SYS_mmap, 0, size, 0, MAP_PRIV_ANON | MAP_NORESERVE_, -1, 0);
 		if ((unsigned long)r > -4096UL)
 			return EAGAIN;
 		map = (unsigned char *)r;
-		if (__syscall3(SYS_mprotect, map + guard, size - guard, 3) < 0) {
+		if (__syscall3(SYS_mprotect, map + guard, size - guard, PROT_RW) < 0) {
 			__syscall2(SYS_munmap, map, size);
 			return EAGAIN;
 		}
@@ -133,7 +141,7 @@ int __pthread_create(__pthread_t *res, const void *attrp, void *(*fn)(void *), v
 	new->canary = self->canary;
 	new->pointer_guard = self->pointer_guard;
 	new->sysinfo = self->sysinfo;
-	new->robust_list.head = &new->robust_list.head;
+	new->robust_list.head = 0;
 	new->start = fn;
 	new->start_arg = arg;
 	new->c11 = (attr._a_flags & 2) != 0;
@@ -144,9 +152,14 @@ int __pthread_create(__pthread_t *res, const void *attrp, void *(*fn)(void *), v
 	__tl_lock();
 	if (!__libc.threaded)
 		__libc.threaded = 1;
-	r = __clone(start, stack, CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD |
-	            CLONE_SYSVSEM | CLONE_SETTLS | CLONE_PARENT_SETTID | CLONE_CHILD_CLEARTID | CLONE_DETACHED,
-	            new, &new->tid, new, &new->detach_state);
+	memset(&tp, 0, sizeof tp);
+	tp.start_func = start;
+	tp.arg = new;
+	tp.stack_base = (char *)stack - new->stack_size;
+	tp.stack_size = new->stack_size;
+	tp.tls_base = (char *)new;
+	tp.child_tid = tp.parent_tid = (long *)&new->tid;
+	r = __syscall2(SYS_thr_new, &tp, sizeof tp);
 	if (r >= 0) {
 		new->next = self->next;
 		new->prev = self;
@@ -155,20 +168,10 @@ int __pthread_create(__pthread_t *res, const void *attrp, void *(*fn)(void *), v
 		__libc.threads_minus_1++;
 		if (explicit) {
 			/* (the packing: pthread_attr.c) */
-			struct sched_param sp = {0};
 			int pol = (int)((attr._a_sched >> 8) & 0xff);
+			if (!pol) pol = SCHED_OTHER;
 			unsigned long pr = (unsigned long)attr._a_prio;
-			sp.sched_priority = (int)(unsigned)pr;
-			if (pol == SCHED_SPORADIC) {
-				unsigned long b = (unsigned long)attr._a_sched >> 16, rp = (unsigned long)attr._a_flags >> 2;
-				sp.sched_ss_low_priority = (int)(pr >> 32 & 0xff);
-				sp.sched_ss_max_repl = (int)(pr >> 40 & 0xff);
-				sp.sched_ss_init_budget.tv_sec = (time_t)(b / 1000000);
-				sp.sched_ss_init_budget.tv_nsec = (long)(b % 1000000 * 1000);
-				sp.sched_ss_repl_period.tv_sec = (time_t)(rp / 1000000);
-				sp.sched_ss_repl_period.tv_nsec = (long)(rp % 1000000 * 1000);
-			}
-			long e = __syscall3(SYS_sched_setscheduler, new->tid, pol, &sp);
+			long e = __thr_setsched(new->tid, pol, (int)(unsigned)pr);
 			if (e < 0) {
 				new->detach_state = DT_DETACHED;   /* it unmaps itself */
 				r = e;

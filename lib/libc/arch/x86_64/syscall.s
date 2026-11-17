@@ -27,7 +27,8 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # long __syscall6(long n, long a, long b, long c, long d, long e, long f)
-# Raw system call; returns the kernel's result (-errno on failure).
+# Raw system call; returns the kernel's result (-errno on failure: FreeBSD
+# returns the error with the carry flag set and the positive errno).
 	.text
 	.globl	__syscall6
 	.hidden	__syscall6
@@ -41,7 +42,9 @@ __syscall6:
 	mov	%r9,%r8
 	mov	8(%rsp),%r9
 	syscall
-	ret
+	jnc	1f
+	neg	%rax
+1:	ret
 	.size	__syscall6,.-__syscall6
 
 # struct __pthread *__get_tp(void): the thread pointer (%fs:0 holds it).
@@ -53,12 +56,4 @@ __get_tp:
 	ret
 	.size	__get_tp,.-__get_tp
 
-# void __restore_rt(void): signal-return trampoline for SA_RESTORER.
-	.globl	__restore_rt
-	.hidden	__restore_rt
-	.type	__restore_rt,@function
-__restore_rt:
-	mov	$SYS_rt_sigreturn,%eax
-	syscall
-	.size	__restore_rt,.-__restore_rt
 	.section .note.GNU-stack,"",@progbits

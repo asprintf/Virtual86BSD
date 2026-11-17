@@ -44,5 +44,6 @@ pid_t wait(int *status)
 
 int waitid(idtype_t type, id_t id, siginfo_t *info, int options)
 {
-	return (int)__sys_cp5(SYS_waitid, type, id, info, options, 0);
+	/* wait6 returns the pid, waitid 0 */
+	return __sys_cp6(SYS_wait6, type, id, 0, options, 0, info) < 0 ? -1 : 0;
 }

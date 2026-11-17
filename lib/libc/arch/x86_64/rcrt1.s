@@ -34,7 +34,7 @@
 	.type	_start,@function
 _start:
 	xor	%ebp,%ebp
-	mov	%rsp,%r12		# the initial stack (callee-saved)
+	mov	%rdi,%r12		# the initial stack, in %rdi (callee-saved)
 	lea	__ehdr_start(%rip),%rdi	# the load address
 	lea	_DYNAMIC(%rip),%rsi
 	xor	%ecx,%ecx		# rela

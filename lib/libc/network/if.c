@@ -28,103 +28,118 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* <net/if.h>: interface names and indexes, from the kernel by ioctl;
- * the list of interfaces from /proc/net/dev. */
+#define _DEFAULT_SOURCE
 #include <errno.h>
 #include <net/if.h>
-#include <stdio.h>
+#include <net/if_dl.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include "syscall.h"
-
-struct ifreq_min {               /* struct ifreq: name, then a union */
-	char name[IF_NAMESIZE];
-	union { int index; char pad[24]; } u;
-};
+#include "ifmsg.h"
 
 unsigned if_nametoindex(const char *name)
 {
-	struct ifreq_min r;
+	struct ifreq r;
 	int fd, ok;
 	if (strlen(name) >= IF_NAMESIZE)
 		return 0;
 	memset(&r, 0, sizeof r);
-	strcpy(r.name, name);
+	strcpy(r.ifr_name, name);
 	if ((fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0)) < 0)
 		return 0;
 	ok = __sys3(SYS_ioctl, fd, SIOCGIFINDEX, &r) == 0;
 	close(fd);
-	return ok ? (unsigned)r.u.index : 0;
+	return ok ? (unsigned)(unsigned short)r.ifr_index : 0;
+}
+
+/* the AF_LINK address of the interface of each RTM_IFINFO: index, name */
+static int each(void (*fn)(void *, unsigned, const char *, size_t), void *arg)
+{
+	char *buf, *p;
+	size_t len;
+	if (__ifmsg_list(&buf, &len) < 0)
+		return -1;
+	for (p = buf; p + sizeof(struct ifmsg) <= buf + len; p += ((struct ifmsg *)p)->msglen) {
+		const struct ifmsg *m = (const void *)p;
+		const struct sockaddr_dl *dl;
+		if (!m->msglen || m->version != IFM_VERSION || m->type != IFM_RTM_IFINFO)
+			continue;
+		dl = (const void *)__ifmsg_addr(m, IFM_RTA_IFP);
+		if (dl && dl->sdl_family == AF_LINK)
+			fn(arg, m->index, dl->sdl_data, dl->sdl_nlen);
+	}
+	free(buf);
+	return 0;
+}
+
+struct find { unsigned index; char *name; };
+
+static void find_name(void *arg, unsigned index, const char *name, size_t n)
+{
+	struct find *f = arg;
+	if (index == f->index && n < IF_NAMESIZE) {
+		memcpy(f->name, name, n);
+		f->name[n] = 0;
+		f->index = 0;
+	}
 }
 
 char *if_indextoname(unsigned index, char *name)
 {
-	struct ifreq_min r;
-	int fd, ok;
-	memset(&r, 0, sizeof r);
-	r.u.index = (int)index;
-	if ((fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0)) < 0)
+	struct find f = { index, name };
+	if (each(find_name, &f) < 0)
 		return 0;
-	ok = __sys3(SYS_ioctl, fd, SIOCGIFNAME, &r) == 0;
-	close(fd);
-	if (!ok) {
-		if (errno == ENODEV)
-			errno = ENXIO;
+	if (f.index) {
+		errno = ENXIO;
 		return 0;
 	}
-	r.name[IF_NAMESIZE - 1] = 0;
-	return strcpy(name, r.name);
+	return name;
+}
+
+struct list { struct if_nameindex *v; size_t n; int err; };
+
+static void add(void *arg, unsigned index, const char *name, size_t n)
+{
+	struct list *l = arg;
+	struct if_nameindex *v;
+	char *s;
+	if (l->err || n >= IF_NAMESIZE)
+		return;
+	if (!(v = realloc(l->v, (l->n + 2) * sizeof *v)) || !(s = malloc(n + 1))) {
+		l->v = v ? v : l->v;
+		l->err = ENOBUFS;
+		return;
+	}
+	memcpy(s, name, n);
+	s[n] = 0;
+	l->v = v;
+	l->v[l->n].if_index = index;
+	l->v[l->n].if_name = s;
+	l->n++;
 }
 
 struct if_nameindex *if_nameindex(void)
 {
-	FILE *f = fopen("/proc/net/dev", "re");
-	struct if_nameindex *list = 0, *l;
-	char line[512], *p, *q;
-	size_t n = 0;
-	if (!f)
+	struct list l = { 0, 0, 0 };
+	if (each(add, &l) < 0)
 		return 0;
-	while (fgets(line, sizeof line, f)) {
-		if (!(q = strchr(line, ':')))
-			continue;
-		*q = 0;
-		for (p = line; *p == ' '; p++)
-			;
-		if (!(l = realloc(list, (n + 2) * sizeof *list)))
-			goto fail;
-		list = l;
-		list[n].if_name = 0;
-		if (strlen(p) >= IF_NAMESIZE || !(list[n].if_index = if_nametoindex(p)))
-			continue;
-		if (!(list[n].if_name = strdup(p)))
-			goto fail;
-		n++;
-	}
-	fclose(f);
-	if (!list && !(list = malloc(sizeof *list)))
+	if (!l.v && !(l.v = malloc(sizeof *l.v))) {
+		errno = ENOBUFS;
 		return 0;
-	{       /* in the order of the indexes, as the kernel lists them */
-		size_t i, j;
-		for (i = 1; i < n; i++)
-			for (j = i; j > 0 && list[j - 1].if_index > list[j].if_index; j--) {
-				struct if_nameindex t = list[j];
-				list[j] = list[j - 1];
-				list[j - 1] = t;
-			}
 	}
-	list[n].if_index = 0;
-	list[n].if_name = 0;
-	return list;
-fail:
-	fclose(f);
-	while (n--)
-		free(list[n].if_name);
-	free(list);
-	errno = ENOBUFS;
-	return 0;
+	if (l.err) {
+		while (l.n--)
+			free(l.v[l.n].if_name);
+		free(l.v);
+		errno = l.err;
+		return 0;
+	}
+	l.v[l.n].if_index = 0;
+	l.v[l.n].if_name = 0;
+	return l.v;
 }
 
 void if_freenameindex(struct if_nameindex *list)

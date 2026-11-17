@@ -37,10 +37,7 @@
 #define AT_PHENT   4
 #define AT_PHNUM   5
 #define AT_PAGESZ  6
-#define AT_HWCAP   16
-#define AT_SECURE  23
-#define AT_RANDOM  25
-#define AT_SYSINFO_EHDR 33
+#define AT_CANARY  16
 
 #define PT_LOAD    1
 #define PT_DYNAMIC 2

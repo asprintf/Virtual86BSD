@@ -73,7 +73,7 @@ char *tmpnam(char *buf)
 	int tries;
 	for (tries = 0; tries < 100; tries++) {
 		if (__randname(name + 12)) break;
-		if (__syscall4(SYS_newfstatat, -100, name, &st, 0x100) == -ENOENT) {
+		if (__syscall4(SYS_fstatat, -100, name, &st, 0x200) == -ENOENT) {
 			char *d = buf ? buf : internal;
 			memcpy(d, name, sizeof name);
 			return d;

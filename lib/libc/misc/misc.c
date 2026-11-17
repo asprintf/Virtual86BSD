@@ -52,13 +52,13 @@ long __setnice(int);
 
 int nice(int inc)
 {
-	long prio = 20 - __syscall2(SYS_getpriority, PRIO_PROCESS, 0); /* kernel returns 20-nice */
+	long prio = getpriority(PRIO_PROCESS, 0);
 	if (inc > 40) inc = 40;
 	if (inc < -40) inc = -40;
 	prio += inc;
 	if (prio > 19) prio = 19;
 	if (prio < -20) prio = -20;
-	if (__setnice((int)prio) < 0) {   /* every thread: see __setxid.c */
+	if (__setnice((int)prio) < 0) {
 		errno = EPERM;  /* POSIX: EPERM for a refused increase */
 		return -1;
 	}
@@ -67,7 +67,7 @@ int nice(int inc)
 
 int lockf(int fd, int op, off_t size)
 {
-	struct flock l = { F_WRLCK, SEEK_CUR, 0, size, 0 };
+	struct flock l = { .l_type = F_WRLCK, .l_whence = SEEK_CUR, .l_start = 0, .l_len = size };
 	switch (op) {
 	case F_TEST:
 		l.l_type = F_RDLCK;

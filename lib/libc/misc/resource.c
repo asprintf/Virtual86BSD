@@ -31,27 +31,48 @@
 #include <sys/resource.h>
 #include <sys/times.h>
 #include <errno.h>
+#include <time.h>
 #include "syscall.h"
 
-int getrlimit(int r, struct rlimit *l) { return (int)__sys4(SYS_prlimit64, 0, r, 0, l); }
-int setrlimit(int r, const struct rlimit *l) { return (int)__sys4(SYS_prlimit64, 0, r, l, 0); }
+int getrlimit(int r, struct rlimit *l) { return (int)__sys2(SYS_getrlimit, r, l); }
+int setrlimit(int r, const struct rlimit *l) { return (int)__sys2(SYS_setrlimit, r, l); }
 int getrusage(int who, struct rusage *u) { return (int)__sys2(SYS_getrusage, who, u); }
 
+/* the kernel returns the nice value itself, which can look like an error */
 int getpriority(int which, id_t who)
 {
-	long r = __syscall2(SYS_getpriority, which, who);
-	if (r < 0) return (int)__syscall_ret((unsigned long)r);
-	return 20 - (int)r;   /* the kernel returns 20 - nice */
+	long err, r = __syscall2_cf(SYS_getpriority, which, (int)who, &err);
+	if (err) { errno = (int)err; return -1; }
+	return (int)r;
 }
 
 long __setnice(int);
 
 int setpriority(int which, id_t who, int prio)
 {
-	/* the process itself: every thread (Linux has a nice value per thread) */
-	if (which == PRIO_PROCESS && (!who || who == (id_t)__syscall0(SYS_getpid)))
-		return (int)__syscall_ret((unsigned long)__setnice(prio));
-	return (int)__sys3(SYS_setpriority, which, who, prio);
+	return (int)__sys3(SYS_setpriority, which, (int)who, prio);
 }
 
-clock_t times(struct tms *t) { return (clock_t)__syscall1(SYS_times, t); }
+/* times(): the CPU times from getrusage in ticks of 1/128 s (CLK_TCK), the
+ * elapsed ticks from the monotonic clock */
+#define TICKS 128
+static clock_t ticks(const struct timeval *tv)
+{
+	return (clock_t)(tv->tv_sec * TICKS + tv->tv_usec * TICKS / 1000000);
+}
+
+clock_t times(struct tms *t)
+{
+	struct rusage ru;
+	struct timespec ts;
+	if (t) {
+		if (getrusage(RUSAGE_SELF, &ru)) return (clock_t)-1;
+		t->tms_utime = ticks(&ru.ru_utime);
+		t->tms_stime = ticks(&ru.ru_stime);
+		if (getrusage(RUSAGE_CHILDREN, &ru)) return (clock_t)-1;
+		t->tms_cutime = ticks(&ru.ru_utime);
+		t->tms_cstime = ticks(&ru.ru_stime);
+	}
+	if (__syscall2(SYS_clock_gettime, CLOCK_MONOTONIC, &ts) < 0) return (clock_t)-1;
+	return (clock_t)(ts.tv_sec * TICKS + ts.tv_nsec / (1000000000 / TICKS));
+}

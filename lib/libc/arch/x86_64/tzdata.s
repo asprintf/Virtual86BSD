@@ -33,7 +33,7 @@
 .Lutc:	.asciz	"UTC"
 
 	.data
-	.align	8
+	.align	16			# an array of 16 bytes: the ABI aligns it to 16 (compilers use movaps)
 	.globl	__tzname
 	.type	__tzname,@object
 	.size	__tzname,16

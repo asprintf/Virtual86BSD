@@ -49,7 +49,7 @@ FILE *freopen(const char *__RESTRICT path, const char *__RESTRICT mode, FILE *__
 		int fd = __openat_flags(AT_FDCWD, path, fl, 0666);
 		if (fd < 0) goto fail;
 		if (f->fd >= 0 && fd != f->fd) {
-			if (__syscall3(SYS_dup3, fd, f->fd, fl & O_CLOEXEC) < 0) { __syscall1(SYS_close, fd); goto fail; }
+			if (__syscall3(SYS_fcntl, fd, 24 /* F_DUP3FD */ | ((fl & O_CLOEXEC ? FD_CLOEXEC : 0) << 16), f->fd) < 0) { __syscall1(SYS_close, fd); goto fail; }
 			__syscall1(SYS_close, fd);
 		} else if (f->fd < 0) {
 			f->fd = fd;

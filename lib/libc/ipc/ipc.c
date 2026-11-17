@@ -64,29 +64,20 @@ int semget(key_t k, int n, int flag)
 
 int semop(int id, struct sembuf *ops, size_t n) { return (int)__sys3(SYS_semop, id, ops, n); }
 
-/* the fourth argument, a union semun of the application's, as a long */
+/* the fourth argument, a union semun of the application's, as a long; the
+ * kernel's __semctl takes the address of the union */
 int semctl(int id, int num, int cmd, ...)
 {
 	unsigned long arg = 0;
 	switch (cmd) {
-	case SETVAL: case GETALL: case SETALL: case IPC_STAT: case IPC_SET: case 3: case 19: case 20: {
+	case SETVAL: case GETALL: case SETALL: case IPC_STAT: case IPC_SET: {
 		va_list ap;
 		va_start(ap, cmd);
 		arg = va_arg(ap, unsigned long);
 		va_end(ap);
 	}
 	}
-	if (cmd == IPC_STAT) {   /* clear the high half of sem_nsems */
-		struct semid_ds *d = (struct semid_ds *)arg;
-		long r = __syscall4(SYS_semctl, id, num, cmd, arg);
-		if (r >= 0) {
-			int i;
-			for (i = 0; i < 6; i++)
-				d->__pad[i] = 0;
-		}
-		return (int)__syscall_ret((unsigned long)r);
-	}
-	return (int)__sys4(SYS_semctl, id, num, cmd, arg);
+	return (int)__sys4(SYS___semctl, id, num, cmd, &arg);
 }
 
 int shmget(key_t k, size_t n, int flag) { return (int)__sys3(SYS_shmget, k, n, flag); }

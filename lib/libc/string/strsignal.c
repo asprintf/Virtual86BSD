@@ -33,17 +33,18 @@
 static const char *const names[] = {
 
 	[1] = "Hangup", [2] = "Interrupt", [3] = "Quit",
-	[4] = "Illegal instruction", [5] = "Trace/breakpoint trap",
-	[6] = "Aborted", [7] = "Bus error", [8] = "Floating point exception",
-	[9] = "Killed", [10] = "User defined signal 1", [11] = "Segmentation fault",
-	[12] = "User defined signal 2", [13] = "Broken pipe", [14] = "Alarm clock",
-	[15] = "Terminated", [16] = "Stack fault", [17] = "Child exited",
-	[18] = "Continued", [19] = "Stopped (signal)", [20] = "Stopped",
+	[4] = "Illegal instruction", [5] = "Trace/BPT trap",
+	[6] = "Abort trap", [7] = "EMT trap", [8] = "Floating point exception",
+	[9] = "Killed", [10] = "Bus error", [11] = "Segmentation fault",
+	[12] = "Bad system call", [13] = "Broken pipe", [14] = "Alarm clock",
+	[15] = "Terminated", [16] = "Urgent I/O condition", [17] = "Suspended (signal)",
+	[18] = "Suspended", [19] = "Continued", [20] = "Child exited",
 	[21] = "Stopped (tty input)", [22] = "Stopped (tty output)",
-	[23] = "Urgent I/O condition", [24] = "CPU time limit exceeded",
-	[25] = "File size limit exceeded", [26] = "Virtual timer expired",
-	[27] = "Profiling timer expired", [28] = "Window changed",
-	[29] = "I/O possible", [30] = "Power failure", [31] = "Bad system call",
+	[23] = "I/O possible", [24] = "Cputime limit exceeded",
+	[25] = "Filesize limit exceeded", [26] = "Virtual timer expired",
+	[27] = "Profiling timer expired", [28] = "Window size changes",
+	[29] = "Information request", [30] = "User defined signal 1",
+	[31] = "User defined signal 2",
 };
 
 char *strsignal(int sig)
@@ -52,9 +53,9 @@ char *strsignal(int sig)
 	char *p;
 	unsigned u;
 	if (sig > 0 && sig < 32) return (char *)names[sig];
-	if (sig >= 35 && sig <= 64) {
-		/* 32-34 are reserved for the library; 35 is SIGRTMIN */
-		int n = sig - 35;
+	if (sig >= 65 && sig <= 126) {
+		/* 32-34 are reserved for the library; 65 is SIGRTMIN */
+		int n = sig - 65;
 		p = stpcpy(buf, "Real-time signal ");
 		if (n >= 10) *p++ = (char)('0' + n / 10);
 		*p++ = (char)('0' + n % 10);

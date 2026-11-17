@@ -73,6 +73,7 @@
 #include "pthread_impl.h"
 #include "lock.h"
 #include "syscall.h"
+#include "execpath.h"
 
 #define HIDDEN __attribute__((visibility("hidden")))
 #ifndef RTLD_DEFAULT
@@ -144,7 +145,6 @@ enum {
 #define AT_PAGESZ 6
 #define AT_BASE 7
 #define AT_ENTRY 9
-#define AT_SECURE 23
 
 /* ---- the loaded objects ---- */
 
@@ -517,10 +517,15 @@ HIDDEN void __dls2(unsigned char *base, size_t *sp);
  * need a relocation (no global data, no calls but to __dls2). */
 HIDDEN void __dls1(size_t *sp)
 {
-	unsigned char *base = (unsigned char *)&__ehdr_start;
+	/* the load address as a plain number: derived from the 64-byte const
+	 * __ehdr_start, the stores below look undefined and clang drops them */
+	uintptr_t b = (uintptr_t)&__ehdr_start;
+	unsigned char *base;
 	Dyn *v;
 	Rela *rel = 0;
 	size_t relsz = 0, *rr = 0, rrsz = 0, i;
+	__asm__ ("" : "+r"(b));
+	base = (unsigned char *)b;
 	for (v = _DYNAMIC; v->d_tag; v++) {
 		if (v->d_tag == DT_RELA) rel = (Rela *)(void *)(base + v->d_val);
 		else if (v->d_tag == DT_RELASZ) relsz = v->d_val;
@@ -676,7 +681,7 @@ static void origin_of(struct dso *p, char *buf, size_t n)
 {
 	const char *s = p->name, *slash;
 	if (p == &app) {
-		ssize_t l = readlink("/proc/self/exe", buf, n - 1);
+		ssize_t l = __execpath(buf, n);
 		if (l > 0) {
 			buf[l] = 0;
 			if ((slash = strrchr(buf, '/'))) { buf[slash - buf] = 0; return; }
@@ -1024,13 +1029,13 @@ static void dls3(size_t *sp)
 		if (auxv[i] < 32) aux[auxv[i]] = auxv[i + 1];
 	__libc.auxv = (unsigned long *)auxv;
 	__libc.page_size = page = aux[AT_PAGESZ] ? aux[AT_PAGESZ] : 4096;
-	__libc.secure = aux[AT_SECURE] != 0;
+	__libc.secure = __syscall0(SYS_issetugid) != 0;
 
 	/* a provisional thread pointer: errno, locks, malloc */
 	early_td.self = early_td.self2 = &early_td;
 	early_td.dtv = early_td.dtv_static = early_dtv;
-	early_td.tid = (int)__syscall0(SYS_gettid);
-	early_td.robust_list.head = &early_td.robust_list.head;
+	early_td.tid = (int)__thr_self();
+	early_td.robust_list.head = 0;
 	early_td.next = early_td.prev = &early_td;
 	__set_thread_area(&early_td);
 
@@ -1070,7 +1075,7 @@ static void dls3(size_t *sp)
 		/* run as a command: libc.so program [args...] */
 		char buf[PATH_MAX];
 		int fd;
-		ssize_t l = readlink("/proc/self/exe", buf, sizeof buf - 1);
+		ssize_t l = __execpath(buf, sizeof buf);
 		if (l > 0) {
 			struct stat st;
 			char *sl;

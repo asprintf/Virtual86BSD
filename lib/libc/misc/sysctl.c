@@ -32,28 +32,41 @@
    (<sys/sysctl.h>), and getloadavg(3) on top of it.  Native only: the Linux
    ABI has no such call. */
 #define _DEFAULT_SOURCE
-#include <abi.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/sysctl.h>
 #include "syscall.h"
 
-int sysctl(const int *name, unsigned int namelen, void *oldp, size_t *oldlenp, void *newp, size_t newlen)
-{
-#ifdef __V86BSD_NATIVE_ABI
-	return (int)__sys6(SYS_sysctl, name, namelen, oldp, oldlenp, newp, newlen);
-#else
-	(void)name; (void)namelen; (void)oldp; (void)oldlenp; (void)newp; (void)newlen;
-	errno = ENOSYS;
-	return -1;
+#ifndef VM_LOADAVG
+#define VM_LOADAVG 2
 #endif
+
+int sysctl(const int *name, unsigned int namelen, void *oldp, size_t *oldlenp, const void *newp, size_t newlen)
+{
+	return (int)__sys6(SYS___sysctl, name, namelen, oldp, oldlenp, newp, newlen);
+}
+
+int sysctlbyname(const char *name, void *oldp, size_t *oldlenp, const void *newp, size_t newlen)
+{
+	return (int)__sys6(SYS___sysctlbyname, name, strlen(name), oldp, oldlenp, newp, newlen);
+}
+
+/* the kernel's name-to-number translation is the node { 0, 3 } */
+int sysctlnametomib(const char *name, int *mibp, size_t *sizep)
+{
+	static const int oid[2] = { 0, 3 };
+	size_t l = *sizep * sizeof *mibp;
+	if (sysctl(oid, 2, mibp, &l, name, strlen(name)) < 0) return -1;
+	*sizep = l / sizeof *mibp;
+	return 0;
 }
 
 /* the 1, 5 and 15 minute load averages; how many of nelem (at most 3)
    were stored, or -1 */
 int getloadavg(double loadavg[], int nelem)
 {
-	struct loadavg la;
+	struct { unsigned ldavg[3]; long fscale; } la;
 	size_t len = sizeof la;
 	int mib[2] = { CTL_VM, VM_LOADAVG };
 	int i;

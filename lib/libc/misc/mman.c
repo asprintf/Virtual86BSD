@@ -36,7 +36,6 @@
 #include <stdint.h>
 #include <unistd.h>
 #include "syscall.h"
-#include "clofork.h"
 
 void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off)
 {
@@ -48,7 +47,15 @@ void *mmap(void *addr, size_t len, int prot, int flags, int fd, off_t off)
 	return (void *)__syscall_ret((unsigned long)r);
 }
 
-int munmap(void *a, size_t n) { return (int)__sys2(SYS_munmap, a, n); }
+/* the kernel rounds an unaligned address down */
+int munmap(void *a, size_t n)
+{
+	if ((uintptr_t)a & 4095) {
+		errno = EINVAL;
+		return -1;
+	}
+	return (int)__sys2(SYS_munmap, a, n);
+}
 int mprotect(void *a, size_t n, int p)
 {
 	uintptr_t s = (uintptr_t)a & -(uintptr_t)4096;
@@ -62,42 +69,48 @@ int munlockall(void) { return (int)__sys0(SYS_munlockall); }
 
 int posix_madvise(void *a, size_t n, int advice)
 {
-	/* Linux MADV_DONTNEED discards data, which POSIX does not allow: ignore it */
-	if (advice == POSIX_MADV_DONTNEED) return 0;
 	return (int)-__syscall3(SYS_madvise, a, n, advice);
 }
 
-/* Shared memory objects are files in /dev/shm. */
-static int shm_path(const char *name, char *buf)
+/* shared memory objects: the kernel's shm_open (named objects) */
+/* the kernel wants a leading slash (a name without one gets it) and has no NAME_MAX */
+static const char *shmname(const char *name, char *buf)
 {
-	size_t l;
-	while (*name == '/') name++;
-	l = strlen(name);
-	if (!l || strchr(name, '/') || l > NAME_MAX || !strcmp(name, ".") || !strcmp(name, "..")) {
-		errno = l > NAME_MAX ? ENAMETOOLONG : EINVAL;
-		return -1;
+	size_t n = strlen(name), c = 0, i;
+	for (i = 0; i < n; i++) {
+		if (name[i] == '/' && i > 0) {	/* one slash at most, the first */
+			errno = EINVAL;
+			return 0;
+		}
+		c = name[i] == '/' ? 0 : c + 1;
+		if (c > NAME_MAX) {
+			errno = ENAMETOOLONG;
+			return 0;
+		}
 	}
-	memcpy(buf, "/dev/shm/", 9);
-	memcpy(buf + 9, name, l + 1);
-	return 0;
+	if (name[0] == '/')
+		return name;
+	if (n + 2 > PATH_MAX) {
+		errno = ENAMETOOLONG;
+		return 0;
+	}
+	buf[0] = '/';
+	memcpy(buf + 1, name, n + 1);
+	return buf;
 }
-
-int __openat_flags(int, const char *, int, mode_t);
 
 int shm_open(const char *name, int flag, mode_t mode)
 {
-	char buf[NAME_MAX + 10];
-	if (shm_path(name, buf)) return -1;
-	return __openat_flags(AT_FDCWD, buf, flag | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK, mode);
+	char buf[PATH_MAX];
+	if (!(name = shmname(name, buf)))
+		return -1;
+	return (int)__sys5(SYS_shm_open2, name, flag | O_CLOEXEC, mode, 0, 0);
 }
 
 int shm_unlink(const char *name)
 {
-	char buf[NAME_MAX + 10];
-	if (shm_path(name, buf)) return -1;
-	if (unlink(buf) == 0)
-		return 0;
-	if (errno == EPERM)
-		errno = EACCES;     /* the sticky /dev/shm: POSIX says EACCES */
-	return -1;
+	char buf[PATH_MAX];
+	if (!(name = shmname(name, buf)))
+		return -1;
+	return (int)__sys1(SYS_shm_unlink, name);
 }

@@ -41,7 +41,7 @@ int utimensat(int fd, const char *p, const struct timespec t[2], int flag)
 
 int futimens(int fd, const struct timespec t[2])
 {
-	return (int)__sys4(SYS_utimensat, fd, 0, t, 0);
+	return (int)__sys2(SYS_futimens, fd, t);
 }
 
 int utimes(const char *p, const struct timeval tv[2])

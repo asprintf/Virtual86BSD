@@ -42,23 +42,23 @@ void (*__atfork_hook)(int);  /* set by pthread_atfork(): -1 prepare, 0 parent, 1
 pid_t _Fork(void)
 {
 	long r;
-	unsigned long all = -1UL, old;
+	__sm_t all = { { -1UL, -1UL } }, old;
 	/* block signals so that no handler runs in the child with stale state */
-	__syscall4(SYS_rt_sigprocmask, SIG_BLOCK, &all, &old, 8);
-	r = __syscall5(SYS_clone, SIGCHLD, 0, 0, 0, 0);
+	__syscall3(SYS_sigprocmask, SIG_BLOCK, &all, &old);
+	r = __syscall0(SYS_fork);
 	if (r == 0) {
 		/* the child: the only thread */
 		struct __pthread *self = __pthread_self();
-		self->tid = (int)__syscall0(SYS_gettid);
+		self->tid = (int)__thr_self();
 		self->next = self->prev = self;
 		self->robust_registered = 0;
-		self->robust_list.head = &self->robust_list.head;
+		self->robust_list.head = 0;
 		self->robust_list.pending = 0;
 		__libc.threads_minus_1 = 0;
 		__thread_list_lock = 0;
 		__clofork_close_all();
 	}
-	__syscall4(SYS_rt_sigprocmask, SIG_SETMASK, &old, 0, 8);
+	__syscall3(SYS_sigprocmask, SIG_SETMASK, &old, 0);
 	return (pid_t)__syscall_ret((unsigned long)r);
 }
 

@@ -41,27 +41,30 @@ int sigemptyset(sigset_t *set) { memset(set, 0, sizeof *set); return 0; }
 
 int sigfillset(sigset_t *set)
 {
+	int s;
 	memset(set, 0, sizeof *set);
-	set->__bits[0] = ~(7UL << 31); /* 1-31 and 35-64; not 32-34 */
+	for (s = 1; s < _NSIG; s++)    /* 1-31 and 35-126; not 32-34 */
+		if (!RESERVED(s))
+			set->__bits[(s - 1) >> 5] |= 1U << ((s - 1) & 31);
 	return 0;
 }
 
 int sigaddset(sigset_t *set, int s)
 {
 	if (BAD(s)) { errno = EINVAL; return -1; }
-	set->__bits[0] |= 1UL << (s - 1);
+	set->__bits[(s - 1) >> 5] |= 1U << ((s - 1) & 31);
 	return 0;
 }
 
 int sigdelset(sigset_t *set, int s)
 {
 	if (BAD(s)) { errno = EINVAL; return -1; }
-	set->__bits[0] &= ~(1UL << (s - 1));
+	set->__bits[(s - 1) >> 5] &= ~(1U << ((s - 1) & 31));
 	return 0;
 }
 
 int sigismember(const sigset_t *set, int s)
 {
 	if ((unsigned)s - 1 >= _NSIG - 1) { errno = EINVAL; return -1; }
-	return (int)(set->__bits[0] >> (s - 1) & 1);
+	return (int)(set->__bits[(s - 1) >> 5] >> ((s - 1) & 31) & 1);
 }

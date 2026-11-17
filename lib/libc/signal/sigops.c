@@ -47,14 +47,14 @@ int killpg(pid_t pg, int sig)
 int pthread_sigmask(int how, const sigset_t *__RESTRICT set, sigset_t *__RESTRICT old)
 {
 	long r;
-	unsigned long m;
-	if (set && (unsigned)how > SIG_SETMASK) return EINVAL;
+	__sm_t m;
+	if (set && (unsigned)how - SIG_BLOCK > SIG_SETMASK - SIG_BLOCK) return EINVAL;
 	if (set) {
-		m = set->__bits[0];
-		if (how != SIG_UNBLOCK) m &= ~(7UL << 31);
+		memcpy(&m, set, sizeof m);
+		if (how != SIG_UNBLOCK) m.__w[0] &= ~(7UL << 31);
 	}
 	if (old) memset(old, 0, sizeof *old);
-	r = __syscall4(SYS_rt_sigprocmask, how, set ? &m : 0, old, 8);
+	r = __syscall3(SYS_sigprocmask, how, set ? &m : 0, old);
 	return (int)-r;
 }
 
@@ -68,30 +68,30 @@ int sigprocmask(int how, const sigset_t *__RESTRICT set, sigset_t *__RESTRICT ol
 int sigpending(sigset_t *set)
 {
 	memset(set, 0, sizeof *set);
-	return (int)__sys2(SYS_rt_sigpending, set, 8);
+	return (int)__sys1(SYS_sigpending, set);
 }
 
 int sigsuspend(const sigset_t *mask)
 {
-	return (int)__sys_cp2(SYS_rt_sigsuspend, mask, 8);
+	return (int)__sys_cp1(SYS_sigsuspend, mask);
 }
 
 int sigtimedwait(const sigset_t *__RESTRICT set, siginfo_t *__RESTRICT info,
                  const struct timespec *__RESTRICT ts)
 {
-	return (int)__sys_cp4(SYS_rt_sigtimedwait, set, info, ts, 8);
+	return (int)__sys_cp3(SYS_sigtimedwait, set, info, ts);
 }
 
 int sigwaitinfo(const sigset_t *__RESTRICT set, siginfo_t *__RESTRICT info)
 {
-	long r = __syscall_cp4(SYS_rt_sigtimedwait, set, info, 0, 8);
+	long r = __syscall_cp3(SYS_sigtimedwait, set, info, 0);
 	return (int)__syscall_ret((unsigned long)r);
 }
 
 int sigwait(const sigset_t *__RESTRICT set, int *__RESTRICT sig)
 {
 	long r;
-	do r = __syscall_cp4(SYS_rt_sigtimedwait, set, 0, 0, 8);
+	do r = __syscall_cp3(SYS_sigtimedwait, set, 0, 0);
 	while (r == -EINTR);
 	if (r < 0) return (int)-r;
 	*sig = (int)r;
@@ -100,14 +100,7 @@ int sigwait(const sigset_t *__RESTRICT set, int *__RESTRICT sig)
 
 int sigqueue(pid_t pid, int sig, union sigval value)
 {
-	siginfo_t si;
-	memset(&si, 0, sizeof si);
-	si.si_signo = sig;
-	si.si_code = SI_QUEUE;
-	si.si_value = value;
-	si.si_uid = (uid_t)__syscall0(SYS_getuid);
-	si.si_pid = (pid_t)__syscall0(SYS_getpid);
-	return (int)__sys3(SYS_rt_sigqueueinfo, pid, sig, &si);
+	return (int)__sys3(SYS_sigqueue, pid, sig, value.sival_ptr);
 }
 
 int sigaltstack(const stack_t *__RESTRICT ss, stack_t *__RESTRICT old)
@@ -122,12 +115,12 @@ int sigaltstack(const stack_t *__RESTRICT ss, stack_t *__RESTRICT old)
  * thread that ignores the signal */
 int __pthread_kill(pthread_t t, int sig)
 {
-	unsigned long set;
+	__sm_t set;
 	int r;
 	if ((unsigned)sig >= _NSIG) return EINVAL;
 	__block_all_sigs(&set);
 	LOCK(&t->killlock);
-	r = t->tid ? (int)-__syscall2(SYS_tkill, t->tid, sig) : 0;
+	r = t->tid ? (int)-__syscall2(SYS_thr_kill, t->tid, sig) : 0;
 	UNLOCK(&t->killlock);
 	__restore_sigs(&set);
 	return r;

@@ -51,7 +51,7 @@ extern void __pthread_tsd_run_dtors(void) __attribute__((weak));
 _Noreturn void __pthread_exit(void *result)
 {
 	struct __pthread *self = __pthread_self();
-	unsigned long set;
+	__sm_t set;
 	int state;
 
 	self->canceldisable = 1;
@@ -64,6 +64,8 @@ _Noreturn void __pthread_exit(void *result)
 	}
 	if (__pthread_tsd_run_dtors)
 		__pthread_tsd_run_dtors();
+
+	__robust_exit(self);
 
 	/* signals stay deliverable while waiting for the lock (set*id
 	 * broadcasts hold it while they wait for every listed thread) */
@@ -84,12 +86,10 @@ _Noreturn void __pthread_exit(void *result)
 	__tl_unlock();
 	if (__libc.tls_free)   /* dlopen'ed modules' TLS of this thread */
 		__libc.tls_free(self);
-	if (state == DT_DETACHED && self->map_base) {
-		__syscall1(SYS_set_tid_address, 0);
+	if (state == DT_DETACHED && self->map_base)
 		__unmapself(self->map_base, self->map_size);
-	}
 	for (;;)
-		__syscall1(SYS_exit, 0);
+		__syscall1(SYS_thr_exit, &self->dead);   /* the kernel sets `dead' and wakes the joiner */
 }
 
 extern __typeof(__pthread_exit) pthread_exit __attribute__((weak, alias("__pthread_exit")));

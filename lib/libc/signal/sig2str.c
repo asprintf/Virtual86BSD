@@ -33,9 +33,9 @@
 #include <errno.h>
 
 static const char names[][8] = {
-	"", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "BUS", "FPE", "KILL", "USR1",
-	"SEGV", "USR2", "PIPE", "ALRM", "TERM", "STKFLT", "CHLD", "CONT", "STOP", "TSTP",
-	"TTIN", "TTOU", "URG", "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "POLL", "PWR", "SYS",
+	"", "HUP", "INT", "QUIT", "ILL", "TRAP", "ABRT", "EMT", "FPE", "KILL", "BUS",
+	"SEGV", "SYS", "PIPE", "ALRM", "TERM", "URG", "STOP", "TSTP", "CONT", "CHLD",
+	"TTIN", "TTOU", "IO", "XCPU", "XFSZ", "VTALRM", "PROF", "WINCH", "INFO", "USR1", "USR2",
 };
 
 int sig2str(int sig, char *s)
@@ -78,7 +78,7 @@ int str2sig(const char *__RESTRICT s, int *__RESTRICT sig)
 	for (i = 1; i < 32; i++)
 		if (!strcmp(s, names[i])) { *sig = i; return 0; }
 	if (!strcmp(s, "IOT")) { *sig = SIGABRT; return 0; }
-	if (!strcmp(s, "IO")) { *sig = SIGIO; return 0; }
+	if (!strcmp(s, "POLL")) { *sig = SIGPOLL; return 0; }
 	if (!strncmp(s, "RTMIN", 5)) {
 		if (!s[5]) { *sig = SIGRTMIN; return 0; }
 		if (s[5] == '+' && !num(s + 6, &n) && SIGRTMIN + n <= SIGRTMAX) { *sig = SIGRTMIN + n; return 0; }

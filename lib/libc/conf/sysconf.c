@@ -56,7 +56,7 @@ static const long values[] = {
 	[_SC_ASYNCHRONOUS_IO] = VER, [_SC_ATEXIT_MAX] = ATEXIT_MAX, [_SC_BARRIERS] = VER,
 	[_SC_BC_BASE_MAX] = BC_BASE_MAX, [_SC_BC_DIM_MAX] = BC_DIM_MAX,
 	[_SC_BC_SCALE_MAX] = BC_SCALE_MAX, [_SC_BC_STRING_MAX] = BC_STRING_MAX,
-	[_SC_CHILD_MAX] = RLIM(6 /* RLIMIT_NPROC */), [_SC_CLK_TCK] = 100,
+	[_SC_CHILD_MAX] = RLIM(7 /* RLIMIT_NPROC */), [_SC_CLK_TCK] = 128,
 	[_SC_CLOCK_SELECTION] = VER, [_SC_COLL_WEIGHTS_MAX] = COLL_WEIGHTS_MAX,
 	[_SC_CPUTIME] = VER, [_SC_DELAYTIMER_MAX] = DELAYTIMER_MAX,
 	[_SC_DEVICE_CONTROL] = VER, [_SC_EXPR_NEST_MAX] = EXPR_NEST_MAX,
@@ -74,7 +74,7 @@ static const long values[] = {
 	[_SC_REALTIME_SIGNALS] = VER, [_SC_REGEXP] = 1, [_SC_RTSIG_MAX] = SIGRTMAX - SIGRTMIN + 1,
 	[_SC_SAVED_IDS] = 1, [_SC_SEM_NSEMS_MAX] = -1, [_SC_SEM_VALUE_MAX] = SEM_VALUE_MAX,
 	[_SC_SEMAPHORES] = VER, [_SC_SHARED_MEMORY_OBJECTS] = VER, [_SC_SHELL] = 1,
-	[_SC_SIGQUEUE_MAX] = RLIM(11 /* RLIMIT_SIGPENDING */), [_SC_SPAWN] = VER,
+	[_SC_SIGQUEUE_MAX] = 128, [_SC_SPAWN] = VER,
 	[_SC_SPIN_LOCKS] = VER, [_SC_SPORADIC_SERVER] = SPORADIC, [_SC_SS_REPL_MAX] = SSREPL,
 	[_SC_STREAM_MAX] = -1, [_SC_SYMLOOP_MAX] = SYMLOOP_MAX, [_SC_SYNCHRONIZED_IO] = VER,
 	[_SC_THREAD_ATTR_STACKADDR] = VER, [_SC_THREAD_ATTR_STACKSIZE] = VER,
@@ -107,14 +107,13 @@ static const long values[] = {
 	[_SC_XOPEN_STREAMS] = -1,
 };
 
-/* Count the CPUs in a kernel cpu mask. */
+/* The number of CPUs (sysctl hw.ncpu). */
 static long ncpus(void)
 {
-	unsigned char set[128];
-	long r = __syscall3(SYS_sched_getaffinity, 0, sizeof set, set), n = 0, i;
-	if (r <= 0) return 1;
-	for (i = 0; i < r; i++) { unsigned c = set[i]; for (; c; c &= c - 1) n++; }
-	return n ? n : 1;
+	int mib[2] = { 6 /* CTL_HW */, 3 /* HW_NCPU */ }, n = 0;
+	size_t l = sizeof n;
+	if (__syscall6x(SYS___sysctl, mib, 2, &n, &l, 0, 0) < 0) return 1;
+	return n > 0 ? n : 1;
 }
 
 long sysconf(int name)
@@ -124,11 +123,11 @@ long sysconf(int name)
 	v = values[name];
 	if (v >= -1) return v;
 	switch (v) {
-	case -2: {   /* ARG_MAX: a quarter of the stack limit, as Linux allows */
-		struct rlimit l;
-		if (getrlimit(RLIMIT_STACK, &l) || l.rlim_cur == RLIM_INFINITY) return 2097152;
-		v = (long)(l.rlim_cur / 4);
-		return v < _POSIX_ARG_MAX ? _POSIX_ARG_MAX : v;
+	case -2: {   /* ARG_MAX: sysctl kern.argmax */
+		int mib[2] = { 1 /* CTL_KERN */, 8 /* KERN_ARGMAX */ }, n = 0;
+		size_t l = sizeof n;
+		if (__syscall6x(SYS___sysctl, mib, 2, &n, &l, 0, 0) < 0 || n < _POSIX_ARG_MAX) return 262144;
+		return n;
 	}
 	case CPUS_CONF: case CPUS_ONLN: return ncpus();
 	case PAGESZ: return (long)__libc.page_size;

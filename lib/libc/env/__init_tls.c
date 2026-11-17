@@ -54,11 +54,12 @@ unsigned long __getauxval(unsigned long);
 static unsigned long builtin_tls[(BUILTIN_TLS_SIZE + sizeof(struct __pthread)) / sizeof(long) + 2];
 static struct __tls_module main_tls;
 
-#define ARCH_SET_FS 0x1002
+#define AMD64_SET_FSBASE 129
 
 int __set_thread_area(void *p)
 {
-	return (int)__syscall2(SYS_arch_prctl, ARCH_SET_FS, p);
+	unsigned long base = (unsigned long)p;
+	return (int)__syscall2(SYS_sysarch, AMD64_SET_FSBASE, &base);
 }
 
 /* The area's size and alignment from the modules (__libc.tls_head, with
@@ -109,21 +110,19 @@ struct __pthread *__copy_tls(unsigned char *mem)
 void __init_tp(struct __pthread *td)
 {
 	const unsigned char *rnd;
-	if (__set_thread_area(td) < 0) for (;;) __syscall1(SYS_exit_group, 127);
+	if (__set_thread_area(td) < 0) for (;;) __syscall1(SYS__exit, 127);
 
-	/* Stack-protector canary from the kernel's AT_RANDOM bytes; the low
+	/* Stack-protector canary from the kernel's AT_CANARY bytes; the low
 	 * byte is zeroed so string overflows cannot reproduce it. */
-	rnd = (const unsigned char *)__getauxval(AT_RANDOM);
+	rnd = (const unsigned char *)__getauxval(AT_CANARY);
 	if (rnd) {
 		memcpy(&td->canary, rnd, sizeof td->canary);
 		memcpy(&td->pointer_guard, rnd + 8, sizeof td->pointer_guard);
 	}
 	td->canary &= ~0xffUL;
-	/* the kernel clears detach_state (to DT_EXITED) when the thread ends,
-	 * which is what pthread_join() waits for */
-	td->tid = (int)__syscall1(SYS_set_tid_address, &td->detach_state);
+	td->tid = (int)__thr_self();
 	td->detach_state = DT_JOINABLE;
-	td->robust_list.head = &td->robust_list.head;
+	td->robust_list.head = 0;
 	td->next = td->prev = td;
 }
 
@@ -135,8 +134,8 @@ void __init_main_tls(void)
 		mem = (unsigned char *)builtin_tls;
 	} else {
 		long r = __syscall6x(SYS_mmap, 0, __libc.tls_area_size, 3 /*RW*/,
-		                     0x22 /*PRIVATE|ANON*/, -1, 0);
-		if ((unsigned long)r > -4096UL) for (;;) __syscall1(SYS_exit_group, 127);
+		                     0x1002 /*PRIVATE|ANON*/, -1, 0);
+		if ((unsigned long)r > -4096UL) for (;;) __syscall1(SYS__exit, 127);
 		mem = (unsigned char *)r;
 	}
 	__init_tp(__copy_tls(mem));

@@ -37,63 +37,65 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include "syscall.h"
-#include "clofork.h"
 
-#define TYPEFLAGS (SOCK_NONBLOCK | SOCK_CLOEXEC)
-
-static int clofork(int fd, int on)
-{
-	if (fd >= 0 && on && __clofork_set(fd, 1) < 0) {
-		__syscall1(SYS_close, fd);
-		errno = ENOMEM;
-		return -1;
-	}
-	return fd;
-}
+#define TYPEFLAGS (SOCK_NONBLOCK | SOCK_CLOEXEC | SOCK_CLOFORK)
 
 int socket(int domain, int type, int proto)
 {
-	if ((type & SOCK_CLOFORK) && __clofork_native())
-		return (int)__sys3(SYS_socket, domain, type, proto);
-	int fd = (int)__sys3(SYS_socket, domain, type & ~SOCK_CLOFORK, proto);
-	return clofork(fd, type & SOCK_CLOFORK);
+	return (int)__sys3(SYS_socket, domain, type, proto);
 }
 
 int socketpair(int domain, int type, int proto, int fd[2])
 {
-	if ((type & SOCK_CLOFORK) && __clofork_native())
-		return (int)__sys4(SYS_socketpair, domain, type, proto, fd);
-	if (__sys4(SYS_socketpair, domain, type & ~SOCK_CLOFORK, proto, fd) < 0)
-		return -1;
-	if (type & SOCK_CLOFORK) {
-		if (__clofork_set(fd[0], 1) < 0 || __clofork_set(fd[1], 1) < 0) {
-			__syscall1(SYS_close, fd[0]);
-			__syscall1(SYS_close, fd[1]);
-			errno = ENOMEM;
-			return -1;
-		}
-	}
-	return 0;
+	return (int)__sys4(SYS_socketpair, domain, type, proto, fd);
 }
 
 int bind(int fd, const struct sockaddr *a, socklen_t n) { return (int)__sys3(SYS_bind, fd, a, n); }
-int connect(int fd, const struct sockaddr *a, socklen_t n) { return (int)__sys_cp3(SYS_connect, fd, a, n); }
+static int sotype(int fd)
+{
+	int t;
+	socklen_t l = sizeof t;
+	return __sys5(SYS_getsockopt, fd, SOL_SOCKET, SO_TYPE, &t, &l) < 0 ? -1 : t;
+}
+
+/* the kernel has already dissolved the association when it refuses AF_UNSPEC */
+int connect(int fd, const struct sockaddr *a, socklen_t n)
+{
+	int r = (int)__sys_cp3(SYS_connect, fd, a, n);
+	if (r < 0 && errno == EAFNOSUPPORT && a && a->sa_family == AF_UNSPEC) {
+		int e = errno, t = sotype(fd);
+		errno = e;
+		if (t == SOCK_DGRAM)
+			return 0;
+	}
+	return r;
+}
+
+/* the kernel says EINVAL for a socket that is not listening, whatever its type */
+static int accepterr(int fd, int r)
+{
+	if (r < 0 && errno == EINVAL) {
+		int t = sotype(fd);
+		errno = EINVAL;
+		if (t >= 0 && t != SOCK_STREAM && t != SOCK_SEQPACKET)
+			errno = EOPNOTSUPP;
+	}
+	return r;
+}
 int listen(int fd, int backlog) { return (int)__sys2(SYS_listen, fd, backlog); }
 
 int accept(int fd, struct sockaddr *__RESTRICT a, socklen_t *__RESTRICT n)
 {
-	return (int)__sys_cp4(SYS_accept4, fd, a, n, 0);
+	return accepterr(fd, (int)__sys_cp3(SYS_accept, fd, a, n));
 }
 
 int accept4(int fd, struct sockaddr *__RESTRICT a, socklen_t *__RESTRICT n, int flags)
 {
-	if (flags & ~(TYPEFLAGS | SOCK_CLOFORK)) {
+	if (flags & ~TYPEFLAGS) {
 		errno = EINVAL;
 		return -1;
 	}
-	if ((flags & SOCK_CLOFORK) && __clofork_native())
-		return (int)__sys_cp4(SYS_accept4, fd, a, n, flags);
-	return clofork((int)__sys_cp4(SYS_accept4, fd, a, n, flags & TYPEFLAGS), flags & SOCK_CLOFORK);
+	return accepterr(fd, (int)__sys_cp4(SYS_accept4, fd, a, n, flags));
 }
 
 int getsockname(int fd, struct sockaddr *__RESTRICT a, socklen_t *__RESTRICT n) { return (int)__sys3(SYS_getsockname, fd, a, n); }
@@ -133,72 +135,13 @@ ssize_t recvfrom(int fd, void *__RESTRICT b, size_t n, int flags, struct sockadd
 
 ssize_t recv(int fd, void *b, size_t n, int flags) { return recvfrom(fd, b, n, flags, 0, 0); }
 
-/* the kernel's struct msghdr */
-struct kmsghdr {
-	void *name;
-	unsigned long namelen_unused;   /* int namelen + pad: as ours */
-	struct iovec *iov;
-	unsigned long iovlen;
-	void *control;
-	unsigned long controllen;
-	unsigned long flags;
-};
-
-static void kmsg(struct kmsghdr *k, const struct msghdr *m)
-{
-	k->name = m->msg_name;
-	k->namelen_unused = m->msg_namelen;
-	k->iov = m->msg_iov;
-	k->iovlen = (unsigned long)(unsigned)m->msg_iovlen;
-	k->control = m->msg_control;
-	k->controllen = m->msg_controllen;
-	k->flags = (unsigned)m->msg_flags;
-}
-
+/* (the kernel's struct msghdr is ours) */
 ssize_t sendmsg(int fd, const struct msghdr *m, int flags)
 {
-	struct kmsghdr k;
-	unsigned char buf[1024];
-	struct cmsghdr *c;
-	struct msghdr mm;
-	kmsg(&k, m);
-	if (m->msg_controllen) {
-		/* each cmsg_len is 64-bit for the kernel: clear the padding */
-		if (m->msg_controllen > sizeof buf) {
-			errno = ENOMEM;
-			return -1;
-		}
-		memcpy(buf, m->msg_control, m->msg_controllen);
-		mm = *m;
-		mm.msg_control = buf;
-		for (c = CMSG_FIRSTHDR(&mm); c; c = CMSG_NXTHDR(&mm, c))
-			c->__pad1 = 0;
-		k.control = buf;
-	}
-	return __sys_cp3(SYS_sendmsg, fd, &k, flags);
+	return __sys_cp3(SYS_sendmsg, fd, m, flags);
 }
 
 ssize_t recvmsg(int fd, struct msghdr *m, int flags)
 {
-	struct kmsghdr k;
-	struct cmsghdr *c;
-	ssize_t r;
-	kmsg(&k, m);
-	int native = (flags & MSG_CMSG_CLOFORK) && __clofork_native();
-	r = __sys_cp3(SYS_recvmsg, fd, &k, native ? flags : flags & ~MSG_CMSG_CLOFORK);
-	if (r < 0)
-		return r;
-	m->msg_namelen = (socklen_t)k.namelen_unused;
-	m->msg_controllen = (socklen_t)k.controllen;
-	m->msg_flags = (int)k.flags;
-	for (c = CMSG_FIRSTHDR(m); c; c = CMSG_NXTHDR(m, c)) {
-		c->__pad1 = 0;
-		if ((flags & MSG_CMSG_CLOFORK) && !native && c->cmsg_level == SOL_SOCKET && c->cmsg_type == SCM_RIGHTS) {
-			int *fds = (int *)CMSG_DATA(c);
-			size_t i, n = (c->cmsg_len - CMSG_LEN(0)) / sizeof(int);
-			for (i = 0; i < n; i++)
-				__clofork_set(fds[i], 1);
-		}
-	}
-	return r;
+	return __sys_cp3(SYS_recvmsg, fd, m, flags);
 }

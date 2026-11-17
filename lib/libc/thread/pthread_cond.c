@@ -152,7 +152,7 @@ static int cond_wait(pthread_cond_t *__RESTRICT c, pthread_mutex_t *__RESTRICT m
 	int kind = m->_m_type & 3;
 
 	if ((kind != PTHREAD_MUTEX_NORMAL || (m->_m_type & __M_ROBUST)) &&
-	    (m->__vi[1] & 0x3fffffff) != __pthread_self()->tid)
+	    ((unsigned)m->_m_lock & ~UMUTEX_CONTESTED) != (unsigned)__pthread_self()->tid)
 		return EPERM;
 	if (at && (unsigned long)at->tv_nsec >= 1000000000UL)
 		return EINVAL;

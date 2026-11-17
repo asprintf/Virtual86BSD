@@ -42,5 +42,16 @@ unsigned sleep(unsigned sec)
 	return 0;
 }
 
-unsigned alarm(unsigned sec) { return (unsigned)__syscall1(SYS_alarm, sec); }
-int pause(void) { return (int)__sys_cp4(SYS_ppoll, 0, 0, 0, 0); }
+unsigned alarm(unsigned sec)
+{
+	struct { struct ktimespec i, v; } nw = { { 0, 0 }, { (long)sec, 0 } }, old;   /* itimerval: usec */
+	if (__syscall3(SYS_setitimer, 0 /* ITIMER_REAL */, &nw, &old) < 0) return 0;
+	return (unsigned)old.v.tv_sec + (old.v.tv_nsec > 0);
+}
+
+int pause(void)
+{
+	__sm_t m;
+	__syscall3(SYS_sigprocmask, 1 /* SIG_BLOCK */, 0, &m);
+	return (int)__sys_cp1(SYS_sigsuspend, &m);
+}

@@ -28,7 +28,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Internal: system call interface.
+/* Internal: system call interface, FreeBSD's.  The kernel returns an error
+ * with the carry flag set and the positive errno in %rax; the call stubs
+ * (here and in arch/x86_64/syscall.s) turn that into -errno, so the code
+ * tells failure by a result in [-4095, -1] as it always did.
  *
  * __syscallN() return the raw kernel result (-errno on failure);
  * __syscall_ret() converts that to the C convention (-1 and errno).
@@ -42,6 +45,9 @@
 long __syscall6(long, long, long, long, long, long, long);
 long __syscall_ret(unsigned long);
 
+/* a signal set as the kernel's sigset_t: 128 bits, signal n is bit n-1 */
+typedef struct { unsigned long __w[2]; } __sm_t;
+
 #if defined(__GNUC__) || defined(__clang__)
 static inline long __sc(long n, long a, long b, long c, long d, long e, long f)
 {
@@ -49,9 +55,10 @@ static inline long __sc(long n, long a, long b, long c, long d, long e, long f)
 	register long r8 __asm__("r8") = e;
 	register long r9 __asm__("r9") = f;
 	long ret;
-	__asm__ __volatile__ ("syscall" : "=a"(ret)
-		: "a"(n), "D"(a), "S"(b), "d"(c), "r"(r10), "r"(r8), "r"(r9)
-		: "rcx", "r11", "memory");
+	/* the kernel returns %r8-%r10 zeroed */
+	__asm__ __volatile__ ("syscall; jnc 1f; neg %%rax; 1:" : "=a"(ret), "+d"(c), "+r"(r10), "+r"(r8), "+r"(r9)
+		: "a"(n), "D"(a), "S"(b)
+		: "rcx", "r11", "cc", "memory");
 	return ret;
 }
 #else
@@ -77,6 +84,27 @@ static inline long __sc(long n, long a, long b, long c, long d, long e, long f)
 #define __sys6(n,a,b,c,d,e,f) __syscall_ret(__syscall6x(n,a,b,c,d,e,f))
 
 
+
+/* a system call whose result may look like an error (getpriority): the
+ * carry flag tells; *err is the positive errno or 0 */
+static inline long __syscall2_cf(long n, long a, long b, long *err)
+{
+	long ret;
+	unsigned char cf;
+	long c = 0;
+	__asm__ __volatile__ ("syscall" : "=a"(ret), "=@ccc"(cf), "+d"(c)
+		: "a"(n), "D"(a), "S"(b) : "rcx", "r8", "r9", "r10", "r11", "memory");
+	*err = cf ? ret : 0;
+	return ret;
+}
+
+/* the kernel's id of the calling thread (thr_self) */
+static inline long __thr_self(void)
+{
+	long id = 0;
+	__syscall1(SYS_thr_self, &id);
+	return id;
+}
 
 /* System calls that are cancellation points (src/thread/__syscall_cp.c). */
 long __syscall_cp_c(long, long, long, long, long, long, long);

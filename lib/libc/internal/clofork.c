@@ -44,18 +44,12 @@ static unsigned long builtin[1024 / WBITS];
 static unsigned long *map = builtin;
 static size_t nwords = sizeof builtin / sizeof *builtin;
 
-/* does the kernel keep FD_CLOFORK?  Linux ignores O_CLOFORK in open and
- * FD_CLOFORK in F_SETFD, and F_GETFD then does not report it */
+/* the kernel keeps FD_CLOFORK (O_CLOFORK, F_DUPFD_CLOFORK, SOCK_CLOFORK ...)
+ * itself and closes those descriptors in the child of a fork; what is below
+ * for kernels that do not is not reached */
 int __clofork_native(void)
 {
-	static volatile int native = -1;
-	if (native < 0) {
-		long fd = __syscall4(SYS_openat, AT_FDCWD, "/", O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_CLOFORK, 0);
-		long fl = fd >= 0 ? __syscall2(SYS_fcntl, fd, F_GETFD) : -1;
-		if (fd >= 0) __syscall1(SYS_close, fd);
-		native = fl >= 0 && (fl & FD_CLOFORK);
-	}
-	return native;
+	return 1;
 }
 
 int __clofork_set(int fd, int on)

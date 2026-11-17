@@ -28,9 +28,10 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Named semaphores: files /dev/shm/sem.NAME holding a sem_t, mapped
- * shared.  A new one is made under a temporary name and linked into
- * place, so no process ever sees it uninitialised.  Opening a name again
+/* Named semaphores: shared memory objects /sem.NAME holding a sem_t, mapped
+ * shared.  A new one is made under a temporary name and renamed into
+ * place (shm_rename, SHM_RENAME_NOREPLACE), so no process ever sees it
+ * uninitialised.  Opening a name again
  * returns the same address (POSIX), so the mappings are counted. */
 #include <errno.h>
 #include <fcntl.h>
@@ -44,13 +45,16 @@
 #include <time.h>
 #include <unistd.h>
 #include "lock.h"
+#include "syscall.h"
+
+#define SHM_RENAME_NOREPLACE 1
 
 #define MAXOPEN 256
 
 static struct { dev_t dev; ino_t ino; sem_t *sem; int refs; } table[MAXOPEN];
 static volatile int lock;
 
-/* /dev/shm/sem.NAME, or 0 (errno set) */
+/* /sem.NAME, or 0 (errno set) */
 static char *path(const char *name, char *buf)
 {
 	size_t n;
@@ -65,8 +69,8 @@ static char *path(const char *name, char *buf)
 		errno = ENAMETOOLONG;
 		return 0;
 	}
-	memcpy(buf, "/dev/shm/sem.", 13);
-	memcpy(buf + 13, name, n + 1);
+	memcpy(buf, "/sem.", 5);
+	memcpy(buf + 5, name, n + 1);
 	return buf;
 }
 
@@ -113,6 +117,7 @@ sem_t *sem_open(const char *name, int flags, ...)
 	unsigned value = 0;
 	sem_t init, *s;
 	int fd, tries;
+	long r;
 	struct timespec ts;
 
 	if (!path(name, p))
@@ -120,7 +125,7 @@ sem_t *sem_open(const char *name, int flags, ...)
 	if (flags & O_CREAT) {
 		va_list ap;
 		va_start(ap, flags);
-		mode = va_arg(ap, mode_t);
+		mode = (mode_t)va_arg(ap, int);
 		value = va_arg(ap, unsigned);
 		va_end(ap);
 		if (value > SEM_VALUE_MAX) {
@@ -130,7 +135,7 @@ sem_t *sem_open(const char *name, int flags, ...)
 	}
 	for (tries = 0; tries < 100; tries++) {
 		if ((flags & (O_CREAT | O_EXCL)) != (O_CREAT | O_EXCL)) {
-			fd = open(p, O_RDWR | O_NOFOLLOW | O_CLOEXEC);
+			fd = shm_open(p, O_RDWR, 0);
 			if (fd >= 0) {
 				s = map(fd);
 				close(fd);
@@ -141,29 +146,31 @@ sem_t *sem_open(const char *name, int flags, ...)
 		}
 		/* create it under another name, then link it into place */
 		clock_gettime(CLOCK_REALTIME, &ts);
-		snprintf(tmp, sizeof tmp, "/dev/shm/tmp-sem.%ld.%ld.%d", (long)getpid(), ts.tv_nsec, tries);
-		fd = open(tmp, O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, mode);
+		snprintf(tmp, sizeof tmp, "/tmp-sem.%ld.%ld.%d", (long)getpid(), ts.tv_nsec, tries);
+		fd = shm_open(tmp, O_RDWR | O_CREAT | O_EXCL, mode);
 		if (fd < 0) {
 			if (errno == EEXIST)
 				continue;
 			return SEM_FAILED;
 		}
 		sem_init(&init, 1, value);
-		if (write(fd, &init, sizeof init) != sizeof init) {
+		if (ftruncate(fd, sizeof init) < 0 ||
+		    (s = mmap(0, sizeof init, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0)) == MAP_FAILED) {
 			close(fd);
-			unlink(tmp);
+			shm_unlink(tmp);
 			return SEM_FAILED;
 		}
-		if (link(tmp, p) < 0) {
-			int e = errno;
+		memcpy(s, &init, sizeof init);
+		munmap(s, sizeof init);
+		if ((r = __syscall3(SYS_shm_rename, tmp, p, SHM_RENAME_NOREPLACE)) < 0) {
+			int e = (int)-r;
 			close(fd);
-			unlink(tmp);
+			shm_unlink(tmp);
 			if (e == EEXIST && !(flags & O_EXCL))
 				continue;
 			errno = e;
 			return SEM_FAILED;
 		}
-		unlink(tmp);
 		s = map(fd);
 		close(fd);
 		return s;
@@ -193,9 +200,9 @@ int sem_unlink(const char *name)
 	char p[NAME_MAX + 16];
 	if (!path(name, p))
 		return -1;
-	if (unlink(p) == 0)
+	if (shm_unlink(p) == 0)
 		return 0;
 	if (errno == EPERM)
-		errno = EACCES;     /* the sticky /dev/shm: POSIX says EACCES */
+		errno = EACCES;     /* POSIX says EACCES */
 	return -1;
 }

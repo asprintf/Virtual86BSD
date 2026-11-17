@@ -73,7 +73,7 @@ FILE *__fdopen(int fd, const char *mode)
 	f->flags |= F_SVB;
 	if (!(f->flags & F_NOWR)) {
 		struct { unsigned short r, c, x, y; } ws;
-		if (!__syscall3(SYS_ioctl, fd, 0x5413 /* TIOCGWINSZ */, &ws)) f->lbf = '\n';
+		if (!__syscall3(SYS_ioctl, fd, 0x40087468 /* TIOCGWINSZ */, &ws)) f->lbf = '\n';
 	}
 	f->read = __stdio_read;
 	f->write = __stdio_write;

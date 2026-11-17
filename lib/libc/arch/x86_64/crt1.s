@@ -26,14 +26,14 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# Process entry point.  The kernel leaves argc at (%rsp), followed by
-# argv[], NULL, envp[], NULL, auxv[].
+# Process entry point.  The kernel (and the dynamic linker) pass the address
+# of argc in %rdi (%rsp is not it), followed by argv[], NULL, envp[], NULL,
+# auxv[].
 	.text
 	.globl	_start
 	.type	_start,@function
 _start:
 	xor	%ebp,%ebp		# mark the outermost frame
-	mov	%rsp,%rdi		# arg 1: initial stack pointer
 	lea	main(%rip),%rsi		# arg 2: main
 	and	$-16,%rsp		# ABI stack alignment
 	call	__libc_start_main

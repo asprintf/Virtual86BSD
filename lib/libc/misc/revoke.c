@@ -28,22 +28,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* revoke(2): take a device away from every process that has it open (the
-   open files of the device end as dead files, a terminal's session is hung
-   up).  Native only: the Linux ABI has no such call. */
 #define _DEFAULT_SOURCE
-#include <abi.h>
-#include <errno.h>
 #include <unistd.h>
 #include "syscall.h"
 
 int revoke(const char *path)
 {
-#ifdef __V86BSD_NATIVE_ABI
-	return __sys1(SYS_revoke, path);
-#else
-	(void)path;
-	errno = ENOSYS;
-	return -1;
-#endif
+	return (int)__sys1(SYS_revoke, path);
 }

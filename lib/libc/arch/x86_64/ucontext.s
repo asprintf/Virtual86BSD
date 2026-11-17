@@ -26,130 +26,47 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# getcontext, setcontext, swapcontext: SUSv2, SUSv3.  setcontext builds a
-# signal frame and calls rt_sigreturn, so signal handler contexts work too.
-
-	.set	UC_STACK, 16
-	.set	G, 40			# uc_mcontext's general registers
-	.set	FPREGS, 224
-	.set	MASK, 296
-	.set	FPMEM, 424
-
-# save the caller's context into %rdi's ucontext_t (return address at
-# off(%rsp)); it resumes returning 0; %r8 holds the ucontext_t after
-	.macro	SAVE off
-	mov	%r8,G+0(%rdi)
-	mov	%r9,G+8(%rdi)
-	mov	%r10,G+16(%rdi)
-	mov	%r11,G+24(%rdi)
-	mov	%r12,G+32(%rdi)
-	mov	%r13,G+40(%rdi)
-	mov	%r14,G+48(%rdi)
-	mov	%r15,G+56(%rdi)
-	mov	%rdi,G+64(%rdi)
-	mov	%rsi,G+72(%rdi)
-	mov	%rbp,G+80(%rdi)
-	mov	%rbx,G+88(%rdi)
-	mov	%rdx,G+96(%rdi)
-	movq	$0,G+104(%rdi)		# rax: the function returns 0
-	mov	%rcx,G+112(%rdi)
-	lea	\off+8(%rsp),%rax
-	mov	%rax,G+120(%rdi)	# rsp: after the return
-	mov	\off(%rsp),%rax
-	mov	%rax,G+128(%rdi)	# rip: the return address
-	pushfq
-	pop	%rax
-	mov	%rax,G+136(%rdi)
-	movabs	$0x002b000000000033,%rax
-	mov	%rax,G+144(%rdi)	# cs (user code), gs, fs, ss (user data)
-	xor	%eax,%eax
-	mov	%rax,G+152(%rdi)	# err, trapno, oldmask, cr2
-	mov	%rax,G+160(%rdi)
-	mov	%rax,G+168(%rdi)
-	mov	%rax,G+176(%rdi)
-	mov	%rax,(%rdi)		# uc_flags
-	mov	%rax,8(%rdi)		# uc_link: none
-	mov	%rdi,%r8
-	# FPU state, via an aligned buffer
-	mov	%rsp,%r9
-	sub	$512,%rsp
-	and	$-16,%rsp
-	fxsave	(%rsp)
-	mov	%rsp,%rsi
-	lea	FPMEM(%r8),%rdi
-	mov	$64,%ecx
-	rep	movsq
-	mov	%r9,%rsp
-	lea	FPMEM(%r8),%rax
-	mov	%rax,FPREGS(%r8)
-	xor	%eax,%eax
-	lea	FPREGS+8(%r8),%rdi	# the reserved words
-	mov	$8,%ecx
-	rep	stosq
-	# the signal mask
-	lea	MASK(%r8),%rdi
-	mov	$16,%ecx
-	rep	stosq
-	xor	%edi,%edi
-	xor	%esi,%esi
-	lea	MASK(%r8),%rdx
-	mov	$8,%r10d
-	mov	$SYS_rt_sigprocmask,%eax
-	syscall
-	# uc_stack: the alternate signal stack
-	xor	%edi,%edi
-	lea	UC_STACK(%r8),%rsi
-	mov	$SYS_sigaltstack,%eax
-	syscall
-	.endm
-
+# getcontext, setcontext, swapcontext: SUSv2, SUSv3.  The kernel has them
+# (getcontext, setcontext and swapcontext system calls, FreeBSD's mcontext_t);
+# an error comes back as -1 with errno set.
 	.text
 	.globl	getcontext
 	.type	getcontext,@function
 getcontext:
-	SAVE	0
-	xor	%eax,%eax
+	mov	$SYS_getcontext,%eax
+	syscall
+	jc	1f
 	ret
+1:	mov	%rax,%rdi
+	neg	%rdi
+	jmp	__syscall_ret
 	.size	getcontext,.-getcontext
 
-	.globl	swapcontext
-	.type	swapcontext,@function
-swapcontext:
-	push	%rsi
-	SAVE	8
-	pop	%rdi
-	jmp	setcontext
-	.size	swapcontext,.-swapcontext
-
+	.text
 	.globl	setcontext
 	.type	setcontext,@function
 setcontext:
-	mov	%rdi,%r8
-	sub	$1024,%rsp
-	and	$-64,%rsp
-	# (%rsp): FPU image, 512(%rsp): the frame
-	mov	FPREGS(%r8),%rsi
-	xor	%r9d,%r9d
-	test	%rsi,%rsi
-	jz	1f
-	mov	%rsp,%rdi
-	mov	$64,%ecx
-	rep	movsq
-	mov	%rsp,%r9
-1:	lea	520(%rsp),%rdi
-	mov	%r8,%rsi
-	mov	$38,%ecx
-	rep	movsq
-	mov	%r9,520+FPREGS(%rsp)
-	xor	%edi,%edi
-	lea	520+UC_STACK(%rsp),%rsi
-	mov	$SYS_sigaltstack,%eax
+	mov	$SYS_setcontext,%eax
 	syscall
-	lea	520(%rsp),%rsp
-	mov	$SYS_rt_sigreturn,%eax
-	syscall
-	ud2				# the kernel refused the frame: SIGSEGV
+	jc	1f
+	ret
+1:	mov	%rax,%rdi
+	neg	%rdi
+	jmp	__syscall_ret
 	.size	setcontext,.-setcontext
+
+	.text
+	.globl	swapcontext
+	.type	swapcontext,@function
+swapcontext:
+	mov	$SYS_swapcontext,%eax
+	syscall
+	jc	1f
+	ret
+1:	mov	%rax,%rdi
+	neg	%rdi
+	jmp	__syscall_ret
+	.size	swapcontext,.-swapcontext
 
 # makecontext's functions return here: resume uc_link (%rbx) or exit the thread
 	.globl	__start_context

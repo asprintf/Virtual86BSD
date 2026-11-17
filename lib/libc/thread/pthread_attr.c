@@ -117,7 +117,7 @@ int pthread_attr_setinheritsched(pthread_attr_t *a, int s)
  * priority, 40-47 the maximum of pending replenishments; the initial
  * budget and the replenishment period, in microseconds, are _a_sched from
  * bit 16 and _a_flags from bit 2. */
-#define POLICY(a) ((int)(((a)->_a_sched >> 8) & 0xff))
+#define POLICY(a) ((int)(((a)->_a_sched >> 8) & 0xff) ?: SCHED_OTHER)
 #define US(ts) ((unsigned long)(ts).tv_sec * 1000000UL + (unsigned long)(ts).tv_nsec / 1000)
 
 int pthread_attr_getschedpolicy(const pthread_attr_t *__RESTRICT a, int *__RESTRICT p) { *p = POLICY(a); return 0; }

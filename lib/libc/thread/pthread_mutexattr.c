@@ -33,17 +33,17 @@
 #include <errno.h>
 #include <pthread.h>
 #include "pthread_impl.h"
+#include "atomic.h"
 
 int __pthread_mutex_setceiling(pthread_mutex_t *, int, int *);
 
-#define TID_MASK 0x3fffffff
 
 int pthread_mutex_consistent(pthread_mutex_t *m)
 {
-	if ((m->_m_type & (__M_ROBUST | __M_INCONSISTENT)) != (__M_ROBUST | __M_INCONSISTENT) ||
-	    (int)((unsigned)m->__vi[1] & TID_MASK) != __pthread_self()->tid)
+	if (!(m->_m_type & __M_ROBUST) || !(m->_m_kflags & UMUTEX_NONCONSISTENT) ||
+	    (int)((unsigned)m->_m_lock & ~UMUTEX_CONTESTED) != __pthread_self()->tid)
 		return EINVAL;
-	m->_m_type &= ~__M_INCONSISTENT;
+	a_and(&m->_m_kflags, ~UMUTEX_NONCONSISTENT);
 	return 0;
 }
 
@@ -62,7 +62,7 @@ int pthread_mutex_setprioceiling(pthread_mutex_t *__RESTRICT m, int p, int *__RE
 }
 
 /* attributes: type in bits 0-1, robust 4, protocol in 8-9, process-shared
- * 128, the ceiling in 16-23 (0: the lowest, 1) */
+ * 128, the ceiling in 16-23 */
 int pthread_mutexattr_init(pthread_mutexattr_t *a) { a->__attr = 0; return 0; }
 int pthread_mutexattr_destroy(pthread_mutexattr_t *a) { (void)a; return 0; }
 
@@ -98,15 +98,15 @@ int pthread_mutexattr_setprotocol(pthread_mutexattr_t *a, int p)
 	return 0;
 }
 
-/* within the priorities of SCHED_FIFO */
+/* within the priorities of SCHED_FIFO (the kernel's 0-31; 0 the default) */
 int pthread_mutexattr_getprioceiling(const pthread_mutexattr_t *__RESTRICT a, int *__RESTRICT p)
 {
-	*p = __M_CEIL(a->__attr) ? (int)__M_CEIL(a->__attr) : 1;
+	*p = (int)__M_CEIL(a->__attr);
 	return 0;
 }
 int pthread_mutexattr_setprioceiling(pthread_mutexattr_t *a, int p)
 {
-	if (p < 1 || p > 99) return EINVAL;
+	if (p < 0 || p > 31) return EINVAL;
 	a->__attr = (a->__attr & ~(255u << 16)) | (unsigned)p << 16;
 	return 0;
 }

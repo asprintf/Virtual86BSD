@@ -33,7 +33,6 @@
 	.type	_start,@function
 _start:
 	xor	%ebp,%ebp
-	mov	%rsp,%rdi
 	lea	main(%rip),%rsi
 	and	$-16,%rsp
 	call	__libc_start_main@PLT

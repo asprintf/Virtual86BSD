@@ -44,12 +44,6 @@
 
 #define SIGEV_THREAD_ID 4
 
-struct ksigevent {
-	union sigval value;
-	int signo, notify, tid;
-	int pad[11];
-};
-
 struct start {
 	void (*fn)(union sigval);
 	union sigval val;
@@ -62,7 +56,7 @@ static void *timer_thread(void *p)
 	struct __pthread *self = __pthread_self();
 	void (*fn)(union sigval) = s->fn;
 	union sigval val = s->val;
-	unsigned long set = 1UL << (SIGTIMER - 1);
+	__sm_t set = { { 1UL << (SIGTIMER - 1), 0 } };
 	siginfo_t si;
 	long r;
 	int id;
@@ -70,7 +64,7 @@ static void *timer_thread(void *p)
 	a_store(&s->ready, 1);
 	__wake(&s->ready, 1, 1);
 	for (;;) {
-		r = __syscall4(SYS_rt_sigtimedwait, &set, &si, 0, 8);
+		r = __syscall3(SYS_sigtimedwait, &set, &si, 0);
 		id = self->timer_id;
 		if (id < 0)
 			break;
@@ -78,7 +72,7 @@ static void *timer_thread(void *p)
 			fn(val);
 	}
 	if (id != -1)
-		__syscall1(SYS_timer_delete, id & INT_MAX);
+		__syscall1(SYS_ktimer_delete, id & INT_MAX);
 	return 0;
 }
 
@@ -99,8 +93,8 @@ static int thread_timer(clockid_t c, struct sigevent *sev, timer_t *res)
 	long *a = (long *)attr;
 	struct start s;
 	struct __pthread *td;
-	struct ksigevent ksev;
-	unsigned long set, block = 1UL << (SIGTIMER - 1);
+	struct sigevent ksev;
+	__sm_t set, block = { { 1UL << (SIGTIMER - 1), 0 } };
 	int id, r;
 
 	if (sev->sigev_notify_attributes)
@@ -115,7 +109,7 @@ static int thread_timer(clockid_t c, struct sigevent *sev, timer_t *res)
 	s.val = sev->sigev_value;
 	s.ready = 0;
 	/* the thread inherits the mask with SIGTIMER blocked */
-	__syscall4(SYS_rt_sigprocmask, SIG_BLOCK, &block, &set, 8);
+	__syscall3(SYS_sigprocmask, SIG_BLOCK, &block, &set);
 	r = __pthread_create(&td, attr, timer_thread, &s);
 	__restore_sigs(&set);
 	if (r) {
@@ -126,14 +120,14 @@ static int thread_timer(clockid_t c, struct sigevent *sev, timer_t *res)
 		__wait(&s.ready, 0, 1);
 
 	memset(&ksev, 0, sizeof ksev);
-	ksev.value.sival_ptr = 0;
-	ksev.signo = SIGTIMER;
-	ksev.notify = SIGEV_THREAD_ID;
-	ksev.tid = td->tid;
-	r = (int)__syscall3(SYS_timer_create, c, &ksev, &id);
+	ksev.sigev_value.sival_ptr = 0;
+	ksev.sigev_signo = SIGTIMER;
+	ksev.sigev_notify = SIGEV_THREAD_ID;
+	ksev.__un.__tid = td->tid;
+	r = (int)__syscall3(SYS_ktimer_create, c, &ksev, &id);
 	if (r < 0) {
 		td->timer_id = -1;
-		__syscall2(SYS_tkill, td->tid, SIGTIMER);
+		__syscall2(SYS_thr_kill, td->tid, SIGTIMER);
 		errno = -r;
 		return -1;
 	}
@@ -144,21 +138,11 @@ static int thread_timer(clockid_t c, struct sigevent *sev, timer_t *res)
 
 int timer_create(clockid_t c, struct sigevent *__RESTRICT sev, timer_t *__RESTRICT res)
 {
-	struct ksigevent ksev;
 	int id;
 	if (sev && sev->sigev_notify == SIGEV_THREAD)
 		return thread_timer(c, sev, res);
 	if (sev && sev->sigev_notify != SIGEV_SIGNAL && sev->sigev_notify != SIGEV_NONE) { errno = EINVAL; return -1; }
-	memset(&ksev, 0, sizeof ksev);
-	if (sev) {
-		ksev.value = sev->sigev_value;
-		ksev.signo = sev->sigev_signo;
-		ksev.notify = sev->sigev_notify;
-	} else {
-		ksev.signo = SIGALRM;
-		ksev.notify = SIGEV_SIGNAL;
-	}
-	if (__sys3(SYS_timer_create, c, sev ? &ksev : 0, &id) < 0) return -1;
+	if (__sys3(SYS_ktimer_create, c, sev, &id) < 0) return -1;
 	*res = (timer_t)(long)id;
 	return 0;
 }
@@ -169,15 +153,15 @@ int timer_delete(timer_t t)
 	if (td) {
 		/* the thread deletes the kernel timer and ends */
 		td->timer_id |= INT_MIN;
-		__syscall2(SYS_tkill, td->tid, SIGTIMER);
+		__syscall2(SYS_thr_kill, td->tid, SIGTIMER);
 		return 0;
 	}
-	return (int)__sys1(SYS_timer_delete, (long)t);
+	return (int)__sys1(SYS_ktimer_delete, (long)t);
 }
 
-int timer_getoverrun(timer_t t) { return (int)__sys1(SYS_timer_getoverrun, kid(t)); }
-int timer_gettime(timer_t t, struct itimerspec *v) { return (int)__sys2(SYS_timer_gettime, kid(t), v); }
+int timer_getoverrun(timer_t t) { return (int)__sys1(SYS_ktimer_getoverrun, kid(t)); }
+int timer_gettime(timer_t t, struct itimerspec *v) { return (int)__sys2(SYS_ktimer_gettime, kid(t), v); }
 int timer_settime(timer_t t, int flags, const struct itimerspec *__RESTRICT v, struct itimerspec *__RESTRICT old)
 {
-	return (int)__sys4(SYS_timer_settime, kid(t), flags, v, old);
+	return (int)__sys4(SYS_ktimer_settime, kid(t), flags, v, old);
 }

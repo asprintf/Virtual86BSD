@@ -83,7 +83,7 @@ static int bins_ready;
 
 static void *sys_mmap(size_t n)
 {
-	long r = __syscall6x(SYS_mmap, 0, n, 3 /*RW*/, 0x22 /*PRIVATE|ANON*/, -1, 0);
+	long r = __syscall6x(SYS_mmap, 0, n, 3 /*RW*/, 0x1002 /*PRIVATE|ANON*/, -1, 0);
 	return (unsigned long)r > -4096UL ? 0 : (void *)r;
 }
 
@@ -300,16 +300,7 @@ void *realloc(void *p, size_t n)
 	c = CHUNK(p);
 	old = CSIZE(c);
 	if (c->size & C_MMAP) {
-		size_t off = c->psize, len = page_round(sz + off);
-		long r;
-		if (sz >= MMAP_THRESHOLD / 2) {
-			r = __syscall5(SYS_mremap, (char *)c - off, old + off, len, 1 /*MAYMOVE*/, 0);
-			if ((unsigned long)r <= -4096UL) {
-				c = (struct chunk *)((char *)r + off);
-				c->size = (len - off) | C_MMAP | C_INUSE;
-				return MEM(c);
-			}
-		}
+		/* (no mremap in the kernel: a bigger block is a new one) */
 		if (sz <= old && sz >= MMAP_THRESHOLD / 2) return p;
 	} else {
 		LOCK(&heap_lock);

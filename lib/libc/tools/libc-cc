@@ -1,17 +1,17 @@
 #!/bin/sh
 # libc-cc COMPILER [args...]
 # Compile and link against this libc instead of the system's, with
-# COMPILER gcc or c17.
+# COMPILER clang (with lld, for the FreeBSD target) or c17.
 #   LIBC_LIB=dir      link with the library in dir (e.g. one built by the
 #                     other compiler) instead of build/COMPILER/lib
 #   LIBC_INCLUDE=dir  compile against the headers in dir instead of ../../include
-#   LIBC_INTERP=path  the program interpreter of a dynamic executable (gcc),
+#   LIBC_INTERP=path  the program interpreter of a dynamic executable (clang),
 #                     instead of LIBC_LIB/libc.so
 #   LIBC_LINK=static  (the default) a static executable
 #   LIBC_LINK=dynamic linked with libc.so, which is also the program
-#                     interpreter (gcc: a PIE; c17: at a fixed address)
-#   LIBC_LINK=static-pie  (gcc) a static position-independent executable
-#   -shared (gcc), -G (c17)  a shared object, linked with libc.so
+#                     interpreter (clang: a PIE; c17: at a fixed address)
+#   LIBC_LINK=static-pie  (clang) a static position-independent executable
+#   -shared (clang), -G (c17)  a shared object, linked with libc.so
 here=$(cd "$(dirname "$0")/.." && pwd)
 include=${LIBC_INCLUDE:-$(cd "$here/../../include" && pwd)}
 cc=$1; shift
@@ -19,37 +19,34 @@ name=$(basename "$cc")
 mode=${LIBC_LINK:-static}
 lib=${LIBC_LIB:-$here/build/$name/lib}
 case $name in
-gcc*|cc)
+*clang*)
 	link=1
 	for a in "$@"; do
 		case $a in
-		-c|-S|-E|-M|-MM) link=;;
+		-c|-S|-E|-M|-MM|-fsyntax-only) link=;;
 		-shared) mode=shared;;
 		esac
 	done
-	gccinc=$($cc -print-file-name=include)
-	set -- -nostdinc -isystem "$include" -isystem "$gccinc" "$@"
+	# -fmath-errno: this library's math_errhandling has MATH_ERRNO (FreeBSD's default is without)
+	set -- --target=x86_64-unknown-freebsd15.2 -fmath-errno \
+		-nostdinc -isystem "$include" -isystem "$($cc -print-resource-dir)/include" "$@"
+	# compiler-rt's helpers: the host's builtins archive (it uses no libc)
+	rt=$($cc --rtlib=compiler-rt -print-libgcc-file-name)
+	[ -f "$rt" ] || rt=
 	if [ "$link" ]; then
+		set -- -fuse-ld=lld "$@"
 		case $mode in
 		static)
-			set -- -static -no-pie -nostdlib -L"$lib" "$lib/crt1.o" "$lib/crti.o" \
-				"$($cc -print-file-name=crtbeginT.o)" "$@" \
-				"$lib/libc.a" "$($cc -print-libgcc-file-name)" "$lib/libc.a" \
-				"$($cc -print-file-name=crtend.o)" "$lib/crtn.o";;
+			set -- -static -nostdlib -L"$lib" "$lib/crt1.o" "$lib/crti.o" "$@" \
+				"$lib/libc.a" $rt "$lib/libc.a" "$lib/crtn.o";;
 		static-pie)
-			set -- -static-pie -nostdlib -L"$lib" "$lib/rcrt1.o" "$lib/crti.o" \
-				"$($cc -print-file-name=crtbeginS.o)" "$@" \
-				"$lib/libc.a" "$($cc -print-libgcc-file-name)" "$lib/libc.a" \
-				"$($cc -print-file-name=crtendS.o)" "$lib/crtn.o";;
+			set -- -static -pie -Wl,--no-dynamic-linker -nostdlib -L"$lib" "$lib/rcrt1.o" "$lib/crti.o" "$@" \
+				"$lib/libc.a" $rt "$lib/libc.a" "$lib/crtn.o";;
 		dynamic)
 			set -- -pie -nostdlib -L"$lib" -Wl,-dynamic-linker,"${LIBC_INTERP:-$lib/libc.so}" \
-				"$lib/Scrt1.o" "$lib/crti.o" "$($cc -print-file-name=crtbeginS.o)" "$@" \
-				"$lib/libc.so" "$($cc -print-libgcc-file-name)" \
-				"$($cc -print-file-name=crtendS.o)" "$lib/crtn.o";;
+				"$lib/Scrt1.o" "$lib/crti.o" "$@" "$lib/libc.so" $rt "$lib/crtn.o";;
 		shared)   # -shared: a shared object (linked with libc.so)
-			set -- -nostdlib -L"$lib" "$lib/crti.o" "$($cc -print-file-name=crtbeginS.o)" "$@" \
-				"$lib/libc.so" "$($cc -print-libgcc-file-name)" \
-				"$($cc -print-file-name=crtendS.o)" "$lib/crtn.o";;
+			set -- -nostdlib -L"$lib" "$lib/crti.o" "$@" "$lib/libc.so" $rt "$lib/crtn.o";;
 		*) echo "libc-cc: LIBC_LINK=$mode: static, dynamic or static-pie" >&2; exit 2;;
 		esac
 	fi
@@ -75,6 +72,6 @@ c17*)
 	*) echo "libc-cc: LIBC_LINK=$mode: c17 links static or dynamic" >&2; exit 2;;
 	esac;;
 *)
-	echo "libc-cc: unknown compiler $name (expected gcc or c17)" >&2
+	echo "libc-cc: unknown compiler $name (expected clang or c17)" >&2
 	exit 2;;
 esac

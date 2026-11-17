@@ -92,6 +92,7 @@ HDRS = \
 	../../include/signal.h \
 	../../include/spawn.h \
 	../../include/stdalign.h \
+	../../include/stdatomic.h \
 	../../include/stdbool.h \
 	../../include/stdint.h \
 	../../include/stdio.h \
@@ -101,6 +102,9 @@ HDRS = \
 	../../include/strings.h \
 	../../include/stropts.h \
 	../../include/sys/cdefs.h \
+	../../include/sys/endian.h \
+	../../include/sys/filio.h \
+	../../include/sys/ioccom.h \
 	../../include/sys/ioctl.h \
 	../../include/sys/ipc.h \
 	../../include/sys/mman.h \
@@ -122,6 +126,7 @@ HDRS = \
 	../../include/sys/time.h \
 	../../include/sys/timeb.h \
 	../../include/sys/times.h \
+	../../include/sys/ttycom.h \
 	../../include/sys/types.h \
 	../../include/sys/uio.h \
 	../../include/sys/un.h \
@@ -167,6 +172,7 @@ HDRS = \
 	internal/complex_impl.h \
 	internal/elf_min.h \
 	internal/era.h \
+	internal/execpath.h \
 	internal/fpdigits.h \
 	internal/libc.h \
 	internal/libm.h \
@@ -178,8 +184,8 @@ HDRS = \
 	internal/stdio_impl.h \
 	internal/strptime_impl.h \
 	internal/syscall.h \
-	internal/syscall_nr_linux.h \
 	internal/time_impl.h \
+	internal/umtx.h \
 	internal/xti_impl.h \
 	intl/intl_impl.h \
 	locale/charsets_data.h \
@@ -188,6 +194,7 @@ HDRS = \
 	locale/uctype_width.h \
 	math/twoopi.h \
 	math/zeta.h \
+	network/ifmsg.h \
 	passwd/pwf.h \
 	regex/regex_impl.h \
 	spawn/spawn_impl.h \
@@ -356,6 +363,7 @@ OBJS = \
 	$(B)/obj/network/getnameinfo.o \
 	$(B)/obj/network/if.o \
 	$(B)/obj/network/ifaddrs.o \
+	$(B)/obj/network/ifmsg.o \
 	$(B)/obj/network/in6addr.o \
 	$(B)/obj/network/inet.o \
 	$(B)/obj/network/inet_ob.o \
@@ -414,6 +422,7 @@ OBJS = \
 	$(B)/obj/stat/mkdir.o \
 	$(B)/obj/stat/mode.o \
 	$(B)/obj/stat/stat.o \
+	$(B)/obj/stat/statfs.o \
 	$(B)/obj/stat/statvfs.o \
 	$(B)/obj/stat/utime.o \
 	$(B)/obj/stat/utimens.o \
@@ -512,9 +521,11 @@ OBJS = \
 	$(B)/obj/syslog/syslog.o \
 	$(B)/obj/thread/__setxid.o \
 	$(B)/obj/thread/__syscall_cp.o \
+	$(B)/obj/thread/__thr_sched.o \
 	$(B)/obj/thread/__tl.o \
 	$(B)/obj/thread/__tls_get_addr.o \
 	$(B)/obj/thread/__wait.o \
+	$(B)/obj/thread/atomic_flag.o \
 	$(B)/obj/thread/pthread_atfork.o \
 	$(B)/obj/thread/pthread_attr.o \
 	$(B)/obj/thread/pthread_barrier.o \
@@ -1182,6 +1193,10 @@ $(B)/obj/network/ifaddrs.o: network/ifaddrs.c $(HDRS)
 	mkdir -p $(B)/obj/network
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/ifaddrs.c
 
+$(B)/obj/network/ifmsg.o: network/ifmsg.c $(HDRS)
+	mkdir -p $(B)/obj/network
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/ifmsg.c
+
 $(B)/obj/network/in6addr.o: network/in6addr.c $(HDRS)
 	mkdir -p $(B)/obj/network
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ network/in6addr.c
@@ -1413,6 +1428,10 @@ $(B)/obj/stat/mode.o: stat/mode.c $(HDRS)
 $(B)/obj/stat/stat.o: stat/stat.c $(HDRS)
 	mkdir -p $(B)/obj/stat
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stat/stat.c
+
+$(B)/obj/stat/statfs.o: stat/statfs.c $(HDRS)
+	mkdir -p $(B)/obj/stat
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stat/statfs.c
 
 $(B)/obj/stat/statvfs.o: stat/statvfs.c $(HDRS)
 	mkdir -p $(B)/obj/stat
@@ -1806,6 +1825,10 @@ $(B)/obj/thread/__syscall_cp.o: thread/__syscall_cp.c $(HDRS)
 	mkdir -p $(B)/obj/thread
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ thread/__syscall_cp.c
 
+$(B)/obj/thread/__thr_sched.o: thread/__thr_sched.c $(HDRS)
+	mkdir -p $(B)/obj/thread
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ thread/__thr_sched.c
+
 $(B)/obj/thread/__tl.o: thread/__tl.c $(HDRS)
 	mkdir -p $(B)/obj/thread
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ thread/__tl.c
@@ -1817,6 +1840,10 @@ $(B)/obj/thread/__tls_get_addr.o: thread/__tls_get_addr.c $(HDRS)
 $(B)/obj/thread/__wait.o: thread/__wait.c $(HDRS)
 	mkdir -p $(B)/obj/thread
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ thread/__wait.c
+
+$(B)/obj/thread/atomic_flag.o: thread/atomic_flag.c $(HDRS)
+	mkdir -p $(B)/obj/thread
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ thread/atomic_flag.c
 
 $(B)/obj/thread/pthread_atfork.o: thread/pthread_atfork.c $(HDRS)
 	mkdir -p $(B)/obj/thread

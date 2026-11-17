@@ -66,6 +66,8 @@ void __a_crash(void);
 #define a_crash __a_crash
 #endif
 
+static inline void a_or(volatile int *p, int v) { int o; do o = *p; while (a_cas(p, o, o | v) != o); }
+static inline void a_and(volatile int *p, int v) { int o; do o = *p; while (a_cas(p, o, o & v) != o); }
 static inline void a_inc(volatile int *p) { a_fetch_add(p, 1); }
 static inline void a_dec(volatile int *p) { a_fetch_add(p, -1); }
 

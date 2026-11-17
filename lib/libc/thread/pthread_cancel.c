@@ -31,6 +31,7 @@
 /* pthread_cancel and the cancelability state (see pthread_impl.h). */
 #include <errno.h>
 #include <signal.h>
+#include <ucontext.h>
 #include <string.h>
 #include "pthread_impl.h"
 #include "syscall.h"
@@ -39,30 +40,26 @@
 
 extern const char __cp_begin[], __cp_end[], __cp_cancel[];
 
-/* ucontext_t as longs: the program counter (gregs[REG_RIP]) and the
- * signal mask the kernel restores */
-#define UC_RIP 21
-#define UC_SIGMASK 37
-
 static void cancel_handler(int sig, siginfo_t *si, void *ctx)
 {
 	struct __pthread *self = __pthread_self();
-	unsigned long *uc = ctx, pc = uc[UC_RIP];
+	ucontext_t *uc = ctx;
+	unsigned long pc = (unsigned long)uc->uc_mcontext.__mc_rip;
 	(void)sig; (void)si;
 	a_barrier();
 	if (!self->cancel || self->canceldisable == 1)
 		return;
-	uc[UC_SIGMASK] |= 1UL << (SIGCANCEL - 1);
+	uc->uc_sigmask.__bits[(SIGCANCEL - 1) >> 5] |= 1U << ((SIGCANCEL - 1) & 31);
 	if (self->cancelasync) {
-		__restore_sigs(&uc[UC_SIGMASK]);
+		__restore_sigs((const __sm_t *)&uc->uc_sigmask);
 		__cancel();
 	}
 	if (pc >= (unsigned long)__cp_begin && pc < (unsigned long)__cp_end) {
-		uc[UC_RIP] = (unsigned long)__cp_cancel;
+		uc->uc_mcontext.__mc_rip = (long)__cp_cancel;
 		return;
 	}
 	/* not at a cancellation point: keep it pending (blocked) */
-	__syscall2(SYS_tkill, self->tid, SIGCANCEL);
+	__syscall2(SYS_thr_kill, self->tid, SIGCANCEL);
 }
 
 static volatile int installed, install_lock;
@@ -75,7 +72,7 @@ int pthread_cancel(__pthread_t t)
 		if (!installed) {
 			struct sigaction sa;
 			memset(&sa, 0, sizeof sa);
-			sa.sa_flags = SA_SIGINFO | SA_RESTART | SA_ONSTACK;
+			sa.sa_flags = SA_SIGINFO | SA_ONSTACK;
 			sa.sa_sigaction = cancel_handler;
 			memset(&sa.sa_mask, -1, sizeof sa.sa_mask);
 			__libc_sigaction(SIGCANCEL, &sa, 0);

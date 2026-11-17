@@ -28,24 +28,22 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Internal futex lock (Drepper's "mutex 2": 0 free, 1 locked, 2 contended). */
+/* Internal futex lock (Drepper's "mutex 2": 0 free, 1 locked, 2 contended),
+ * on _umtx_op. */
 #include "lock.h"
 #include "atomic.h"
 #include "syscall.h"
-
-#define FUTEX_WAIT 0
-#define FUTEX_WAKE 1
-#define FUTEX_PRIVATE 128
+#include "umtx.h"
 
 void __futex_wait(volatile int *addr, int val)
 {
-	__syscall4(SYS_futex, addr, FUTEX_WAIT | FUTEX_PRIVATE, val, 0);
+	__umtx_op((void *)addr, UMTX_OP_WAIT_UINT_PRIVATE, (unsigned)val, 0, 0);
 }
 
 void __futex_wake(volatile int *addr, int cnt)
 {
 	if (cnt < 0) cnt = 0x7fffffff;
-	__syscall3(SYS_futex, addr, FUTEX_WAKE | FUTEX_PRIVATE, cnt);
+	__umtx_op((void *)addr, UMTX_OP_WAKE_PRIVATE, (unsigned)cnt, 0, 0);
 }
 
 void __lock(volatile int *l)

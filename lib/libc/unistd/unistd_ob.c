@@ -41,26 +41,37 @@
 #include <unistd.h>
 #include "syscall.h"
 
+/* the kernel's break system call sets the break and does not report it:
+ * the current one is kept here, starting at the end of the program (static
+ * programs only; a dynamically linked program has no `end' of its own) */
+extern char _end[] __attribute__((weak));
+static char *curbrk;
+
 int brk(void *addr)
 {
-	if (__syscall1(SYS_brk, (long)addr) != (long)addr) {
+	if (!curbrk) curbrk = _end;
+	if (__syscall1(SYS_break, addr) < 0) {
 		errno = ENOMEM;
 		return -1;
 	}
+	curbrk = addr;
 	return 0;
 }
 
 void *sbrk(intptr_t incr)
 {
-	long old = __syscall1(SYS_brk, 0);
+	char *old;
+	if (!curbrk) curbrk = _end;
+	old = curbrk;
 	if (incr == 0)
-		return (void *)old;
+		return old;
 	if ((incr > 0 && old + incr < old) || (incr < 0 && old + incr > old) ||
-	    __syscall1(SYS_brk, old + incr) != old + incr) {
+	    __syscall1(SYS_break, old + incr) < 0) {
 		errno = ENOMEM;
 		return (void *)-1;
 	}
-	return (void *)old;
+	curbrk = old + incr;
+	return old;
 }
 
 int chroot(const char *path)

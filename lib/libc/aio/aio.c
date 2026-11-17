@@ -67,14 +67,14 @@
 struct lio {
 	volatile int pending;
 	struct sigevent sev;
-	unsigned long mask;
+	__sm_t mask;
 };
 
 struct req {
 	struct aiocb *cb;
 	int op, fd;
 	struct sigevent sev;
-	unsigned long mask;          /* the submitter's signal mask */
+	__sm_t mask;                 /* the submitter's signal mask */
 	pthread_t td;
 	struct req *next, *prev;
 	struct lio *lio;
@@ -98,20 +98,15 @@ static void parent(void) { UNLOCK(&lock); }
 static void child(void) { head = tail = 0; lock = 0; }
 static void init(void) { pthread_atfork(prepare, parent, child); }
 
-static void notify(const struct sigevent *sev, unsigned long mask)
+static void notify(const struct sigevent *sev, __sm_t mask)
 {
-	siginfo_t si;
 	switch (sev->sigev_notify) {
 	case SIGEV_SIGNAL:
 		if (!sev->sigev_signo)
 			break;
-		memset(&si, 0, sizeof si);
-		si.si_signo = sev->sigev_signo;
-		si.si_code = SI_ASYNCIO;
-		si.si_value = sev->sigev_value;
-		si.si_pid = (pid_t)__syscall0(SYS_getpid);
-		si.si_uid = (uid_t)__syscall0(SYS_getuid);
-		__syscall3(SYS_rt_sigqueueinfo, si.si_pid, si.si_signo, &si);
+		/* the kernel's lio_listio of no requests (mode 0: its LIO_NOWAIT) sends it at once, as SI_ASYNCIO */
+		if (__syscall4(SYS_lio_listio, 0, 0, 0, sev) < 0)
+			__syscall3(SYS_sigqueue, __syscall0(SYS_getpid), sev->sigev_signo, sev->sigev_value.sival_ptr);
 		break;
 	case SIGEV_THREAD:
 		__restore_sigs(&mask);
@@ -159,11 +154,11 @@ static void *worker(void *p)
 {
 	struct req *r = p, *q;
 	struct aiocb *cb = r->cb;
-	unsigned long cancelmask = 1UL << (SIGCANCEL - 1);
+	__sm_t cancelmask = { { 1UL << (SIGCANCEL - 1), 0 } };
 	ssize_t ret = 0;
 	int s, err;
 
-	__syscall4(SYS_rt_sigprocmask, 1 /* SIG_UNBLOCK */, &cancelmask, 0, 8);
+	__syscall3(SYS_sigprocmask, SIG_UNBLOCK, &cancelmask, 0);
 	pthread_cleanup_push(cancelled, r);
 	for (;;) {
 		LOCK(&lock);
@@ -183,9 +178,7 @@ static void *worker(void *p)
 			ret = read(r->fd, (void *)cb->aio_buf, cb->aio_nbytes);
 		break;
 	case LIO_WRITE:
-		/* with O_APPEND aio_write appends: the system call pwrite64 does
-		   (pwrite() itself keeps to the offset, as POSIX has it) */
-		ret = __syscall_ret((unsigned long)__syscall_cp4(SYS_pwrite64, r->fd, cb->aio_buf, cb->aio_nbytes, cb->aio_offset));
+		ret = __syscall_ret((unsigned long)__syscall_cp4(SYS_pwrite, r->fd, cb->aio_buf, cb->aio_nbytes, cb->aio_offset));
 		if (ret < 0 && errno == ESPIPE)
 			ret = write(r->fd, (const void *)cb->aio_buf, cb->aio_nbytes);
 		break;
@@ -209,8 +202,8 @@ static int valid_sev(const struct sigevent *sev)
 	case SIGEV_NONE:
 		return 1;
 	case SIGEV_SIGNAL:
-		/* signal 0: none (a zeroed sigevent is SIGEV_SIGNAL on Linux) */
-		return sev->sigev_signo >= 0 && sev->sigev_signo <= 64;
+		/* signal 0: no signal */
+		return sev->sigev_signo >= 0 && sev->sigev_signo <= SIGRTMAX;
 	case SIGEV_THREAD:
 		return sev->sigev_notify_function != 0;
 	}
@@ -221,7 +214,7 @@ static int submit(struct aiocb *cb, int op, struct lio *l)
 {
 	struct req *r;
 	pthread_attr_t a;
-	unsigned long old;
+	__sm_t old;
 	int e;
 
 	/* A bad aio_fildes is reported through the error status (EBADF from

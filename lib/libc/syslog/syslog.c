@@ -29,7 +29,7 @@
  */
 
 /* <syslog.h>: messages as RFC 3164 lines, "<PRI>Mmm dd hh:mm:ss
- * TAG[PID]: text", on a datagram socket connected to /dev/log; with
+ * TAG[PID]: text", on a datagram socket connected to /var/run/log; with
  * LOG_CONS, on /dev/console when that fails.  %m stands for
  * strerror(errno).  The tag defaults to the program's name. */
 #include <errno.h>
@@ -54,11 +54,11 @@ static volatile int lock;
 static char tag[64];
 static int opts, facility = LOG_USER, mask = 0xff, fd = -1;
 
-/* without a syslogd (no /dev/log) messages are dropped; errno is kept:
+/* without a syslogd (no /var/run/log) messages are dropped; errno is kept:
    openlog() and syslog() have no errors */
 static void opensock(void)
 {
-	static const struct sockaddr_un log = {AF_UNIX, "/dev/log"};
+	static const struct sockaddr_un log = {0, AF_UNIX, "/var/run/log"};
 	int e = errno;
 	if (fd < 0)
 		fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);

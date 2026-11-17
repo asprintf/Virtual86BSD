@@ -38,12 +38,10 @@
 
 void __start_context(void);
 
-enum { R8, R9, R10, R11, R12, R13, R14, R15, RDI, RSI, RBP, RBX, RDX, RAX, RCX, RSP, RIP };
-
 void makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
 {
-	static const int reg[6] = { RDI, RSI, RDX, RCX, R8, R9 };
-	long long *g = ucp->uc_mcontext.__gregs;
+	long *reg[6] = { &ucp->uc_mcontext.__mc_rdi, &ucp->uc_mcontext.__mc_rsi, &ucp->uc_mcontext.__mc_rdx,
+	    &ucp->uc_mcontext.__mc_rcx, &ucp->uc_mcontext.__mc_r8, &ucp->uc_mcontext.__mc_r9 };
 	unsigned long *sp = (unsigned long *)((char *)ucp->uc_stack.ss_sp + ucp->uc_stack.ss_size);
 	int i, nstack = argc > 6 ? argc - 6 : 0;
 	va_list ap;
@@ -53,14 +51,14 @@ void makecontext(ucontext_t *ucp, void (*func)(void), int argc, ...)
 	for (i = 0; i < argc; i++) {
 		long a = va_arg(ap, long);
 		if (i < 6)
-			g[reg[i]] = a;
+			*reg[i] = a;
 		else
 			sp[i - 6] = (unsigned long)a;
 	}
 	va_end(ap);
 	*--sp = (unsigned long)__start_context;
-	g[RSP] = (long long)(uintptr_t)sp;
-	g[RIP] = (long long)(uintptr_t)func;
-	g[RBX] = (long long)(uintptr_t)ucp->uc_link;
-	g[RBP] = 0;
+	ucp->uc_mcontext.__mc_rsp = (long)(uintptr_t)sp;
+	ucp->uc_mcontext.__mc_rip = (long)(uintptr_t)func;
+	ucp->uc_mcontext.__mc_rbx = (long)(uintptr_t)ucp->uc_link;
+	ucp->uc_mcontext.__mc_rbp = 0;
 }

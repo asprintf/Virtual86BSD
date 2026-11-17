@@ -26,9 +26,9 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-# libc - a POSIX.1-2024 C library for x86-64 Linux.  A POSIX makefile.
+# libc - a POSIX.1-2024 C library for x86-64 FreeBSD (V86BSD).  A POSIX makefile.
 #
-#   make                  build with gcc: build/gcc/lib/{libc.a,crt1.o,crti.o,crtn.o},
+#   make                  build with clang + lld: build/clang/lib/{libc.a,crt1.o,crti.o,crtn.o},
 #                         and libc.so (also the dynamic linker), Scrt1.o, rcrt1.o
 #   make CCNAME=c17       build with c17 (on PATH), which also assembles, and
 #                         links libc.so (c17 -G)
@@ -42,17 +42,16 @@
 
 .POSIX:
 
-CCNAME   = gcc
+CCNAME   = clang
 B        = build/$(CCNAME)
 AR       = ar
 INCLUDE  = ../../include
 CPPFLAGS = -I$(INCLUDE) -Iinternal -I$(ABIDIR) -D_XOPEN_SOURCE=800
 
-# The system call ABI the library is built for (tools/mkabi.sh): linux,
-# Linux's numbers (any Linux kernel, V86BSD's compat/linux too), or native,
-# V86BSD's own, from the kernel's sys/syscall.h (SYSCALL_H) with the brand
-# in the start files.
-TARGET_ABI = linux
+# The system call ABI the library is built for (tools/mkabi.sh): freebsd,
+# the FreeBSD kernel's (sys/sys/syscall.h, SYSCALL_H) with its constants and
+# structures (include/), and the ABI note in the start files.
+TARGET_ABI = freebsd
 SYSCALL_H  = ../../sys/sys/syscall.h
 ABIDIR     = $(B)/abi
 

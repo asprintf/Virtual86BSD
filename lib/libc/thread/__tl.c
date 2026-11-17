@@ -31,6 +31,7 @@
 /* The lock of the thread list, and blocking all signals. */
 #include "pthread_impl.h"
 #include "lock.h"
+#include <signal.h>
 #include "syscall.h"
 
 volatile int __thread_list_lock;
@@ -38,13 +39,13 @@ volatile int __thread_list_lock;
 void __tl_lock(void) { LOCK(&__thread_list_lock); }
 void __tl_unlock(void) { UNLOCK(&__thread_list_lock); }
 
-void __block_all_sigs(unsigned long *old)
+void __block_all_sigs(__sm_t *old)
 {
-	unsigned long all = -1UL;
-	__syscall4(SYS_rt_sigprocmask, 0 /* SIG_BLOCK */, &all, old, 8);
+	__sm_t all = { { -1UL, -1UL } };
+	__syscall3(SYS_sigprocmask, SIG_BLOCK, &all, old);
 }
 
-void __restore_sigs(const unsigned long *old)
+void __restore_sigs(const __sm_t *old)
 {
-	__syscall4(SYS_rt_sigprocmask, 2 /* SIG_SETMASK */, old, 0, 8);
+	__syscall3(SYS_sigprocmask, SIG_SETMASK, old, 0);
 }

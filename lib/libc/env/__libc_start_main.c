@@ -76,7 +76,7 @@ void __libc_start_main(long *sp, int (*main)(int, char **, char **))
 	__libc.auxv = auxv;
 	__libc.page_size = __getauxval(AT_PAGESZ);
 	if (!__libc.page_size) __libc.page_size = 4096;
-	__libc.secure = __getauxval(AT_SECURE) != 0;
+	__libc.secure = __syscall0(SYS_issetugid) != 0;
 
 	/* dynamically linked: the dynamic linker set up the thread and TLS, and
 	 * runs the constructors of every module (the program's last) */

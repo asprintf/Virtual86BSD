@@ -34,20 +34,19 @@
 #include "syscall.h"
 #include "atomic.h"
 
-/* the kernel writes DT_EXITED (0) and wakes us when the thread is gone;
- * that wake is a shared one, so the wait is too */
+/* the kernel writes 1 to `dead' and wakes us when the thread is gone (thr_exit);
+ * that wake is not a private one, so the wait is not either */
 static int join(struct __pthread *t, void **res, int cp)
 {
-	int state;
 	if (t == __pthread_self())
 		return EDEADLK;
-	while ((state = t->detach_state) != DT_EXITED) {
-		if (state == DT_DETACHED)
+	while (!*(volatile int *)&t->dead) {
+		if (t->detach_state == DT_DETACHED)
 			return EINVAL;
 		if (cp)
-			__timedwait_cp(&t->detach_state, state, 0, 0, 0);
+			__timedwait_cp((volatile int *)&t->dead, 0, 0, 0, 0);
 		else
-			__wait(&t->detach_state, state, 0);
+			__wait((volatile int *)&t->dead, 0, 0);
 	}
 	a_barrier();
 	if (res)

@@ -30,16 +30,11 @@
 
 /* Internal: close-on-fork (FD_CLOFORK, O_CLOFORK).
  *
- * V86BSD's kernel has it: the flags go to the kernel as they are (open,
+ * FreeBSD's kernel has it: the flags go to the kernel as they are (open,
  * pipe2, dup3, socket, accept4, recvmsg take them; F_GETFD/F_SETFD carry
  * FD_CLOFORK; F_DUPFD_CLOFORK exists), and the kernel closes the
- * descriptors in a new process.  __clofork_native() finds out, once.
- *
- * Linux lacks it: then it is emulated.  A bitmap records the descriptors
- * that have it; fork() closes them in the child.  Descriptors only become
- * flagged through the library, and close()/dup2()/dup3() clear the flag
- * of the descriptor they free or replace, so a reused descriptor number
- * starts clear. */
+ * descriptors in a new process.  __clofork_native() is 1; the bitmap
+ * emulation behind it (clofork.c) is for a kernel without, and not used. */
 #ifndef _INTERNAL_CLOFORK_H
 #define _INTERNAL_CLOFORK_H
 extern volatile int __clofork_any;

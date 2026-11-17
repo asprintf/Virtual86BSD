@@ -42,7 +42,7 @@ int __sigaction(int, const struct sigaction *, struct sigaction *);
 int system(const char *cmd)
 {
 	struct sigaction ign, oint, oquit;
-	unsigned long chld = 1UL << (SIGCHLD - 1), omask;
+	__sm_t chld = { { 1UL << (SIGCHLD - 1), 0 } }, omask;
 	long pid, r;
 	int status;
 
@@ -51,16 +51,16 @@ int system(const char *cmd)
 	ign.sa_handler = SIG_IGN;
 	__sigaction(SIGINT, &ign, &oint);
 	__sigaction(SIGQUIT, &ign, &oquit);
-	__syscall4(SYS_rt_sigprocmask, SIG_BLOCK, &chld, &omask, 8);
+	__syscall3(SYS_sigprocmask, SIG_BLOCK, &chld, &omask);
 
-	pid = __syscall5(SYS_clone, SIGCHLD, 0, 0, 0, 0);
+	pid = __syscall0(SYS_fork);
 	if (pid == 0) {
 		const char *argv[] = { "sh", "-c", "--", cmd, 0 };
 		__sigaction(SIGINT, &oint, 0);
 		__sigaction(SIGQUIT, &oquit, 0);
-		__syscall4(SYS_rt_sigprocmask, SIG_SETMASK, &omask, 0, 8);
+		__syscall3(SYS_sigprocmask, SIG_SETMASK, &omask, 0);
 		__syscall3(SYS_execve, "/bin/sh", argv, __environ);
-		__syscall1(SYS_exit_group, 127);
+		__syscall1(SYS__exit, 127);
 	}
 	status = -1;
 	if (pid > 0) {
@@ -71,6 +71,6 @@ int system(const char *cmd)
 	}
 	__sigaction(SIGINT, &oint, 0);
 	__sigaction(SIGQUIT, &oquit, 0);
-	__syscall4(SYS_rt_sigprocmask, SIG_SETMASK, &omask, 0, 8);
+	__syscall3(SYS_sigprocmask, SIG_SETMASK, &omask, 0);
 	return status;
 }

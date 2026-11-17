@@ -36,9 +36,9 @@
  * at %fs:0x28.
  *
  * Thread life cycle (detach_state): JOINABLE or DETACHED while running;
- * an exiting joinable thread moves to EXITING, and the kernel writes
- * EXITED (0) there when the thread is gone (CLONE_CHILD_CLEARTID) and
- * wakes pthread_join().  A detached thread unmaps its own stack.
+ * an exiting joinable thread moves to EXITING, and the kernel writes 1 to
+ * `dead' when the thread is gone (thr_exit) and wakes pthread_join().  A
+ * detached thread unmaps its own stack.
  *
  * Cancellation: system calls that are cancellation points go through
  * __syscall_cp_asm (arch/x86_64/syscall_cp.s), which tests `cancel'
@@ -51,6 +51,7 @@
 #define _INTERNAL_PTHREAD_IMPL_H
 #include <stddef.h>
 #include <time.h>
+#include "syscall.h"
 
 struct __ptcb;
 
@@ -65,6 +66,7 @@ struct __pthread {
 	/* Library-private part. */
 	struct __pthread *next, *prev;
 	int tid;
+	int __tid_hi;                 /* (the kernel stores the tid as a long) */
 	int errno_val;
 	volatile int detach_state;
 	volatile int cancel;
@@ -83,21 +85,19 @@ struct __pthread {
 	volatile int killlock;
 	void *(*start)(void *);
 	void *start_arg;
-	unsigned long sigmask;
+	__sm_t sigmask;
 	volatile int startlock;       /* 1: wait for the creator; 2: go; 3: give up */
 	volatile int timer_id;        /* SIGEV_THREAD timers: the kernel timer */
-	struct {                      /* the kernel's robust list (set_robust_list) */
-		volatile void *volatile head;
-		long off;
-		volatile void *volatile pending;
+	volatile long dead;           /* the kernel sets it to 1 at thr_exit */
+	struct {                      /* the robust lists the kernel walks when the thread ends */
+		volatile void *volatile head;      /* the first robust mutex held */
+		volatile void *volatile priv;      /* (the private list: unused) */
+		volatile void *volatile pending;   /* the one being locked */
 	} robust_list;
 	const char *dlerror;          /* <dlfcn.h>: the pending error message */
 	unsigned long *dtv_static;    /* the dtv in the TLS area (dlopen: dtv may be another) */
 	char *dlerror_buf;            /* libc.so: the last formatted message (malloc) */
-	/* PTHREAD_PRIO_PROTECT: how many mutexes of each ceiling (1-99) the
-	 * thread holds, the highest, and its own priority while raised */
-	int pp_max, pp_base;
-	unsigned short pp_count[100];
+	void *pp_top;                 /* the PTHREAD_PRIO_PROTECT mutex locked last (_m_ppnext the rest) */
 };
 
 enum { DT_EXITED = 0, DT_EXITING, DT_JOINABLE, DT_DETACHED };
@@ -132,25 +132,31 @@ struct __pthread *__get_tp(void);
 #define _a_prio      __l[5]
 #define _a_flags     __l[6]   /* bit 0: set; bit 1: C11 thread */
 
-/* mutexes (int __i[10], void *__p[5]) */
-#define _m_type  __i[0]   /* type 0-1 (normal, recursive, errorcheck), 4 robust,
-                           * 8 inconsistent, 16/32/64 protocol (below),
-                           * 128 process-shared, ceiling << 16 */
-#define _m_lock  __i[1]   /* 0, or owner tid | FUTEX_WAITERS; NOTRECOVERABLE */
-#define _m_count __i[2]   /* recursion */
-#define _m_prev  __p[2]   /* robust list */
-#define _m_next  __p[3]
+/* mutexes (int __i[10], void *__p[5]): the kernel's struct umutex in the first
+ * 32 bytes (the lock word, its flags, the ceiling, the link of the robust
+ * list), then the library's type and count */
+#define _m_lock   __i[0]  /* m_owner: 0, or owner tid, | UMUTEX_CONTESTED while others sleep;
+                           * UMUTEX_RB_OWNERDEAD, UMUTEX_RB_NOTRECOV (robust) */
+#define _m_kflags __i[1]  /* m_flags: the UMUTEX_ flags the kernel reads */
+#define _m_kceil  __i[2]  /* m_ceilings[0]: the POSIX priority ceiling (PP) */
+#define _m_kceil1 __i[3]  /* m_ceilings[1]: the ceiling the owner keeps at a PP unlock, or -1 */
+#define _m_rb     __p[2]  /* m_rb_lnk: the next robust mutex of the owner */
+#define _m_ppnext __p[3]  /* (m_spare) the PP mutex the owner locked before this one */
+#define _m_type   __i[8]  /* type 0-1 (normal, recursive, errorcheck), 4 robust,
+                           * 16/32 protocol (below), 128 process-shared, ceiling << 16 */
+#define _m_count  __i[9]  /* recursion */
 #define __M_ROBUST 4
-#define __M_INCONSISTENT 8
-#define __M_PI 16         /* PTHREAD_PRIO_INHERIT: the kernel's PI futexes */
+#define __M_PI 16         /* PTHREAD_PRIO_INHERIT: the kernel's PI umutex */
 #define __M_PP 32         /* PTHREAD_PRIO_PROTECT; the ceiling in bits 16-23 */
-#define __M_PI_NOTREC 64  /* a robust PI mutex made unrecoverable (the kernel
-                           * owns its lock word while contended) */
 #define __M_SHARED 128
 #define __M_CEIL(t) (((unsigned)(t) >> 16) & 255)
-#define __M_NOTRECOVERABLE 0x3fffffff
-#define FUTEX_WAITERS 0x80000000u
-#define FUTEX_OWNER_DIED 0x40000000
+/* the kernel's m_flags and lock word values (sys/sys/umtx.h) */
+#define UMUTEX_SHARED       0x0001
+#define UMUTEX_PRIO_INHERIT 0x0004
+#define UMUTEX_PRIO_PROTECT 0x0008
+#define UMUTEX_ROBUST       0x0010
+#define UMUTEX_NONCONSISTENT 0x0020
+#define UMUTEX_CONTESTED    0x80000000u
 
 /* condition variables (int __i[12], void *__p[6]) */
 #define _c_head   __p[0]
@@ -189,7 +195,6 @@ long __cancel(void);
 void __testcancel(void);
 int __setcancelstate(int new, int *old);
 
-int __clone(int (*)(void *), void *stack, int flags, void *arg, int *ptid, void *tls, volatile int *ctid);
 _Noreturn void __unmapself(void *base, size_t size);
 
 /* the implementations behind the public names (which are weak aliases,
@@ -202,9 +207,12 @@ int __pthread_join(__pthread_t, void **);
 int __pthread_detach(__pthread_t);
 int __pthread_kill(__pthread_t, int sig);   /* internal signals allowed */
 void __pthread_tsd_run_dtors(void);
-void __block_all_sigs(unsigned long *old);
-void __restore_sigs(const unsigned long *old);
+void __block_all_sigs(__sm_t *old);
+void __restore_sigs(const __sm_t *old);
 int __libc_sigaction(int sig, const void *sa, void *old);   /* no reserved-signal check */
 int __robust_register(struct __pthread *);
+void __robust_exit(struct __pthread *);
+long __thr_setsched(long tid, int policy, int prio);          /* 0, or -errno */
+long __thr_getsched(long tid, int *policy, int *prio);
 
 #endif

@@ -35,7 +35,10 @@
 int remove(const char *path)
 {
 	long r = __syscall3(SYS_unlinkat, -100, path, 0);
-	if (r == -EISDIR) r = __syscall3(SYS_unlinkat, -100, path, 0x200 /* AT_REMOVEDIR */);
+	if (r == -EISDIR || r == -EPERM) {   /* a directory: EISDIR (Linux), EPERM (FreeBSD) */
+		long q = __syscall3(SYS_unlinkat, -100, path, 0x800 /* AT_REMOVEDIR */);
+		if (q != -ENOTDIR) r = q;
+	}
 	return (int)__syscall_ret((unsigned long)r);
 }
 

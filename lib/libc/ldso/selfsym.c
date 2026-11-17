@@ -43,6 +43,7 @@
 #include "pthread_impl.h"
 #include "elf_min.h"
 #include "lock.h"
+#include "execpath.h"
 
 typedef struct {
 	unsigned char e_ident[16];
@@ -120,10 +121,10 @@ static void load(void)
 		n = (ssize_t)strlen(__selfsym_file);
 		if (n >= (ssize_t)sizeof self.path) n = sizeof self.path - 1;
 		memcpy(self.path, __selfsym_file, (size_t)n);
-	} else if ((n = readlink("/proc/self/exe", self.path, sizeof self.path - 1)) < 0)
+	} else if ((n = __execpath(self.path, sizeof self.path)) < 0)
 		n = 0;
 	self.path[n] = 0;
-	if ((fd = open(__selfsym_file ? __selfsym_file : "/proc/self/exe", O_RDONLY | O_CLOEXEC)) < 0)
+	if ((fd = open(self.path, O_RDONLY | O_CLOEXEC)) < 0)
 		return;
 	if (fstat(fd, &st) < 0 || st.st_size < (off_t)sizeof *eh
 	    || (map = mmap(0, (size_t)st.st_size, PROT_READ, MAP_PRIVATE, fd, 0)) == MAP_FAILED) {

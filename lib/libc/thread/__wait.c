@@ -28,22 +28,19 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Futex waits and wakes.  An absolute timeout is measured against
- * CLOCK_REALTIME or CLOCK_MONOTONIC by the kernel (FUTEX_WAIT_BITSET). */
+/* Futex waits and wakes, on _umtx_op.  An absolute timeout is measured
+ * against CLOCK_REALTIME or CLOCK_MONOTONIC by the kernel (_umtx_time). */
 #include <errno.h>
 #include "pthread_impl.h"
 #include "syscall.h"
-
-#define FUTEX_WAIT 0
-#define FUTEX_WAKE 1
-#define FUTEX_WAIT_BITSET 9
-#define FUTEX_PRIVATE 128
-#define FUTEX_CLOCK_REALTIME 256
+#include "umtx.h"
 
 static int fwait(volatile int *addr, int val, clockid_t clk, const struct timespec *at, int priv, int cp)
 {
 	long r;
-	int op = FUTEX_WAIT;
+	int op = priv ? UMTX_OP_WAIT_UINT_PRIVATE : UMTX_OP_WAIT_UINT;
+	struct _umtx_time t;
+	void *a1 = 0, *a2 = 0;
 	if (at) {
 		if ((unsigned long)at->tv_nsec >= 1000000000UL)
 			return EINVAL;
@@ -51,14 +48,16 @@ static int fwait(volatile int *addr, int val, clockid_t clk, const struct timesp
 			return EINVAL;
 		if (at->tv_sec < 0)
 			return ETIMEDOUT;
-		op = FUTEX_WAIT_BITSET | (clk == CLOCK_REALTIME ? FUTEX_CLOCK_REALTIME : 0);
+		t._timeout = *at;
+		t._flags = UMTX_ABSTIME;
+		t._clockid = (unsigned)clk;
+		a1 = (void *)sizeof t;
+		a2 = &t;
 	}
-	if (priv)
-		op |= FUTEX_PRIVATE;
 	if (cp)
-		r = __syscall_cp6(SYS_futex, addr, op, val, at, 0, at ? -1 : 0);
+		r = __syscall_cp5(SYS__umtx_op, addr, op, (unsigned)val, a1, a2);
 	else
-		r = __syscall6x(SYS_futex, addr, op, val, at, 0, at ? -1 : 0);
+		r = __syscall5(SYS__umtx_op, addr, op, (unsigned)val, a1, a2);
 	if (r == -ETIMEDOUT || r == -EINTR || r == -ECANCELED || r == -EINVAL)
 		return (int)-r;
 	return 0;
@@ -83,5 +82,5 @@ void __wake(volatile int *addr, int cnt, int priv)
 {
 	if (cnt < 0)
 		cnt = 0x7fffffff;
-	__syscall3(SYS_futex, addr, FUTEX_WAKE | (priv ? FUTEX_PRIVATE : 0), cnt);
+	__umtx_op((void *)addr, priv ? UMTX_OP_WAKE_PRIVATE : UMTX_OP_WAKE, (unsigned)cnt, 0, 0);
 }

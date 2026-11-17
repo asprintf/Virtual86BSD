@@ -28,23 +28,21 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* mount.c - mount(2), umount(2): attach and detach a file system.  The
-   system calls have the same numbers and arguments under both ABIs. */
 #define _DEFAULT_SOURCE
 #include <sys/mount.h>
 #include "syscall.h"
 
-int mount(const char *source, const char *target, const char *fstype, unsigned long flags, const void *data)
+int mount(const char *type, const char *dir, int flags, void *data)
 {
-	return (int)__sys5(SYS_mount, source, target, fstype, flags, data);
+	return (int)__sys4(SYS_mount, type, dir, flags, data);
 }
 
-int umount2(const char *target, int flags)
+int nmount(struct iovec *iov, unsigned int niov, int flags)
 {
-	return (int)__sys2(SYS_umount2, target, flags);
+	return (int)__sys3(SYS_nmount, iov, niov, flags);
 }
 
-int umount(const char *target)
+int unmount(const char *dir, int flags)
 {
-	return umount2(target, 0);
+	return (int)__sys2(SYS_unmount, dir, flags);
 }

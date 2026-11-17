@@ -35,13 +35,14 @@
 /* These two return an error number instead of setting errno. */
 int posix_fadvise(int fd, off_t off, off_t len, int advice)
 {
-	return (int)-__syscall4(SYS_fadvise64, fd, off, len, advice);
+	long r = __syscall4(SYS_posix_fadvise, fd, off, len, advice);
+	return (int)(r < 0 ? -r : r);	/* the kernel returns the error number itself */
 }
 
 int posix_fallocate(int fd, off_t off, off_t len)
 {
 	long r;
 	if (off < 0 || len <= 0) return EINVAL;
-	while ((r = __syscall4(SYS_fallocate, fd, 0, off, len)) == -EINTR);
+	while ((r = __syscall3(SYS_posix_fallocate, fd, off, len)) == -EINTR);
 	return (int)-r;
 }

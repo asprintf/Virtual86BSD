@@ -32,28 +32,21 @@
 #include <fcntl.h>
 #include <errno.h>
 #include "syscall.h"
-#include "clofork.h"
+
+#define F_DUP3FD 24         /* (the kernel's fcntl command; not in <fcntl.h>) */
+#define F_DUP3FD_SHIFT 16
 
 int dup(int fd) { return (int)__sys1(SYS_dup, fd); }
 
+/* dup3 is fcntl(F_DUP3FD): the descriptor flags go in the command */
 int dup3(int old, int new, int flags)
 {
-	long r;
+	int fl = 0;
 	if (flags & ~(O_CLOEXEC | O_CLOFORK)) { errno = EINVAL; return -1; }
 	if (old == new) { errno = EINVAL; return -1; }
-	if (__clofork_native()) {
-		while ((r = __syscall3(SYS_dup3, old, new, flags)) == -EBUSY);
-		return (int)__syscall_ret((unsigned long)r);
-	}
-	while ((r = __syscall3(SYS_dup3, old, new, flags & O_CLOEXEC)) == -EBUSY);
-	if (r < 0) return (int)__syscall_ret((unsigned long)r);
-	if ((flags & O_CLOFORK) || __clofork_any) {
-		if (__clofork_set(new, (flags & O_CLOFORK) != 0) < 0) {
-			__syscall1(SYS_close, new);
-			return -1;
-		}
-	}
-	return new;
+	if (flags & O_CLOEXEC) fl |= FD_CLOEXEC;
+	if (flags & O_CLOFORK) fl |= FD_CLOFORK;
+	return (int)__sys3(SYS_fcntl, old, F_DUP3FD | (fl << F_DUP3FD_SHIFT), new);
 }
 
 int dup2(int old, int new)

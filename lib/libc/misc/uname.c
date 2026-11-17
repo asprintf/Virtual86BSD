@@ -34,7 +34,34 @@
 #include <errno.h>
 #include "syscall.h"
 
-int uname(struct utsname *u) { return (int)__sys1(SYS_uname, u); }
+static int kstr(int a, int b, char *out, size_t n)
+{
+	int mib[2] = { a, b };
+	size_t l = n;
+	long r = __syscall6x(SYS___sysctl, mib, 2, out, &l, 0, 0);
+	if (r < 0) return (int)__syscall_ret((unsigned long)r);
+	while (l && (out[l - 1] == '\n' || out[l - 1] == 0)) l--;
+	out[l] = 0;
+	return 0;
+}
+
+#define CTL_KERN 1
+#define KERN_OSTYPE 1
+#define KERN_OSRELEASE 2
+#define KERN_VERSION 4
+#define KERN_HOSTNAME 10
+#define KERN_HOSTID 11
+#define CTL_HW 6
+#define HW_MACHINE 1
+
+int uname(struct utsname *u)
+{
+	return kstr(CTL_KERN, KERN_OSTYPE, u->sysname, sizeof u->sysname - 1) ||
+	    kstr(CTL_KERN, KERN_HOSTNAME, u->nodename, sizeof u->nodename - 1) ||
+	    kstr(CTL_KERN, KERN_OSRELEASE, u->release, sizeof u->release - 1) ||
+	    kstr(CTL_KERN, KERN_VERSION, u->version, sizeof u->version - 1) ||
+	    kstr(CTL_HW, HW_MACHINE, u->machine, sizeof u->machine - 1) ? -1 : 0;
+}
 
 int gethostname(char *name, size_t len)
 {
@@ -49,12 +76,9 @@ int gethostname(char *name, size_t len)
 
 long gethostid(void)
 {
-	/* /etc/hostid (4 bytes, native order) if present, else 0 */
-	unsigned int id = 0;
-	long fd = __syscall4(SYS_openat, -100, "/etc/hostid", 0, 0);
-	if (fd >= 0) {
-		if (__syscall3(SYS_read, fd, &id, sizeof id) != sizeof id) id = 0;
-		__syscall1(SYS_close, fd);
-	}
+	int mib[2] = { CTL_KERN, KERN_HOSTID };
+	unsigned long id = 0;
+	size_t l = sizeof id;
+	__syscall6x(SYS___sysctl, mib, 2, &id, &l, 0, 0);
 	return (long)(int)id;
 }

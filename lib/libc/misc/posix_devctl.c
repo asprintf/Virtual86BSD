@@ -39,7 +39,7 @@
 
 int posix_devctl(int fd, int cmd, void *__RESTRICT data, size_t nbyte, int *__RESTRICT info)
 {
-	unsigned c = (unsigned)cmd, dir = c >> 30, size = c >> 16 & 0x3fff;
+	unsigned c = (unsigned)cmd, dir = c >> 29 & 6, size = c >> 16 & 0x1fff;   /* IOC_OUT, IOC_IN; the size */
 	long r;
 	if (data && nbyte && dir && size > nbyte)
 		return EINVAL;

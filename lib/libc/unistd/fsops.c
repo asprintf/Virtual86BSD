@@ -55,19 +55,11 @@ ssize_t readlinkat(int fd, const char *__RESTRICT p, char *__RESTRICT buf, size_
 }
 ssize_t readlink(const char *__RESTRICT p, char *__RESTRICT buf, size_t n) { return readlinkat(AT_FDCWD, p, buf, n); }
 
-int access(const char *p, int mode) { return (int)__sys3(SYS_faccessat, AT_FDCWD, p, mode); }
+int access(const char *p, int mode) { return (int)__sys4(SYS_faccessat, AT_FDCWD, p, mode, 0); }
 
 int faccessat(int fd, const char *p, int mode, int flag)
 {
-	long r;
-	if (!flag) return (int)__sys3(SYS_faccessat, fd, p, mode);
 	if (flag & ~(AT_EACCESS | AT_SYMLINK_NOFOLLOW)) { errno = EINVAL; return -1; }
-	r = __syscall4(SYS_faccessat2, fd, p, mode, flag);
-	if (r != -ENOSYS) return (int)__syscall_ret((unsigned long)r);
-	/* Old kernels: with equal real and effective IDs the flag changes nothing. */
-	if ((flag & AT_EACCESS) && (__syscall0(SYS_getuid) != __syscall0(SYS_geteuid) ||
-	    __syscall0(SYS_getgid) != __syscall0(SYS_getegid))) { errno = ENOSYS; return -1; }
-	if (flag & AT_SYMLINK_NOFOLLOW) { errno = ENOSYS; return -1; }
-	return (int)__sys3(SYS_faccessat, fd, p, mode);
+	return (int)__sys4(SYS_faccessat, fd, p, mode, flag);
 }
 

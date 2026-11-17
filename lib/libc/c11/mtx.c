@@ -46,7 +46,7 @@ int mtx_init(mtx_t *m, int type)
 {
 	memset(m, 0, sizeof *m);
 	if (type & mtx_recursive)
-		m->__i[0] = 1;          /* PTHREAD_MUTEX_RECURSIVE */
+		m->__i[8] = 1;          /* _m_type (pthread_impl.h): PTHREAD_MUTEX_RECURSIVE */
 	return thrd_success;
 }
 

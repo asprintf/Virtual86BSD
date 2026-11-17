@@ -72,8 +72,9 @@ long double __math_invalid(long double x)
 
 long double __math_divzero(int neg)
 {
+	volatile long double z = 0.0L;
 	errno = ERANGE;
-	return (neg ? -1.0L : 1.0L) / 0.0L;
+	return (neg ? -1.0L : 1.0L) / z;
 }
 
 long double __math_oflow(int neg)

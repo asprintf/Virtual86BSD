@@ -130,7 +130,7 @@ char *getcwd(char *buf, size_t n)
 		errno = EINVAL;
 		return 0;
 	}
-	k = __syscall2(SYS_getcwd, buf ? buf : tmp, buf ? n : sizeof tmp);
+	k = __syscall2(SYS___getcwd, buf ? buf : tmp, buf ? n : sizeof tmp);
 	if (k >= 0) {
 		b = buf ? buf : tmp;
 		if (b[0] != '/') {      /* unreachable */
@@ -139,9 +139,10 @@ char *getcwd(char *buf, size_t n)
 		}
 		return buf ? buf : __strdup_internal(tmp);
 	}
-	if (k != -ENAMETOOLONG || (buf && n <= sizeof tmp)) {
-		/* ERANGE for a small buffer too, as the kernel said */
-		errno = k == -ENAMETOOLONG ? ERANGE : (int)-k;
+	if (k == -EINVAL && buf) k = -ERANGE;      /* a buffer of one byte */
+	/* the kernel says ENOMEM when the path does not fit its buffer (at most 1024 bytes) */
+	if (!(k == -ENOMEM || k == -ENAMETOOLONG) || (buf && n <= 1024)) {
+		errno = (k == -ENOMEM || k == -ENAMETOOLONG) ? ERANGE : (int)-k;
 		return 0;
 	}
 	if (buf)

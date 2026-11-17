@@ -59,17 +59,12 @@
 static int rt_prio(void)
 {
 	struct __pthread *self = __pthread_self();
-	struct sched_param sp;
-	long pol = __syscall1(SYS_sched_getscheduler, self->tid);
-	if (pol < 0)
+	int pol, prio;
+	if (__thr_getsched(self->tid, &pol, &prio) < 0)
 		return -1;
-	pol &= ~0x40000000;	/* SCHED_RESET_ON_FORK */
 	if (pol != SCHED_FIFO && pol != SCHED_RR)
 		return -1;
-	memset(&sp, 0, sizeof sp);
-	if (__syscall2(SYS_sched_getparam, self->tid, &sp) < 0)
-		return -1;
-	return sp.sched_priority;
+	return prio;
 }
 
 int pthread_rwlock_init(pthread_rwlock_t *__RESTRICT rw, const pthread_rwlockattr_t *__RESTRICT a)

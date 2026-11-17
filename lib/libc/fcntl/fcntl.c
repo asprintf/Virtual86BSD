@@ -47,40 +47,20 @@ int fcntl(int fd, int cmd, ...)
 	case F_SETLKW:
 	case F_OFD_SETLKW:
 		return (int)__sys_cp3(SYS_fcntl, fd, cmd, arg);
-	case F_GETFD:
-		r = __syscall2(SYS_fcntl, fd, F_GETFD);
-		if (__clofork_native()) return (int)__syscall_ret((unsigned long)r);
-		if (r >= 0 && __clofork_get(fd)) r |= FD_CLOFORK;
-		return (int)__syscall_ret((unsigned long)r);
-	case F_SETFD:
-		if (__clofork_native()) return (int)__sys3(SYS_fcntl, fd, F_SETFD, arg & (FD_CLOEXEC | FD_CLOFORK));
-		r = __syscall3(SYS_fcntl, fd, F_SETFD, arg & FD_CLOEXEC);
-		if (r >= 0 && (__clofork_any || (arg & FD_CLOFORK)) &&
-		    __clofork_set(fd, (arg & FD_CLOFORK) != 0) < 0) return -1;
-		return (int)__syscall_ret((unsigned long)r);
-	case F_DUPFD_CLOFORK:
-		if (__clofork_native()) return (int)__sys3(SYS_fcntl, fd, F_DUPFD_CLOFORK, arg);
-		r = __syscall3(SYS_fcntl, fd, F_DUPFD, arg);
-		if (r >= 0 && __clofork_set((int)r, 1) < 0) {
-			__syscall1(SYS_close, r);
-			return -1;
-		}
-		return (int)__syscall_ret((unsigned long)r);
-	case F_GETOWN: {
-		/* plain F_GETOWN cannot report all group owners unambiguously */
-		struct f_owner_ex ex;
-		r = __syscall3(SYS_fcntl, fd, F_GETOWN_EX, &ex);
-		if (r == -EINVAL) return (int)__syscall3(SYS_fcntl, fd, F_GETOWN, 0);
-		if (r < 0) return (int)__syscall_ret((unsigned long)r);
-		return ex.type == F_OWNER_PGRP ? -ex.pid : ex.pid;
+	case F_SETOWN_EX: {
+		/* the kernel's F_SETOWN: a process, or minus a process group */
+		const struct f_owner_ex *ex = (const void *)arg;
+		if (ex->type != F_OWNER_PID && ex->type != F_OWNER_PGRP) { errno = EINVAL; return -1; }
+		return (int)__sys3(SYS_fcntl, fd, F_SETOWN, ex->type == F_OWNER_PGRP ? -ex->pid : ex->pid);
 	}
-	case F_GETFL:
-		/* the kernel adds O_LARGEFILE, which means nothing on 64-bit */
-		r = __syscall2(SYS_fcntl, fd, F_GETFL);
-		if (r >= 0) r &= ~0100000L;
-		return (int)__syscall_ret((unsigned long)r);
-	case F_SETFL:
-		return (int)__sys3(SYS_fcntl, fd, cmd, arg & ~(unsigned long)O_CLOFORK);
+	case F_GETOWN_EX: {
+		struct f_owner_ex *ex = (void *)arg;
+		r = __syscall3(SYS_fcntl, fd, F_GETOWN, 0);
+		if (r < 0) return (int)__syscall_ret((unsigned long)r);
+		ex->type = r < 0 ? F_OWNER_PGRP : F_OWNER_PID;
+		ex->pid = (pid_t)(r < 0 ? -r : r);
+		return 0;
+	}
 	default:
 		return (int)__sys3(SYS_fcntl, fd, cmd, arg);
 	}

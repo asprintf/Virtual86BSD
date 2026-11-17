@@ -48,7 +48,7 @@ int __execvpe(const char *, char *const [], char *const []);
 /* The child: attributes, file actions, exec. Errors go to fd ep as an int. */
 static _Noreturn void child(int ep, const char *path, int usepath, const posix_spawn_file_actions_t *fa,
                             const posix_spawnattr_t *at, char *const argv[], char *const envp[],
-                            const unsigned long *omask)
+                            const __sm_t *omask)
 {
 	struct sigaction sa;
 	struct fa *a;
@@ -56,7 +56,7 @@ static _Noreturn void child(int ep, const char *path, int usepath, const posix_s
 	short fl = at ? at->__flags : 0;
 
 	struct __pthread *self = __pthread_self();
-	self->tid = (int)__syscall0(SYS_gettid);
+	self->tid = (int)__thr_self();
 	self->next = self->prev = self;
 	__clofork_close_all();
 
@@ -113,31 +113,31 @@ static _Noreturn void child(int ep, const char *path, int usepath, const posix_s
 			break;
 		}
 	}
-	__syscall4(SYS_rt_sigprocmask, SIG_SETMASK, (fl & POSIX_SPAWN_SETSIGMASK) ? (const void *)&at->__mask : (const void *)omask, 0, 8);
+	__syscall3(SYS_sigprocmask, SIG_SETMASK, (fl & POSIX_SPAWN_SETSIGMASK) ? (const void *)&at->__mask : (const void *)omask, 0);
 	if (usepath) __execvpe(path, argv, envp);
 	else execve(path, argv, envp);
 fail:
 	e = errno;
 	while (write(ep, &e, sizeof e) < 0 && errno == EINTR);
-	__syscall1(SYS_exit_group, 127);
+	__syscall1(SYS__exit, 127);
 	for (;;);
 }
 
 static int spawn(pid_t *res, const char *path, int usepath, const posix_spawn_file_actions_t *fa,
                  const posix_spawnattr_t *at, char *const argv[], char *const envp[])
 {
-	unsigned long all = -1UL, old;
+	__sm_t all = { { -1UL, -1UL } }, old;
 	int p[2], e = 0, st;
 	long pid;
 	ssize_t n;
 	if (pipe2(p, O_CLOEXEC) < 0) return errno;
-	__syscall4(SYS_rt_sigprocmask, SIG_BLOCK, &all, &old, 8);
-	pid = __syscall5(SYS_clone, SIGCHLD, 0, 0, 0, 0);
+	__syscall3(SYS_sigprocmask, SIG_BLOCK, &all, &old);
+	pid = __syscall0(SYS_fork);
 	if (!pid) {
 		close(p[0]);
 		child(p[1], path, usepath, fa, at, argv, envp, &old);
 	}
-	__syscall4(SYS_rt_sigprocmask, SIG_SETMASK, &old, 0, 8);
+	__syscall3(SYS_sigprocmask, SIG_SETMASK, &old, 0);
 	close(p[1]);
 	if (pid < 0) { close(p[0]); return (int)-pid; }
 	while ((n = read(p[0], &e, sizeof e)) < 0 && errno == EINTR);

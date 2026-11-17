@@ -254,13 +254,16 @@ static int tcp_query(const struct sockaddr_in6 *ns, int v4only, const unsigned c
 	struct pollfd pfd;
 	int fd, n = 0, need = 2, got = 0, r;
 	if (v4only) {
-		struct sockaddr_in s4 = {AF_INET, ns->sin6_port, {0}, {0}};
+		struct sockaddr_in s4 = {sizeof(struct sockaddr_in), AF_INET, ns->sin6_port, {0}, {0}};
 		memcpy(&s4.sin_addr, ns->sin6_addr.s6_addr + 12, 4);
 		fd = socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
 		if (fd < 0 || connect(fd, (struct sockaddr *)&s4, sizeof s4) < 0)
 			goto fail;
 	} else {
+		int off = 0;
 		fd = socket(AF_INET6, SOCK_STREAM | SOCK_CLOEXEC, 0);
+		if (fd >= 0)     /* mapped servers: FreeBSD's default is v6only */
+			setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &off, sizeof off);
 		if (fd < 0 || connect(fd, (const struct sockaddr *)ns, sizeof *ns) < 0)
 			goto fail;
 	}

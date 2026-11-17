@@ -32,40 +32,61 @@
 #include <unistd.h>
 #include <errno.h>
 #include <string.h>
+#include <time.h>
 #include "syscall.h"
 
-#define TCGETS     0x5401
-#define TCSETS     0x5402
-#define TCSBRK     0x5409
-#define TCXONC     0x540A
-#define TCFLSH     0x540B
-#define TIOCGPGRP  0x540F
-#define TIOCSPGRP  0x5410
-#define TIOCGWINSZ 0x5413
-#define TIOCSWINSZ 0x5414
-#define TIOCGSID   0x5429
-#define CBAUD      0010017
+#include <sys/ioctl.h>
 
 int tcgetattr(int fd, struct termios *t)
 {
-	/* the kernel fills 19 of the NCCS control characters: the rest is
-	 * zeroed (as glibc), so that termios structures can be compared */
-	memset(t, 0, sizeof *t);
-	if (__sys3(SYS_ioctl, fd, TCGETS, t) < 0) return -1;
-	t->__c_ispeed = t->__c_ospeed = t->c_cflag & CBAUD;
-	return 0;
+	return (int)__sys3(SYS_ioctl, fd, TIOCGETA, t);
 }
 
 int tcsetattr(int fd, int act, const struct termios *t)
 {
+	static const unsigned long req[3] = { TIOCSETA, TIOCSETAW, TIOCSETAF };
 	if ((unsigned)act > TCSAFLUSH) { errno = EINVAL; return -1; }
-	return (int)__sys3(SYS_ioctl, fd, TCSETS + act, t);
+	return (int)__sys3(SYS_ioctl, fd, req[act], t);
 }
 
-int tcsendbreak(int fd, int dur) { (void)dur; return (int)__sys3(SYS_ioctl, fd, TCSBRK, 0); }
-int tcdrain(int fd) { return (int)__sys_cp3(SYS_ioctl, fd, TCSBRK, 1); }
-int tcflush(int fd, int q) { return (int)__sys3(SYS_ioctl, fd, TCFLSH, q); }
-int tcflow(int fd, int a) { return (int)__sys3(SYS_ioctl, fd, TCXONC, a); }
+int tcsendbreak(int fd, int dur)
+{
+	struct timespec ts = { 0, 400000000L };   /* 0.4 s */
+	(void)dur;
+	if (__sys3(SYS_ioctl, fd, TIOCSBRK, 0) < 0) return -1;
+	__syscall2(SYS_nanosleep, &ts, 0);
+	return (int)__sys3(SYS_ioctl, fd, TIOCCBRK, 0);
+}
+
+int tcdrain(int fd) { return (int)__sys_cp3(SYS_ioctl, fd, TIOCDRAIN, 0); }
+
+int tcflush(int fd, int q)
+{
+	int what;
+	switch (q) {
+	case TCIFLUSH: what = 1 /* FREAD */; break;
+	case TCOFLUSH: what = 2 /* FWRITE */; break;
+	case TCIOFLUSH: what = 3; break;
+	default: errno = EINVAL; return -1;
+	}
+	return (int)__sys3(SYS_ioctl, fd, TIOCFLUSH, &what);
+}
+
+int tcflow(int fd, int a)
+{
+	struct termios t;
+	char c;
+	switch (a) {
+	case TCOOFF: return (int)__sys3(SYS_ioctl, fd, TIOCSTOP, 0);
+	case TCOON: return (int)__sys3(SYS_ioctl, fd, TIOCSTART, 0);
+	case TCIOFF: case TCION:
+		if (tcgetattr(fd, &t) < 0) return -1;
+		c = (char)t.c_cc[a == TCIOFF ? VSTOP : VSTART];
+		if (c == (char)0xff) return 0;
+		return __syscall3(SYS_write, fd, &c, 1) == 1 ? 0 : -1;
+	default: errno = EINVAL; return -1;
+	}
+}
 
 pid_t tcgetsid(int fd)
 {
@@ -90,15 +111,7 @@ int tcsetpgrp(int fd, pid_t pg)
 int tcgetwinsize(int fd, struct winsize *w) { return (int)__sys3(SYS_ioctl, fd, TIOCGWINSZ, w); }
 int tcsetwinsize(int fd, const struct winsize *w) { return (int)__sys3(SYS_ioctl, fd, TIOCSWINSZ, w); }
 
-speed_t cfgetospeed(const struct termios *t) { return t->c_cflag & CBAUD; }
-speed_t cfgetispeed(const struct termios *t) { return cfgetospeed(t); }
-
-int cfsetospeed(struct termios *t, speed_t s)
-{
-	if (s & ~(speed_t)CBAUD) { errno = EINVAL; return -1; }
-	t->c_cflag = (t->c_cflag & ~(tcflag_t)CBAUD) | s;
-	return 0;
-}
-
-/* Linux has one speed for both directions; 0 means "same as output". */
-int cfsetispeed(struct termios *t, speed_t s) { return s ? cfsetospeed(t, s) : 0; }
+speed_t cfgetospeed(const struct termios *t) { return t->__c_ospeed; }
+speed_t cfgetispeed(const struct termios *t) { return t->__c_ispeed; }
+int cfsetospeed(struct termios *t, speed_t s) { t->__c_ospeed = s; return 0; }
+int cfsetispeed(struct termios *t, speed_t s) { t->__c_ispeed = s ? s : t->__c_ospeed; return 0; }

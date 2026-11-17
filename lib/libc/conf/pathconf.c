@@ -60,7 +60,7 @@ static long value(int name, long namemax)
 	case _PC_SYNC_IO: return 1;
 	case _PC_TEXTDOMAIN_MAX: return (namemax > 0 ? namemax : NAME_MAX) - 3;
 	case _PC_TIMESTAMP_RESOLUTION: return 1;  /* nanoseconds */
-	case _PC_VDISABLE: return 0;
+	case _PC_VDISABLE: return _POSIX_VDISABLE;
 	}
 	errno = EINVAL;
 	return -1;

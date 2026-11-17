@@ -2,7 +2,7 @@
 
 Legend: **done** = complete per POSIX.1-2024 and tested; **partial** =
 the header declares only what is implemented; **compiler** = supplied by
-the compiler (gcc / c17), not by this library.
+the compiler (clang / c17), not by this library.
 
 ## Stage 1: foundation
 
@@ -11,7 +11,7 @@ the compiler (gcc / c17), not by this library.
 | `<assert.h>` | done | message written with one `write(2)` (stderr is unbuffered, so the effect is the same and works even with stdio locked) |
 | `<ctype.h>` | done | the locale's classes for bytes 0x80-0xff (stage 5); `*_l` variants |
 | `<endian.h>` | done | |
-| `<errno.h>` | done | all Linux error numbers; per-thread `errno` |
+| `<errno.h>` | done | FreeBSD error numbers (and ENODATA, ENOSR, ENOSTR, ETIME above ELAST); per-thread `errno` |
 | `<inttypes.h>` | done | `wcstoimax`, `wcstoumax` since stage 5 |
 | `<iso646.h>` | done | |
 | `<limits.h>` | done | indeterminate limits omitted as required (use `sysconf`) |
@@ -769,3 +769,25 @@ of V86BSD's own would settle):
   ask the kernel (the latter through `/dev/tymctl`).  Without them
   (Linux): ENOENT, ENODEV, EACCES.  `sysconf(_SC_TYPED_MEMORY_OBJECTS)`
   looks for `/dev/tymctl`.  Tested in `tests/s_typedmem.c`.
+
+## On the FreeBSD kernel (V86BSD step 3)
+
+Built with clang and lld for `x86_64-unknown-freebsd15.2` (`config/clang.mk`,
+`tools/libc-cc`); `-fmath-errno` because `math_errhandling` has
+`MATH_ERRNO` (FreeBSD's clang default is without); compiler-rt's builtins
+archive of the host for the few helpers.  Kernel behaviours the tests
+allow for (all from the FreeBSD sources):
+
+* `timer_settime`: an interval below one tick is raised to a tick
+  (`itimespecfix`, kern_time.c); a VM runs at hz 100 (`HZ_VM`).
+* `shmctl(IPC_STAT)`: `shm_segsz` is the size rounded up to pages.
+* Real-time signals are 65-126 (`SIGRTMIN` 65); `CLK_TCK` is 128.
+* `SCHED_OTHER` priorities are 0-167, `SCHED_FIFO`/`SCHED_RR` 0-31.
+* A pty's output drains only when the master reads it, so
+  `tcsetattr(TCSAFLUSH)` waits for that (Linux does not).
+* Opening a terminal does not make it the controlling terminal: that is
+  `TIOCSCTTY`.  Process 1 starts in session 0 (`setsid` gives it one).
+* `pwrite` on an `O_APPEND` descriptor appends; `lchmod` works on
+  symbolic links; `SO_ACCEPTCONN` is 2, not 1.
+* IPv6 sockets are v6-only by default (`net.inet6.ip6.v6only`).
+* The fast system-call return zeroes `%r8`-`%r10`.

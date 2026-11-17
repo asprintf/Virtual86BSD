@@ -28,11 +28,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* sethostname(): not in POSIX, so not in uname.o with the functions that are */
+#define _DEFAULT_SOURCE
+#include <errno.h>
 #include <unistd.h>
 #include "syscall.h"
 
 int sethostname(const char *name, size_t len)
 {
-	return (int)__sys2(SYS_sethostname, name, len);
+	int mib[2] = { 1 /* CTL_KERN */, 10 /* KERN_HOSTNAME */ };
+	return (int)__sys6(SYS___sysctl, mib, 2, 0, 0, name, len);
 }

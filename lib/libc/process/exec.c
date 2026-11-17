@@ -48,7 +48,7 @@ int execv(const char *p, char *const argv[])
 
 int fexecve(int fd, char *const argv[], char *const envp[])
 {
-	return (int)__sys5(SYS_execveat, fd, "", argv, envp, 0x1000 /* AT_EMPTY_PATH */);
+	return (int)__sys3(SYS_fexecve, fd, argv, envp);
 }
 
 /* Run a file that is not an executable binary as a shell script. */

@@ -64,7 +64,7 @@ int posix_spawnattr_setschedpolicy(posix_spawnattr_t *a, int pol)
 	a->__policy = pol;
 	return 0;
 }
-int posix_spawnattr_getschedpolicy(const posix_spawnattr_t *__RESTRICT a, int *__RESTRICT pol) { *pol = a->__policy; return 0; }
+int posix_spawnattr_getschedpolicy(const posix_spawnattr_t *__RESTRICT a, int *__RESTRICT pol) { *pol = a->__policy ? a->__policy : SCHED_OTHER; return 0; }
 /* (a sporadic server's other members are kept in __pad) */
 #define SS_OFF offsetof(struct sched_param, sched_ss_low_priority)
 int posix_spawnattr_setschedparam(posix_spawnattr_t *__RESTRICT a, const struct sched_param *__RESTRICT p)

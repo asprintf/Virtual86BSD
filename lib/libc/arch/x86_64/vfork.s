@@ -27,16 +27,20 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # pid_t vfork(void): SUSv2, SUSv3.  The child shares the stack, so the
-# return address is kept in %rdx across the call and errno set by a jump.
+# return address is kept in %rsi (the kernel keeps it) across the call and
+# errno set by a jump.  The kernel returns 0 in the child.
 	.text
 	.globl	vfork
 	.type	vfork,@function
 vfork:
-	pop	%rdx
+	pop	%rsi
 	mov	$SYS_vfork,%eax
 	syscall
-	push	%rdx
-	mov	%rax,%rdi
+	push	%rsi
+	jc	1f
+	ret
+1:	mov	%rax,%rdi
+	neg	%rdi
 	jmp	__syscall_ret
 	.size	vfork,.-vfork
 	.section .note.GNU-stack,"",@progbits
