@@ -1,1292 +1,3683 @@
-/*
- * Copyright (c) 2026, Joost Orchidee Winter
- * All rights reserved.
+/*-
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Copyright (c) 1982, 1986, 1989, 1991, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived from
- *    this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
 
-/* proc.c - tasks and processes: creation (clone), exit, wait, process
-   groups and sessions, credentials, limits and other process attributes. */
+#include <sys/cdefs.h>
+#include "opt_ddb.h"
+#include "opt_ktrace.h"
+#include "opt_kstack_pages.h"
+#include "opt_stack.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
+#include <sys/bitstring.h>
+#include <sys/conf.h>
+#include <sys/elf.h>
+#include <sys/eventhandler.h>
+#include <sys/exec.h>
+#include <sys/fcntl.h>
+#include <sys/imgact.h>
+#include <sys/ipc.h>
+#include <sys/jail.h>
+#include <sys/kernel.h>
+#include <sys/limits.h>
+#include <sys/lock.h>
+#include <sys/loginclass.h>
+#include <sys/malloc.h>
+#include <sys/mman.h>
+#include <sys/mount.h>
+#include <sys/mutex.h>
+#include <sys/namei.h>
+#include <sys/proc.h>
+#include <sys/ptrace.h>
+#include <sys/refcount.h>
+#include <sys/resourcevar.h>
+#include <sys/rwlock.h>
+#include <sys/sbuf.h>
+#include <sys/sysent.h>
+#include <sys/sched.h>
+#include <sys/shm.h>
+#include <sys/smp.h>
+#include <sys/stack.h>
+#include <sys/stat.h>
+#include <sys/dtrace_bsd.h>
+#include <sys/sysctl.h>
+#include <sys/filedesc.h>
 #include <sys/tty.h>
-#include <sys/file.h>
-#include <uvm/uvm.h>
-#include <machine/cpu.h>
+#include <sys/signalvar.h>
+#include <sys/sdt.h>
+#include <sys/sx.h>
+#include <sys/user.h>
+#include <sys/vnode.h>
+#include <sys/wait.h>
+#ifdef KTRACE
+#include <sys/ktrace.h>
+#endif
 
-struct list all_tasks = LIST_INIT(all_tasks);
-struct list all_procs = LIST_INIT(all_procs);
-struct proc *init_proc;
-struct proc *kernel_proc;
-static _Alignas(16) uint8_t clean_fpu[512];
-static pid_t last_pid;
+#ifdef DDB
+#include <ddb/ddb.h>
+#endif
 
-int kstack_order(void);
-void task_set_dead(struct task *t);
+#include <vm/vm.h>
+#include <vm/vm_param.h>
+#include <vm/vm_extern.h>
+#include <vm/pmap.h>
+#include <vm/vm_map.h>
+#include <vm/vm_object.h>
+#include <vm/vm_page.h>
+#include <vm/vm_pager.h>
+#include <vm/vm_radix.h>
+#include <vm/uma.h>
 
-#define PID_MAX 32768
-int maxproc = PID_MAX; /* kern.maxproc: the process ids there are */
+#include <fs/devfs/devfs.h>
 
-struct task *find_task(pid_t tid) {
-  list_for_each(p, &all_tasks) {
-    struct task *t = list_entry(p, struct task, all_link);
-    if (t->tid == tid)
-      return t;
-  }
-  return NULL;
+#ifdef COMPAT_FREEBSD32
+#include <compat/freebsd32/freebsd32.h>
+#include <compat/freebsd32/freebsd32_util.h>
+#endif
+
+SDT_PROVIDER_DEFINE(proc);
+
+MALLOC_DEFINE(M_SESSION, "session", "session header");
+static MALLOC_DEFINE(M_PROC, "proc", "Proc structures");
+MALLOC_DEFINE(M_SUBPROC, "subproc", "Proc sub-structures");
+
+static void doenterpgrp(struct proc *, struct pgrp *);
+static void orphanpg(struct pgrp *pg);
+static void fill_kinfo_aggregate(struct proc *p, struct kinfo_proc *kp);
+static void fill_kinfo_proc_only(struct proc *p, struct kinfo_proc *kp);
+static void fill_kinfo_thread(struct thread *td, struct kinfo_proc *kp,
+    int preferthread);
+static void pgdelete(struct pgrp *);
+static int pgrp_init(void *mem, int size, int flags);
+static int proc_ctor(void *mem, int size, void *arg, int flags);
+static void proc_dtor(void *mem, int size, void *arg);
+static int proc_init(void *mem, int size, int flags);
+static void proc_fini(void *mem, int size);
+static void pargs_free(struct pargs *pa);
+
+/*
+ * Other process lists
+ */
+struct pidhashhead *pidhashtbl = NULL;
+struct sx *pidhashtbl_lock;
+u_long pidhash;
+u_long pidhashlock;
+struct pgrphashhead *pgrphashtbl;
+u_long pgrphash;
+struct proclist allproc = LIST_HEAD_INITIALIZER(allproc);
+struct sx __exclusive_cache_line allproc_lock;
+struct sx __exclusive_cache_line proctree_lock;
+struct mtx __exclusive_cache_line ppeers_lock;
+struct mtx __exclusive_cache_line procid_lock;
+uma_zone_t proc_zone;
+uma_zone_t pgrp_zone;
+
+/*
+ * The offset of various fields in struct proc and struct thread.
+ * These are used by kernel debuggers to enumerate kernel threads and
+ * processes.
+ */
+const int proc_off_p_pid = offsetof(struct proc, p_pid);
+const int proc_off_p_comm = offsetof(struct proc, p_comm);
+const int proc_off_p_list = offsetof(struct proc, p_list);
+const int proc_off_p_hash = offsetof(struct proc, p_hash);
+const int proc_off_p_threads = offsetof(struct proc, p_threads);
+const int thread_off_td_tid = offsetof(struct thread, td_tid);
+const int thread_off_td_name = offsetof(struct thread, td_name);
+const int thread_off_td_oncpu = offsetof(struct thread, td_oncpu);
+const int thread_off_td_pcb = offsetof(struct thread, td_pcb);
+const int thread_off_td_plist = offsetof(struct thread, td_plist);
+
+EVENTHANDLER_LIST_DEFINE(process_ctor);
+EVENTHANDLER_LIST_DEFINE(process_dtor);
+EVENTHANDLER_LIST_DEFINE(process_init);
+EVENTHANDLER_LIST_DEFINE(process_fini);
+EVENTHANDLER_LIST_DEFINE(process_exit);
+EVENTHANDLER_LIST_DEFINE(process_fork);
+EVENTHANDLER_LIST_DEFINE(process_exec);
+
+int kstack_pages = KSTACK_PAGES;
+SYSCTL_INT(_kern, OID_AUTO, kstack_pages, CTLFLAG_RDTUN | CTLFLAG_NOFETCH,
+    &kstack_pages, 0,
+    "Kernel stack size in pages");
+static int vmmap_skip_res_cnt = 0;
+SYSCTL_INT(_kern, OID_AUTO, proc_vmmap_skip_resident_count, CTLFLAG_RW,
+    &vmmap_skip_res_cnt, 0,
+    "Skip calculation of the pages resident count in kern.proc.vmmap");
+
+CTASSERT(sizeof(struct kinfo_proc) == KINFO_PROC_SIZE);
+#ifdef COMPAT_FREEBSD32
+CTASSERT(sizeof(struct kinfo_proc32) == KINFO_PROC32_SIZE);
+#endif
+
+/*
+ * Initialize global process hashing structures.
+ */
+void
+procinit(void)
+{
+	u_long i;
+
+	sx_init(&allproc_lock, "allproc");
+	sx_init(&proctree_lock, "proctree");
+	mtx_init(&ppeers_lock, "p_peers", NULL, MTX_DEF);
+	mtx_init(&procid_lock, "procid", NULL, MTX_DEF);
+	pidhashtbl = hashinit(maxproc / 4, M_PROC, &pidhash);
+	pidhashlock = (pidhash + 1) / 64;
+	if (pidhashlock > 0)
+		pidhashlock--;
+	pidhashtbl_lock = malloc(sizeof(*pidhashtbl_lock) * (pidhashlock + 1),
+	    M_PROC, M_WAITOK | M_ZERO);
+	for (i = 0; i < pidhashlock + 1; i++)
+		sx_init_flags(&pidhashtbl_lock[i], "pidhash", SX_DUPOK);
+	pgrphashtbl = hashinit(maxproc / 4, M_PROC, &pgrphash);
+	proc_zone = uma_zcreate("PROC", sched_sizeof_proc(),
+	    proc_ctor, proc_dtor, proc_init, proc_fini,
+	    UMA_ALIGN_PTR, UMA_ZONE_NOFREE);
+	pgrp_zone = uma_zcreate("PGRP", sizeof(struct pgrp), NULL, NULL,
+	    pgrp_init, NULL, UMA_ALIGN_PTR, UMA_ZONE_NOFREE);
+	uihashinit();
 }
 
-struct proc *find_proc(pid_t pid) {
-  list_for_each(p, &all_procs) {
-    struct proc *pr = list_entry(p, struct proc, all_link);
-    if (pr->pid == pid && pr->state != P_DEAD)
-      return pr;
-  }
-  return NULL;
+/*
+ * Prepare a proc for use.
+ */
+static int
+proc_ctor(void *mem, int size, void *arg, int flags)
+{
+	struct proc *p;
+	struct thread *td;
+
+	p = (struct proc *)mem;
+#ifdef KDTRACE_HOOKS
+	kdtrace_proc_ctor(p);
+#endif
+	EVENTHANDLER_DIRECT_INVOKE(process_ctor, p);
+	td = FIRST_THREAD_IN_PROC(p);
+	if (td != NULL) {
+		/* Make sure all thread constructors are executed */
+		EVENTHANDLER_DIRECT_INVOKE(thread_ctor, td);
+	}
+	return (0);
 }
 
-static bool pid_used(pid_t pid) {
-  if (find_task(pid))
-    return true;
-  list_for_each(p, &all_procs) {
-    struct proc *pr = list_entry(p, struct proc, all_link);
-    if (pr->pid == pid || pr->pgid == pid || pr->sid == pid)
-      return true;
-  }
-  return false;
+/*
+ * Reclaim a proc after use.
+ */
+static void
+proc_dtor(void *mem, int size, void *arg)
+{
+	struct proc *p;
+	struct thread *td;
+
+	/* INVARIANTS checks go here */
+	p = (struct proc *)mem;
+	td = FIRST_THREAD_IN_PROC(p);
+	if (td != NULL) {
+		KASSERT((p->p_numthreads == 1),
+		    ("too many threads in exiting process"));
+
+		/* Free all OSD associated to this thread. */
+		osd_thread_exit(td);
+		ast_kclear(td);
+
+		/* Make sure all thread destructors are executed */
+		EVENTHANDLER_DIRECT_INVOKE(thread_dtor, td);
+	}
+	KASSERT(STAILQ_EMPTY(&p->p_ktr), ("proc_dtor: non-empty p_ktr"));
+	EVENTHANDLER_DIRECT_INVOKE(process_dtor, p);
+#ifdef KDTRACE_HOOKS
+	kdtrace_proc_dtor(p);
+#endif
+	if (p->p_ksi != NULL)
+		KASSERT(! KSI_ONQ(p->p_ksi), ("SIGCHLD queue"));
 }
 
-void reset_pids(void) { last_pid = 0; }
+/*
+ * Initialize type-stable parts of a proc (when newly created).
+ */
+static int
+proc_init(void *mem, int size, int flags)
+{
+	struct proc *p;
 
-pid_t alloc_pid(void) {
-  for (int i = 0; i < PID_MAX; i++) {
-    last_pid = last_pid >= PID_MAX - 1 ? 300 : last_pid + 1;
-    if (last_pid == 1 && init_proc)
-      continue;
-    if (!pid_used(last_pid))
-      return last_pid;
-  }
-  return -1;
+	p = (struct proc *)mem;
+	mtx_init(&p->p_mtx, "process lock", NULL, MTX_DEF | MTX_DUPOK | MTX_NEW);
+	mtx_init(&p->p_slock, "process slock", NULL, MTX_SPIN | MTX_NEW);
+	mtx_init(&p->p_statmtx, "pstatl", NULL, MTX_SPIN | MTX_NEW);
+	mtx_init(&p->p_itimmtx, "pitiml", NULL, MTX_SPIN | MTX_NEW);
+	mtx_init(&p->p_profmtx, "pprofl", NULL, MTX_SPIN | MTX_NEW);
+	cv_init(&p->p_pwait, "ppwait");
+	TAILQ_INIT(&p->p_threads);	     /* all threads in proc */
+	EVENTHANDLER_DIRECT_INVOKE(process_init, p);
+	p->p_stats = pstats_alloc();
+	p->p_pgrp = NULL;
+	TAILQ_INIT(&p->p_kqtim_stop);
+	STAILQ_INIT(&p->p_ktr);
+	refcount_init(&p->p_tree_refcnt, 0);
+	return (0);
 }
 
-struct task *task_alloc(struct proc *p) {
-  struct task *t = kzalloc(sizeof(*t));
-  if (!t)
-    return NULL;
-  uint64_t ks = alloc_pages(kstack_order());
-  t->fpu = kmalloc(512);
-  if (!ks || !t->fpu) {
-    if (ks)
-      free_pages(ks, kstack_order());
-    kfree(t->fpu);
-    kfree(t);
-    return NULL;
-  }
-  t->kstack = P2V(ks);
-  memcpy(t->fpu, clean_fpu, 512);
-  t->regs = (struct regs *)((char *)t->kstack + (PAGE_SIZE << kstack_order()) - sizeof(struct regs));
-  t->proc = p;
-  t->tid = alloc_pid();
-  t->oncpu = -1;
-  t->cpus_allowed = ~0UL;
-  list_init(&t->thread_link);
-  list_init(&t->run_link);
-  list_init(&t->wait_link);
-  list_init(&t->timer_link);
-  list_init(&t->futex_link);
-  list_init(&t->pending.queue);
-  t->altstack.flags = SS_DISABLE;
-  list_add_tail(&all_tasks, &t->all_link);
-  return t;
+/*
+ * UMA should ensure that this function is never called.
+ * Freeing a proc structure would violate type stability.
+ */
+static void
+proc_fini(void *mem, int size)
+{
+#ifdef notnow
+	struct proc *p;
+
+	p = (struct proc *)mem;
+	EVENTHANDLER_DIRECT_INVOKE(process_fini, p);
+	pstats_free(p->p_stats);
+	thread_free(FIRST_THREAD_IN_PROC(p));
+	mtx_destroy(&p->p_mtx);
+	if (p->p_ksi != NULL)
+		ksiginfo_free(p->p_ksi);
+#else
+	panic("proc reclaimed");
+#endif
 }
 
-/* a processor's idle task: thread 0 of kernel_task, on none of its lists and
-   with no process id taken (sched_init's does the same by hand) */
-struct task *idle_task_alloc(void) {
-  pid_t keep = last_pid;
-  struct task *t = task_alloc(kernel_proc);
-  if (!t)
-    return NULL;
-  last_pid = keep;
-  t->tid = 0;
-  t->is_kthread = true;
-  t->is_idle = true;
-  t->state = T_RUNNING;
-  list_del(&t->all_link);
-  return t;
+static int
+pgrp_init(void *mem, int size, int flags)
+{
+	struct pgrp *pg;
+
+	pg = mem;
+	mtx_init(&pg->pg_mtx, "process group", NULL, MTX_DEF | MTX_DUPOK);
+	sx_init(&pg->pg_killsx, "killpg racer");
+	return (0);
 }
 
-static void pending_clear(struct sigpending *sp) {
-  list_for_each_safe(p, n, &sp->queue) {
-    list_del(p);
-    kfree(list_entry(p, struct sigqueue, link));
-  }
-  sp->set = 0;
-}
+/*
+ * PID space management.
+ *
+ * These bitmaps are used by fork_findpid.
+ */
+bitstr_t bit_decl(proc_id_pidmap, PID_MAX);
+bitstr_t bit_decl(proc_id_grpidmap, PID_MAX);
+bitstr_t bit_decl(proc_id_sessidmap, PID_MAX);
+bitstr_t bit_decl(proc_id_reapmap, PID_MAX);
 
-void task_free(struct task *t) {
-  ss_free(t);
-  pending_clear(&t->pending);
-  free_pages(V2P(t->kstack), kstack_order());
-  kfree(t->fpu);
-  kfree(t);
-}
-
-struct proc *proc_alloc(void) {
-  struct proc *p = kzalloc(sizeof(*p));
-  if (!p)
-    return NULL;
-  list_init(&p->children);
-  list_init(&p->sibling);
-  list_init(&p->threads);
-  list_init(&p->pending.queue);
-  list_init(&p->timers);
-  waitq_init(&p->child_wait);
-  waitq_init(&p->vfork_wait);
-  p->state = P_ALIVE;
-  p->p_emul = &emul_native;
-  p->start_time = monotonic_ns();
-  return p;
-}
-
-bool capable(void) { return cur_proc()->cred.euid == 0; }
-
-static void rlim_defaults(struct proc *p) {
-  for (int i = 0; i < RLIM_NLIMITS; i++)
-    p->rlim[i].cur = p->rlim[i].max = RLIM_INFINITY;
-  p->rlim[RLIMIT_STACK].cur = 8UL << 20;
-  p->rlim[RLIMIT_NOFILE].cur = 1024;
-  p->rlim[RLIMIT_NOFILE].max = 1024 * 1024;
-  p->rlim[RLIMIT_CORE].cur = 0;
-  p->rlim[RLIMIT_MEMLOCK].cur = p->rlim[RLIMIT_MEMLOCK].max = 8UL << 20;
-  p->rlim[RLIMIT_SIGPENDING].cur = p->rlim[RLIMIT_SIGPENDING].max = 1024;
-  p->rlim[RLIMIT_NPROC].cur = p->rlim[RLIMIT_NPROC].max = 4096;
-  p->rlim[RLIMIT_MSGQUEUE].cur = p->rlim[RLIMIT_MSGQUEUE].max = 819200;
-  p->rlim[RLIMIT_NICE].cur = p->rlim[RLIMIT_NICE].max = 0;
-  p->rlim[RLIMIT_RTPRIO].cur = p->rlim[RLIMIT_RTPRIO].max = 0;
-}
-
-/* process 0, kernel_task: the kernel itself.  It has no address space, files
-   or working directory; its threads are the kernel threads, and it is the
-   parent of init. */
-void proc_init_kernel(void) {
-  struct proc *p = proc_alloc();
-  if (!p)
-    panic("no memory for kernel_task");
-  p->pid = p->pgid = p->sid = 0;
-  p->parent = p;
-  for (int i = 0; i < RLIM_NLIMITS; i++)
-    p->rlim[i].cur = p->rlim[i].max = RLIM_INFINITY;
-  strcpy(p->comm, "kernel_task");
-  list_add_tail(&all_procs, &p->all_link);
-  kernel_proc = p;
-}
-
-void kproc_attach(struct task *t) {
-  uint64_t f = irq_save();
-  t->proc = kernel_proc;
-  list_add_tail(&kernel_proc->threads, &t->thread_link);
-  kernel_proc->nthreads++;
-  irq_restore(f);
-}
-
-void kproc_detach(struct task *t) {
-  list_del(&t->thread_link);
-  kernel_proc->nthreads--;
-}
-
-/* the first user process (pid 1): made by the kernel, it execs /sbin/init */
-void proc_init_first(void) {
-  fxsave(clean_fpu); /* the kernel never uses the FPU: a clean state */
-  struct proc *p = proc_alloc();
-  struct task *t = task_alloc(p);
-  p->pid = t->tid;
-  p->pgid = p->sid = p->pid;
-  p->parent = kernel_proc;
-  list_add_tail(&kernel_proc->children, &p->sibling);
-  p->umask = 022;
-  p->mm = mm_new();
-  p->nice = 0;
-  p->next_timer_id = 0;
-  rlim_defaults(p);
-  strcpy(p->comm, "init");
-  p->cwd.mnt = p->root.mnt = root_mount;
-  p->cwd.ino = igrab(root_mount->root);
-  p->root.ino = igrab(root_mount->root);
-  list_add_tail(&p->threads, &t->thread_link);
-  p->nthreads = 1;
-  list_add_tail(&all_procs, &p->all_link);
-  init_proc = p;
-  t->state = T_RUNNING;
-}
-
-/* ---- clone ---- */
-
-#define CLONE_VM 0x100
-#define CLONE_FS 0x200
-#define CLONE_FILES 0x400
-#define CLONE_SIGHAND 0x800
-#define CLONE_PIDFD 0x1000
-#define CLONE_VFORK 0x4000
-#define CLONE_PARENT 0x8000
-#define CLONE_THREAD 0x10000
-#define CLONE_SETTLS 0x80000
-#define CLONE_PARENT_SETTID 0x100000
-#define CLONE_CHILD_CLEARTID 0x200000
-#define CLONE_CHILD_SETTID 0x1000000
-#define CLONE_UNSUPPORTED 0x7e02a000UL /* namespaces, ptrace, io, pidfd... */
-
-static void setup_child_stack(struct task *t, struct regs *r) {
-  *t->regs = *r;
-  uint64_t *sp = (uint64_t *)t->regs;
-  *--sp = (uint64_t)ret_from_fork;
-  for (int i = 0; i < 6; i++)
-    *--sp = 0;
-  t->ksp = (uint64_t)sp;
-}
-
-long do_fork(uint64_t flags, uint64_t stack, uint64_t ptid, uint64_t ctid, uint64_t tls, struct regs *r) {
-  struct proc *parent = cur_proc();
-  if ((flags & CLONE_THREAD) && (!(flags & CLONE_SIGHAND) || !(flags & CLONE_VM)))
-    return -EINVAL;
-  if ((flags & CLONE_SIGHAND) && !(flags & CLONE_VM))
-    return -EINVAL;
-  if (flags & (CLONE_UNSUPPORTED & ~(uint64_t)CLONE_PIDFD))
-    return -EINVAL;
-  if (flags & CLONE_PIDFD)
-    return -EINVAL;
-  if ((flags & CLONE_PARENT) && parent == init_proc)
-    return -EINVAL;
-  fxsave(current->fpu);
-  struct task *t;
-  struct proc *p;
-  if (flags & CLONE_THREAD) {
-    p = parent;
-    t = task_alloc(p);
-    if (!t)
-      return -EAGAIN;
-    list_add_tail(&p->threads, &t->thread_link);
-    p->nthreads++;
-  } else {
-    int nproc = 0;
-    list_for_each(q, &all_procs) nproc++;
-    if (nproc >= 4096 && !capable())
-      return -EAGAIN;
-    p = proc_alloc();
-    if (!p)
-      return -ENOMEM;
-    t = task_alloc(p);
-    if (!t) {
-      kfree(p);
-      return -EAGAIN;
-    }
-    p->pid = t->tid;
-    p->p_emul = parent->p_emul;
-    if (flags & CLONE_VM) {
-      p->mm = parent->mm;
-      p->mm->ref++;
-    } else {
-      p->mm = mm_dup(parent->mm);
-      if (!p->mm) {
-        list_del(&t->all_link);
-        task_free(t);
-        kfree(p);
-        return -ENOMEM;
-      }
-    }
-    if (fds_dup(p, parent)) {
-      mm_put(p->mm);
-      list_del(&t->all_link);
-      task_free(t);
-      kfree(p);
-      return -EMFILE;
-    }
-    p->cwd = parent->cwd;
-    path_get(&p->cwd);
-    p->root = parent->root;
-    path_get(&p->root);
-    p->umask = parent->umask;
-    memcpy(p->sigact, parent->sigact, sizeof(p->sigact));
-    p->cred = parent->cred;
-    if (p->cred.ngroups) {
-      p->cred.groups = kmalloc(p->cred.ngroups * sizeof(gid_t));
-      memcpy(p->cred.groups, parent->cred.groups, p->cred.ngroups * sizeof(gid_t));
-    }
-    memcpy(p->rlim, parent->rlim, sizeof(p->rlim));
-    memcpy(p->comm, parent->comm, sizeof(p->comm));
-    p->exe = parent->exe ? kstrdup(parent->exe) : NULL;
-    p->pgid = parent->pgid;
-    p->sid = parent->sid;
-    p->ctty = parent->ctty;
-    p->nice = parent->nice;
-    p->exit_status = (int)(flags & 0xff); /* the exit signal, until exit */
-    struct proc *pp = (flags & CLONE_PARENT) ? parent->parent : parent;
-    p->parent = pp;
-    list_add_tail(&pp->children, &p->sibling);
-    list_add_tail(&p->threads, &t->thread_link);
-    p->nthreads = 1;
-    list_add_tail(&all_procs, &p->all_link);
-  }
-  t->blocked = current->blocked;
-  t->policy = current->policy;
-  t->rtprio = current->rtprio;
-  t->cpus_allowed = current->cpus_allowed;
-  ss_copy(t, current);
-  memcpy(t->fpu, current->fpu, 512);
-  t->fsbase = (flags & CLONE_SETTLS) ? tls : current->fsbase;
-  if (!(flags & CLONE_VM)) /* threads do not inherit the alternate stack */
-    t->altstack = current->altstack;
-  setup_child_stack(t, r);
-  t->regs->rax = 0;
-  if (stack)
-    t->regs->rsp = stack;
-  if (flags & CLONE_CHILD_CLEARTID)
-    t->clear_child_tid = ctid;
-  int32_t tid = t->tid;
-  if (flags & CLONE_PARENT_SETTID)
-    copy_to_user((void *)ptid, &tid, 4);
-  if (flags & CLONE_CHILD_SETTID) {
-    if (flags & CLONE_VM)
-      copy_to_user((void *)ctid, &tid, 4);
-    else {
-      /* write in the child's copy */
-      mm_switch(p->mm);
-      int e = handle_fault(p->mm, ctid, true, false);
-      if (!e)
-        copy_to_user((void *)ctid, &tid, 4);
-      mm_switch(parent->mm);
-    }
-  }
-  uint64_t f = irq_save();
-  t->state = T_RUNNING;
-  make_runnable(t);
-  irq_restore(f);
-  if (flags & CLONE_VFORK) {
-    f = irq_save();
-    while (!p->vfork_done && !task_ending(current))
-      sleep_on(&p->vfork_wait, 0, false);
-    irq_restore(f);
-  }
-  return tid;
-}
-
-long sys_clone(long flags, long stack, long ptid, long ctid, long tls) {
-  return do_fork((uint64_t)flags, (uint64_t)stack, (uint64_t)ptid, (uint64_t)ctid, (uint64_t)tls, current->regs);
-}
-
-long sys_fork(void) { return do_fork(SIGCHLD, 0, 0, 0, 0, current->regs); }
-
-long sys_vfork(void) { return do_fork(CLONE_VM | CLONE_VFORK | SIGCHLD, 0, 0, 0, 0, current->regs); }
-
-struct clone_args {
-  uint64_t flags, pidfd, child_tid, parent_tid, exit_signal, stack, stack_size, tls;
+static bitstr_t *proc_id_array[] = {
+	proc_id_pidmap,
+	proc_id_grpidmap,
+	proc_id_sessidmap,
+	proc_id_reapmap,
 };
 
-long sys_clone3(long uargs, long size) {
-  struct clone_args a;
-  memset(&a, 0, sizeof(a));
-  if (size < 64 || (size_t)size > 4096)
-    return -EINVAL;
-  if (copy_from_user(&a, (void *)uargs, sizeof(a)))
-    return -EFAULT;
-  if (a.exit_signal & ~0xffUL)
-    return -EINVAL;
-  return do_fork(a.flags | a.exit_signal, a.stack ? a.stack + a.stack_size : 0, a.parent_tid,
-                 a.child_tid, a.tls, current->regs);
+void
+proc_id_set(int type, pid_t id)
+{
+
+	KASSERT(type >= 0 && type < nitems(proc_id_array),
+	    ("invalid type %d\n", type));
+	mtx_lock(&procid_lock);
+	KASSERT(bit_test(proc_id_array[type], id) == 0,
+	    ("bit %d already set in %d\n", id, type));
+	bit_set(proc_id_array[type], id);
+	mtx_unlock(&procid_lock);
 }
 
-/* ---- exit ---- */
+void
+proc_id_set_cond(int type, pid_t id)
+{
 
-static void vfork_release(struct proc *p) {
-  if (!p->vfork_done) {
-    p->vfork_done = true;
-    wake_up(&p->vfork_wait);
-  }
+	KASSERT(type >= 0 && type < nitems(proc_id_array),
+	    ("invalid type %d\n", type));
+	if (bit_test(proc_id_array[type], id))
+		return;
+	mtx_lock(&procid_lock);
+	bit_set(proc_id_array[type], id);
+	mtx_unlock(&procid_lock);
 }
 
-void proc_vfork_release(struct proc *p) { vfork_release(p); }
+void
+proc_id_clear(int type, pid_t id)
+{
 
-static void proc_free(struct proc *p) {
-  list_del(&p->sibling);
-  list_del(&p->all_link);
-  pending_clear(&p->pending);
-  kfree(p->cred.groups);
-  kfree(p->exe);
-  kfree(p);
+	KASSERT(type >= 0 && type < nitems(proc_id_array),
+	    ("invalid type %d\n", type));
+	mtx_lock(&procid_lock);
+	KASSERT(bit_test(proc_id_array[type], id) != 0,
+	    ("bit %d not set in %d\n", id, type));
+	bit_clear(proc_id_array[type], id);
+	mtx_unlock(&procid_lock);
 }
 
-/* the parent is told about a dead child: SIGCHLD and a wakeup */
-static void notify_parent(struct proc *p) {
-  struct proc *pp = p->parent;
-  int sig = p->exit_status >> 16; /* kept there by proc_exit */
-  int status = p->exit_status & 0xffff;
-  p->exit_status = status;
-  bool autoreap = pp->sigact[SIGCHLD - 1].handler == SIG_IGN ||
-                  (pp->sigact[SIGCHLD - 1].flags & SA_NOCLDWAIT);
-  if (sig) {
-    struct siginfo si;
-    memset(&si, 0, sizeof(si));
-    si.signo = sig;
-    if ((status & 0x7f) == 0) {
-      si.code = CLD_EXITED;
-      si.u.chld.status = (status >> 8) & 0xff;
-    } else {
-      si.code = (status & 0x80) ? CLD_DUMPED : CLD_KILLED;
-      si.u.chld.status = status & 0x7f;
-    }
-    si.u.chld.pid = p->pid;
-    si.u.chld.uid = p->cred.uid;
-    si.u.chld.utime = (int64_t)(p->utime * 100 / HZ);
-    si.u.chld.stime = (int64_t)(p->stime * 100 / HZ);
-    send_signal_proc(pp, &si);
-  }
-  if (autoreap && pp != p) {
-    p->state = P_DEAD;
-    proc_free(p);
-  }
-  wake_up(&pp->child_wait);
+/*
+ * Is p an inferior of the current process?
+ */
+int
+inferior(struct proc *p)
+{
+
+	sx_assert(&proctree_lock, SX_LOCKED);
+	PROC_LOCK_ASSERT(p, MA_OWNED);
+	for (; p != curproc; p = proc_realparent(p)) {
+		if (p->p_pid == 0)
+			return (0);
+	}
+	return (1);
 }
 
-/* the last thread of p has exited */
-static void proc_exit(struct proc *p, int status) {
-  int exitsig = p->exit_status & 0xff;
-  if (p == init_proc)
-    panic("init exited (status %#x)", status);
-  timers_exit(p);
-  fd_close_all(p);
-  path_put(&p->cwd);
-  path_put(&p->root);
-  sem_exit(p);
-  struct mm *mm = p->mm;
-  p->mm = NULL;
-  mm_switch(NULL);
-  mm_put(mm);
-  vfork_release(p);
-  /* a session leader's terminal is hung up */
-  if (p->sid == p->pid && p->ctty)
-    tty_session_hangup(p->ctty, p->sid);
-  orphan_check_exit(p);
-  /* children go to init */
-  list_for_each_safe(c, n, &p->children) {
-    struct proc *ch = list_entry(c, struct proc, sibling);
-    list_del(&ch->sibling);
-    ch->parent = init_proc;
-    list_add_tail(&init_proc->children, &ch->sibling);
-    if (ch->state == P_ZOMBIE)
-      wake_up(&init_proc->child_wait);
-  }
-  p->state = P_ZOMBIE;
-  p->exit_status = status | exitsig << 16;
-  notify_parent(p);
+/*
+ * Shared lock all the pid hash lists.
+ */
+void
+pidhash_slockall(void)
+{
+	u_long i;
+
+	for (i = 0; i < pidhashlock + 1; i++)
+		sx_slock(&pidhashtbl_lock[i]);
 }
 
-NORETURN void do_exit(int status) {
-  struct task *t = current;
-  struct proc *p = t->proc;
-  t->exiting = true;
-  futex_clear_tid(t);
-  exit_robust_list(t);
-  cli();
-  list_del(&t->thread_link);
-  p->nthreads--;
-  if (p->nthreads > 0 && p->stopped)
-    group_stop_report(p); /* (the others may all have stopped) */
-  /* process-directed signals that this thread still holds stay in p */
-  if (p->nthreads == 0) {
-    sti();
-    proc_exit(p, p->group_exit ? p->group_status : status);
-    cli();
-  }
-  t->state = T_ZOMBIE;
-  list_del(&t->all_link);
-  task_set_dead(t);
-  schedule();
-  panic("zombie task ran");
+/*
+ * Shared unlock all the pid hash lists.
+ */
+void
+pidhash_sunlockall(void)
+{
+	u_long i;
+
+	for (i = 0; i < pidhashlock + 1; i++)
+		sx_sunlock(&pidhashtbl_lock[i]);
 }
 
-NORETURN void do_group_exit(int status) {
-  struct proc *p = cur_proc();
-  if (!p->group_exit) {
-    p->group_exit = true;
-    p->group_status = status;
-    list_for_each(q, &p->threads) {
-      struct task *o = list_entry(q, struct task, thread_link);
-      if (o != current) {
-        o->pending.set |= SIGBIT(SIGKILL);
-        wake_task(o);
-        if (o->state == T_STOPPED) {
-          o->state = T_RUNNING;
-          make_runnable(o);
-        }
-      }
-    }
-  }
-  do_exit(status);
+/*
+ * Similar to pfind(), this function locate a process by number.
+ */
+struct proc *
+pfind_any_locked(pid_t pid)
+{
+	struct proc *p;
+
+	sx_assert(PIDHASHLOCK(pid), SX_LOCKED);
+	LIST_FOREACH(p, PIDHASH(pid), p_hash) {
+		if (p->p_pid == pid) {
+			PROC_LOCK(p);
+			if (p->p_state == PRS_NEW) {
+				PROC_UNLOCK(p);
+				p = NULL;
+			}
+			break;
+		}
+	}
+	return (p);
 }
 
-long sys_exit(long code) { do_exit(((int)code & 0xff) << 8); }
+/*
+ * Locate a process by number.
+ *
+ * By not returning processes in the PRS_NEW state, we allow callers to avoid
+ * testing for that condition to avoid dereferencing p_ucred, et al.
+ */
+static __always_inline struct proc *
+_pfind(pid_t pid, bool zombie)
+{
+	struct proc *p;
 
-long sys_exit_group(long code) { do_group_exit(((int)code & 0xff) << 8); }
+	p = curproc;
+	if (p->p_pid == pid) {
+		PROC_LOCK(p);
+		return (p);
+	}
+	sx_slock(PIDHASHLOCK(pid));
+	LIST_FOREACH(p, PIDHASH(pid), p_hash) {
+		if (p->p_pid == pid) {
+			PROC_LOCK(p);
+			if (p->p_state == PRS_NEW ||
+			    (!zombie && p->p_state == PRS_ZOMBIE)) {
+				PROC_UNLOCK(p);
+				p = NULL;
+			}
+			break;
+		}
+	}
+	sx_sunlock(PIDHASHLOCK(pid));
+	return (p);
+}
 
-/* ---- wait ---- */
+struct proc *
+pfind(pid_t pid)
+{
 
-#define WNOHANG 1
-#define WUNTRACED 2
-#define WEXITED 4
-#define WCONTINUED 8
-#define WNOWAIT 0x01000000
-#define WALL 0x40000000
-#define WCLONE 0x80000000
+	return (_pfind(pid, false));
+}
 
-#define P_ALL 0
-#define P_PID 1
-#define P_PGID 2
-#define P_PIDFD 3
+/*
+ * Same as pfind but allow zombies.
+ */
+struct proc *
+pfind_any(pid_t pid)
+{
 
-struct krusage {
-  int64_t utime[2], stime[2];
-  int64_t rest[14];
+	return (_pfind(pid, true));
+}
+
+/*
+ * Locate a process group by number.
+ * The caller must hold proctree_lock.
+ */
+struct pgrp *
+pgfind(pid_t pgid)
+{
+	struct pgrp *pgrp;
+
+	sx_assert(&proctree_lock, SX_LOCKED);
+
+	LIST_FOREACH(pgrp, PGRPHASH(pgid), pg_hash) {
+		if (pgrp->pg_id == pgid) {
+			PGRP_LOCK(pgrp);
+			return (pgrp);
+		}
+	}
+	return (NULL);
+}
+
+/*
+ * Locate process and do additional manipulations, depending on flags.
+ */
+int
+pget(pid_t pid, int flags, struct proc **pp)
+{
+	struct proc *p;
+	struct thread *td1;
+	int error;
+
+	p = curproc;
+	if (p->p_pid == pid) {
+		PROC_LOCK(p);
+	} else {
+		p = NULL;
+		if (pid <= PID_MAX) {
+			if ((flags & PGET_NOTWEXIT) == 0)
+				p = pfind_any(pid);
+			else
+				p = pfind(pid);
+		} else if ((flags & PGET_NOTID) == 0) {
+			td1 = tdfind(pid, -1);
+			if (td1 != NULL)
+				p = td1->td_proc;
+		}
+		if (p == NULL)
+			return (ESRCH);
+		if ((flags & PGET_CANSEE) != 0) {
+			error = p_cansee(curthread, p);
+			if (error != 0)
+				goto errout;
+		}
+	}
+	if ((flags & PGET_CANDEBUG) != 0) {
+		error = p_candebug(curthread, p);
+		if (error != 0)
+			goto errout;
+	}
+	if ((flags & PGET_ISCURRENT) != 0 && curproc != p) {
+		error = EPERM;
+		goto errout;
+	}
+	if ((flags & PGET_NOTWEXIT) != 0 && (p->p_flag & P_WEXIT) != 0) {
+		error = ESRCH;
+		goto errout;
+	}
+	if ((flags & PGET_NOTINEXEC) != 0 && (p->p_flag & P_INEXEC) != 0) {
+		/*
+		 * XXXRW: Not clear ESRCH is the right error during proc
+		 * execve().
+		 */
+		error = ESRCH;
+		goto errout;
+	}
+	if ((flags & PGET_HOLD) != 0) {
+		_PHOLD(p);
+		PROC_UNLOCK(p);
+	}
+	*pp = p;
+	return (0);
+errout:
+	PROC_UNLOCK(p);
+	return (error);
+}
+
+/*
+ * Create a new process group.
+ * pgid must be equal to the pid of p.
+ * Begin a new session if required.
+ */
+int
+enterpgrp(struct proc *p, pid_t pgid, struct pgrp *pgrp, struct session *sess)
+{
+	struct pgrp *old_pgrp;
+
+	sx_assert(&proctree_lock, SX_XLOCKED);
+
+	KASSERT(pgrp != NULL, ("enterpgrp: pgrp == NULL"));
+	KASSERT(p->p_pid == pgid,
+	    ("enterpgrp: new pgrp and pid != pgid"));
+	KASSERT(pgfind(pgid) == NULL,
+	    ("enterpgrp: pgrp with pgid exists"));
+	KASSERT(!SESS_LEADER(p),
+	    ("enterpgrp: session leader attempted setpgrp"));
+
+	old_pgrp = p->p_pgrp;
+	if (!sx_try_xlock(&old_pgrp->pg_killsx)) {
+		sx_xunlock(&proctree_lock);
+		sx_xlock(&old_pgrp->pg_killsx);
+		sx_xunlock(&old_pgrp->pg_killsx);
+		return (ERESTART);
+	}
+	MPASS(old_pgrp == p->p_pgrp);
+
+	if (sess != NULL) {
+		/*
+		 * new session
+		 */
+		mtx_init(&sess->s_mtx, "session", NULL, MTX_DEF);
+		PROC_LOCK(p);
+		p->p_flag &= ~P_CONTROLT;
+		PROC_UNLOCK(p);
+		PGRP_LOCK(pgrp);
+		sess->s_leader = p;
+		sess->s_sid = p->p_pid;
+		proc_id_set(PROC_ID_SESSION, p->p_pid);
+		refcount_init(&sess->s_count, 1);
+		sess->s_ttyvp = NULL;
+		sess->s_ttydp = NULL;
+		sess->s_ttyp = NULL;
+		bcopy(p->p_session->s_login, sess->s_login,
+			    sizeof(sess->s_login));
+		pgrp->pg_session = sess;
+		KASSERT(p == curproc,
+		    ("enterpgrp: mksession and p != curproc"));
+	} else {
+		pgrp->pg_session = p->p_session;
+		sess_hold(pgrp->pg_session);
+		PGRP_LOCK(pgrp);
+	}
+	pgrp->pg_id = pgid;
+	proc_id_set(PROC_ID_GROUP, p->p_pid);
+	LIST_INIT(&pgrp->pg_members);
+	pgrp->pg_flags = 0;
+
+	/*
+	 * As we have an exclusive lock of proctree_lock,
+	 * this should not deadlock.
+	 */
+	LIST_INSERT_HEAD(PGRPHASH(pgid), pgrp, pg_hash);
+	SLIST_INIT(&pgrp->pg_sigiolst);
+	PGRP_UNLOCK(pgrp);
+
+	doenterpgrp(p, pgrp);
+
+	sx_xunlock(&old_pgrp->pg_killsx);
+	return (0);
+}
+
+/*
+ * Move p to an existing process group
+ */
+int
+enterthispgrp(struct proc *p, struct pgrp *pgrp)
+{
+	struct pgrp *old_pgrp;
+
+	sx_assert(&proctree_lock, SX_XLOCKED);
+	PROC_LOCK_ASSERT(p, MA_NOTOWNED);
+	PGRP_LOCK_ASSERT(pgrp, MA_NOTOWNED);
+	PGRP_LOCK_ASSERT(p->p_pgrp, MA_NOTOWNED);
+	SESS_LOCK_ASSERT(p->p_session, MA_NOTOWNED);
+	KASSERT(pgrp->pg_session == p->p_session,
+	    ("%s: pgrp's session %p, p->p_session %p proc %p\n",
+	    __func__, pgrp->pg_session, p->p_session, p));
+	KASSERT(pgrp != p->p_pgrp,
+	    ("%s: p %p belongs to pgrp %p", __func__, p, pgrp));
+
+	old_pgrp = p->p_pgrp;
+	if (!sx_try_xlock(&old_pgrp->pg_killsx)) {
+		sx_xunlock(&proctree_lock);
+		sx_xlock(&old_pgrp->pg_killsx);
+		sx_xunlock(&old_pgrp->pg_killsx);
+		return (ERESTART);
+	}
+	MPASS(old_pgrp == p->p_pgrp);
+	if (!sx_try_xlock(&pgrp->pg_killsx)) {
+		sx_xunlock(&old_pgrp->pg_killsx);
+		sx_xunlock(&proctree_lock);
+		sx_xlock(&pgrp->pg_killsx);
+		sx_xunlock(&pgrp->pg_killsx);
+		return (ERESTART);
+	}
+
+	doenterpgrp(p, pgrp);
+
+	sx_xunlock(&pgrp->pg_killsx);
+	sx_xunlock(&old_pgrp->pg_killsx);
+	return (0);
+}
+
+/*
+ * If true, any child of q which belongs to group pgrp, qualifies the
+ * process group pgrp as not orphaned.
+ */
+static bool
+isjobproc(struct proc *q, struct pgrp *pgrp)
+{
+	sx_assert(&proctree_lock, SX_LOCKED);
+
+	return (q->p_pgrp != pgrp &&
+	    q->p_pgrp->pg_session == pgrp->pg_session);
+}
+
+static struct proc *
+jobc_reaper(struct proc *p)
+{
+	struct proc *pp;
+
+	sx_assert(&proctree_lock, SA_LOCKED);
+
+	for (pp = p;;) {
+		pp = pp->p_reaper;
+		if (pp->p_reaper == pp ||
+		    (pp->p_treeflag & P_TREE_GRPEXITED) == 0)
+			return (pp);
+	}
+}
+
+static struct proc *
+jobc_parent(struct proc *p, struct proc *p_exiting)
+{
+	struct proc *pp;
+
+	sx_assert(&proctree_lock, SA_LOCKED);
+
+	pp = proc_realparent(p);
+	if (pp->p_pptr == NULL || pp == p_exiting ||
+	    (pp->p_treeflag & P_TREE_GRPEXITED) == 0)
+		return (pp);
+	return (jobc_reaper(pp));
+}
+
+int
+pgrp_calc_jobc(struct pgrp *pgrp)
+{
+	struct proc *q;
+	int cnt;
+
+#ifdef INVARIANTS
+	if (!mtx_owned(&pgrp->pg_mtx))
+		sx_assert(&proctree_lock, SA_LOCKED);
+#endif
+
+	cnt = 0;
+	LIST_FOREACH(q, &pgrp->pg_members, p_pglist) {
+		if ((q->p_treeflag & P_TREE_GRPEXITED) != 0 ||
+		    q->p_pptr == NULL)
+			continue;
+		if (isjobproc(jobc_parent(q, NULL), pgrp))
+			cnt++;
+	}
+	return (cnt);
+}
+
+/*
+ * Move p to a process group
+ */
+static void
+doenterpgrp(struct proc *p, struct pgrp *pgrp)
+{
+	struct pgrp *savepgrp;
+	struct proc *pp;
+
+	sx_assert(&proctree_lock, SX_XLOCKED);
+	PROC_LOCK_ASSERT(p, MA_NOTOWNED);
+	PGRP_LOCK_ASSERT(pgrp, MA_NOTOWNED);
+	PGRP_LOCK_ASSERT(p->p_pgrp, MA_NOTOWNED);
+	SESS_LOCK_ASSERT(p->p_session, MA_NOTOWNED);
+
+	savepgrp = p->p_pgrp;
+	pp = jobc_parent(p, NULL);
+
+	PGRP_LOCK(pgrp);
+	PGRP_LOCK(savepgrp);
+	if (isjobproc(pp, savepgrp) && pgrp_calc_jobc(savepgrp) == 1)
+		orphanpg(savepgrp);
+	PROC_LOCK(p);
+	LIST_REMOVE(p, p_pglist);
+	p->p_pgrp = pgrp;
+	PROC_UNLOCK(p);
+	LIST_INSERT_HEAD(&pgrp->pg_members, p, p_pglist);
+	if (isjobproc(pp, pgrp))
+		pgrp->pg_flags &= ~PGRP_ORPHANED;
+	PGRP_UNLOCK(savepgrp);
+	PGRP_UNLOCK(pgrp);
+	if (LIST_EMPTY(&savepgrp->pg_members))
+		pgdelete(savepgrp);
+}
+
+/*
+ * remove process from process group
+ */
+int
+leavepgrp(struct proc *p)
+{
+	struct pgrp *savepgrp;
+
+	sx_assert(&proctree_lock, SX_XLOCKED);
+	savepgrp = p->p_pgrp;
+	PGRP_LOCK(savepgrp);
+	PROC_LOCK(p);
+	LIST_REMOVE(p, p_pglist);
+	p->p_pgrp = NULL;
+	PROC_UNLOCK(p);
+	PGRP_UNLOCK(savepgrp);
+	if (LIST_EMPTY(&savepgrp->pg_members))
+		pgdelete(savepgrp);
+	return (0);
+}
+
+/*
+ * delete a process group
+ */
+static void
+pgdelete(struct pgrp *pgrp)
+{
+	struct session *savesess;
+	struct tty *tp;
+
+	sx_assert(&proctree_lock, SX_XLOCKED);
+	PGRP_LOCK_ASSERT(pgrp, MA_NOTOWNED);
+	SESS_LOCK_ASSERT(pgrp->pg_session, MA_NOTOWNED);
+
+	/*
+	 * Reset any sigio structures pointing to us as a result of
+	 * F_SETOWN with our pgid.  The proctree lock ensures that
+	 * new sigio structures will not be added after this point.
+	 */
+	funsetownlst(&pgrp->pg_sigiolst);
+
+	PGRP_LOCK(pgrp);
+	tp = pgrp->pg_session->s_ttyp;
+	LIST_REMOVE(pgrp, pg_hash);
+	savesess = pgrp->pg_session;
+	PGRP_UNLOCK(pgrp);
+
+	/* Remove the reference to the pgrp before deallocating it. */
+	if (tp != NULL) {
+		tty_lock(tp);
+		tty_rel_pgrp(tp, pgrp);
+	}
+
+	proc_id_clear(PROC_ID_GROUP, pgrp->pg_id);
+	uma_zfree(pgrp_zone, pgrp);
+	sess_release(savesess);
+}
+
+
+static void
+fixjobc_kill(struct proc *p)
+{
+	struct proc *q;
+	struct pgrp *pgrp;
+
+	sx_assert(&proctree_lock, SX_LOCKED);
+	PROC_LOCK_ASSERT(p, MA_NOTOWNED);
+	pgrp = p->p_pgrp;
+	PGRP_LOCK_ASSERT(pgrp, MA_NOTOWNED);
+	SESS_LOCK_ASSERT(pgrp->pg_session, MA_NOTOWNED);
+
+	/*
+	 * p no longer affects process group orphanage for children.
+	 * It is marked by the flag because p is only physically
+	 * removed from its process group on wait(2).
+	 */
+	MPASS((p->p_treeflag & P_TREE_GRPEXITED) == 0);
+	p->p_treeflag |= P_TREE_GRPEXITED;
+
+	/*
+	 * Check if exiting p orphans its own group.
+	 */
+	pgrp = p->p_pgrp;
+	if (isjobproc(jobc_parent(p, NULL), pgrp)) {
+		PGRP_LOCK(pgrp);
+		if (pgrp_calc_jobc(pgrp) == 0)
+			orphanpg(pgrp);
+		PGRP_UNLOCK(pgrp);
+	}
+
+	/*
+	 * Check this process' children to see whether they qualify
+	 * their process groups after reparenting to reaper.
+	 */
+	LIST_FOREACH(q, &p->p_children, p_sibling) {
+		pgrp = q->p_pgrp;
+		PGRP_LOCK(pgrp);
+		if (pgrp_calc_jobc(pgrp) == 0) {
+			/*
+			 * We want to handle exactly the children that
+			 * has p as realparent.  Then, when calculating
+			 * jobc_parent for children, we should ignore
+			 * P_TREE_GRPEXITED flag already set on p.
+			 */
+			if (jobc_parent(q, p) == p && isjobproc(p, pgrp))
+				orphanpg(pgrp);
+		} else
+			pgrp->pg_flags &= ~PGRP_ORPHANED;
+		PGRP_UNLOCK(pgrp);
+	}
+	LIST_FOREACH(q, &p->p_orphans, p_orphan) {
+		pgrp = q->p_pgrp;
+		PGRP_LOCK(pgrp);
+		if (pgrp_calc_jobc(pgrp) == 0) {
+			if (isjobproc(p, pgrp))
+				orphanpg(pgrp);
+		} else
+			pgrp->pg_flags &= ~PGRP_ORPHANED;
+		PGRP_UNLOCK(pgrp);
+	}
+}
+
+void
+killjobc(void)
+{
+	struct session *sp;
+	struct tty *tp;
+	struct proc *p;
+	struct vnode *ttyvp;
+
+	p = curproc;
+	MPASS(p->p_flag & P_WEXIT);
+	sx_assert(&proctree_lock, SX_LOCKED);
+
+	if (SESS_LEADER(p)) {
+		sp = p->p_session;
+
+		/*
+		 * s_ttyp is not zero'd; we use this to indicate that
+		 * the session once had a controlling terminal. (for
+		 * logging and informational purposes)
+		 */
+		SESS_LOCK(sp);
+		ttyvp = sp->s_ttyvp;
+		tp = sp->s_ttyp;
+		sp->s_ttyvp = NULL;
+		sp->s_ttydp = NULL;
+		sp->s_leader = NULL;
+		SESS_UNLOCK(sp);
+
+		/*
+		 * Signal foreground pgrp and revoke access to
+		 * controlling terminal if it has not been revoked
+		 * already.
+		 *
+		 * Because the TTY may have been revoked in the mean
+		 * time and could already have a new session associated
+		 * with it, make sure we don't send a SIGHUP to a
+		 * foreground process group that does not belong to this
+		 * session.
+		 */
+
+		if (tp != NULL) {
+			tty_lock(tp);
+			if (tp->t_session == sp)
+				tty_signal_pgrp(tp, SIGHUP);
+			tty_unlock(tp);
+		}
+
+		if (ttyvp != NULL) {
+			sx_xunlock(&proctree_lock);
+			if (vn_lock(ttyvp, LK_EXCLUSIVE) == 0) {
+				VOP_REVOKE(ttyvp, REVOKEALL);
+				VOP_UNLOCK(ttyvp);
+			}
+			devfs_ctty_unref(ttyvp);
+			sx_xlock(&proctree_lock);
+		}
+	}
+	fixjobc_kill(p);
+}
+
+/*
+ * A process group has become orphaned, mark it as such for signal
+ * delivery code.  If there are any stopped processes in the group,
+ * hang-up all process in that group.
+ */
+static void
+orphanpg(struct pgrp *pg)
+{
+	struct proc *p;
+
+	PGRP_LOCK_ASSERT(pg, MA_OWNED);
+
+	pg->pg_flags |= PGRP_ORPHANED;
+
+	LIST_FOREACH(p, &pg->pg_members, p_pglist) {
+		PROC_LOCK(p);
+		if (P_SHOULDSTOP(p) == P_STOPPED_SIG) {
+			PROC_UNLOCK(p);
+			LIST_FOREACH(p, &pg->pg_members, p_pglist) {
+				PROC_LOCK(p);
+				kern_psignal(p, SIGHUP);
+				kern_psignal(p, SIGCONT);
+				PROC_UNLOCK(p);
+			}
+			return;
+		}
+		PROC_UNLOCK(p);
+	}
+}
+
+void
+sess_hold(struct session *s)
+{
+
+	refcount_acquire(&s->s_count);
+}
+
+void
+sess_release(struct session *s)
+{
+
+	if (refcount_release(&s->s_count)) {
+		if (s->s_ttyp != NULL) {
+			tty_lock(s->s_ttyp);
+			tty_rel_sess(s->s_ttyp, s);
+		}
+		proc_id_clear(PROC_ID_SESSION, s->s_sid);
+		mtx_destroy(&s->s_mtx);
+		free(s, M_SESSION);
+	}
+}
+
+#ifdef DDB
+
+static void
+db_print_pgrp_one(struct pgrp *pgrp, struct proc *p)
+{
+	db_printf(
+	    "    pid %d at %p pr %d pgrp %p e %d jc %d\n",
+	    p->p_pid, p, p->p_pptr == NULL ? -1 : p->p_pptr->p_pid,
+	    p->p_pgrp, (p->p_treeflag & P_TREE_GRPEXITED) != 0,
+	    p->p_pptr == NULL ? 0 : isjobproc(p->p_pptr, pgrp));
+}
+
+DB_SHOW_COMMAND_FLAGS(pgrpdump, pgrpdump, DB_CMD_MEMSAFE)
+{
+	struct pgrp *pgrp;
+	struct proc *p;
+	int i;
+
+	for (i = 0; i <= pgrphash; i++) {
+		if (!LIST_EMPTY(&pgrphashtbl[i])) {
+			db_printf("indx %d\n", i);
+			LIST_FOREACH(pgrp, &pgrphashtbl[i], pg_hash) {
+				db_printf(
+			"  pgrp %p, pgid %d, sess %p, sesscnt %d, mem %p\n",
+				    pgrp, (int)pgrp->pg_id, pgrp->pg_session,
+				    pgrp->pg_session->s_count,
+				    LIST_FIRST(&pgrp->pg_members));
+				LIST_FOREACH(p, &pgrp->pg_members, p_pglist)
+					db_print_pgrp_one(pgrp, p);
+			}
+		}
+	}
+}
+#endif /* DDB */
+
+/*
+ * Calculate the kinfo_proc members which contain process-wide
+ * informations.
+ * Must be called with the target process locked.
+ */
+static void
+fill_kinfo_aggregate(struct proc *p, struct kinfo_proc *kp)
+{
+	struct thread *td;
+
+	PROC_LOCK_ASSERT(p, MA_OWNED);
+
+	kp->ki_estcpu = 0;
+	kp->ki_pctcpu = 0;
+	FOREACH_THREAD_IN_PROC(p, td) {
+		thread_lock(td);
+		kp->ki_pctcpu += sched_pctcpu(td);
+		kp->ki_estcpu += sched_estcpu(td);
+		thread_unlock(td);
+	}
+}
+
+/*
+ * Fill in any information that is common to all threads in the process.
+ * Must be called with the target process locked.
+ */
+static void
+fill_kinfo_proc_only(struct proc *p, struct kinfo_proc *kp)
+{
+	struct thread *td0;
+	struct ucred *cred;
+	struct sigacts *ps;
+	struct timeval boottime;
+
+	PROC_LOCK_ASSERT(p, MA_OWNED);
+
+	kp->ki_structsize = sizeof(*kp);
+	kp->ki_paddr = p;
+	kp->ki_addr =/* p->p_addr; */0; /* XXX */
+	kp->ki_args = p->p_args;
+	kp->ki_textvp = p->p_textvp;
+#ifdef KTRACE
+	kp->ki_tracep = ktr_get_tracevp(p, false);
+	kp->ki_traceflag = p->p_traceflag;
+#endif
+	kp->ki_fd = p->p_fd;
+	kp->ki_pd = p->p_pd;
+	kp->ki_vmspace = p->p_vmspace;
+	kp->ki_flag = p->p_flag;
+	kp->ki_flag2 = p->p_flag2;
+	cred = p->p_ucred;
+	if (cred) {
+		kp->ki_uid = cred->cr_uid;
+		kp->ki_ruid = cred->cr_ruid;
+		kp->ki_svuid = cred->cr_svuid;
+		kp->ki_cr_flags = 0;
+		if (cred->cr_flags & CRED_FLAG_CAPMODE)
+			kp->ki_cr_flags |= KI_CRF_CAPABILITY_MODE;
+		/* XXX bde doesn't like KI_NGROUPS */
+		if (1 + cred->cr_ngroups > KI_NGROUPS) {
+			kp->ki_ngroups = KI_NGROUPS;
+			kp->ki_cr_flags |= KI_CRF_GRP_OVERFLOW;
+		} else
+			kp->ki_ngroups = 1 + cred->cr_ngroups;
+		kp->ki_groups[0] = cred->cr_gid;
+		bcopy(cred->cr_groups, kp->ki_groups + 1,
+		    (kp->ki_ngroups - 1) * sizeof(gid_t));
+		kp->ki_rgid = cred->cr_rgid;
+		kp->ki_svgid = cred->cr_svgid;
+		/* If jailed(cred), emulate the old P_JAILED flag. */
+		if (jailed(cred)) {
+			kp->ki_flag |= P_JAILED;
+			/* If inside the jail, use 0 as a jail ID. */
+			if (cred->cr_prison != curthread->td_ucred->cr_prison)
+				kp->ki_jid = cred->cr_prison->pr_id;
+		}
+		strlcpy(kp->ki_loginclass, cred->cr_loginclass->lc_name,
+		    sizeof(kp->ki_loginclass));
+	}
+	ps = p->p_sigacts;
+	if (ps) {
+		mtx_lock(&ps->ps_mtx);
+		kp->ki_sigignore = ps->ps_sigignore;
+		kp->ki_sigcatch = ps->ps_sigcatch;
+		mtx_unlock(&ps->ps_mtx);
+	}
+	if (p->p_state != PRS_NEW &&
+	    p->p_state != PRS_ZOMBIE &&
+	    p->p_vmspace != NULL) {
+		struct vmspace *vm = p->p_vmspace;
+
+		kp->ki_size = vm->vm_map.size;
+		kp->ki_rssize = vmspace_resident_count(vm); /*XXX*/
+		FOREACH_THREAD_IN_PROC(p, td0)
+			kp->ki_rssize += td0->td_kstack_pages;
+		kp->ki_swrss = vm->vm_swrss;
+		kp->ki_tsize = vm->vm_tsize;
+		kp->ki_dsize = vm->vm_dsize;
+		kp->ki_ssize = vm->vm_ssize;
+	} else if (p->p_state == PRS_ZOMBIE)
+		kp->ki_stat = SZOMB;
+	kp->ki_sflag = PS_INMEM;
+	/* Calculate legacy swtime as seconds since 'swtick'. */
+	kp->ki_swtime = (ticks - p->p_swtick) / hz;
+	kp->ki_pid = p->p_pid;
+	kp->ki_nice = p->p_nice;
+	kp->ki_fibnum = p->p_fibnum;
+	kp->ki_start = p->p_stats->p_start;
+	getboottime(&boottime);
+	timevaladd(&kp->ki_start, &boottime);
+	PROC_STATLOCK(p);
+	rufetch(p, &kp->ki_rusage);
+	kp->ki_runtime = cputick2usec(p->p_rux.rux_runtime);
+	calcru(p, &kp->ki_rusage.ru_utime, &kp->ki_rusage.ru_stime);
+	PROC_STATUNLOCK(p);
+	calccru(p, &kp->ki_childutime, &kp->ki_childstime);
+	/* Some callers want child times in a single value. */
+	kp->ki_childtime = kp->ki_childstime;
+	timevaladd(&kp->ki_childtime, &kp->ki_childutime);
+
+	FOREACH_THREAD_IN_PROC(p, td0)
+		kp->ki_cow += td0->td_cow;
+
+	if (p->p_comm[0] != '\0')
+		strlcpy(kp->ki_comm, p->p_comm, sizeof(kp->ki_comm));
+	if (p->p_sysent && p->p_sysent->sv_name != NULL &&
+	    p->p_sysent->sv_name[0] != '\0')
+		strlcpy(kp->ki_emul, p->p_sysent->sv_name, sizeof(kp->ki_emul));
+	kp->ki_siglist = p->p_siglist;
+	kp->ki_xstat = KW_EXITCODE(p->p_xexit, p->p_xsig);
+	kp->ki_acflag = p->p_acflag;
+	kp->ki_lock = p->p_lock;
+	if (p->p_pptr) {
+		kp->ki_ppid = p->p_oppid;
+		if (p->p_flag & P_TRACED)
+			kp->ki_tracer = p->p_pptr->p_pid;
+	}
+}
+
+/*
+ * Fill job-related process information.
+ */
+static void
+fill_kinfo_proc_pgrp(struct proc *p, struct kinfo_proc *kp)
+{
+	struct tty *tp;
+	struct session *sp;
+	struct pgrp *pgrp;
+
+	sx_assert(&proctree_lock, SA_LOCKED);
+	PROC_LOCK_ASSERT(p, MA_OWNED);
+
+	pgrp = p->p_pgrp;
+	if (pgrp == NULL)
+		return;
+
+	kp->ki_pgid = pgrp->pg_id;
+	kp->ki_jobc = pgrp_calc_jobc(pgrp);
+
+	sp = pgrp->pg_session;
+	tp = NULL;
+
+	if (sp != NULL) {
+		kp->ki_sid = sp->s_sid;
+		SESS_LOCK(sp);
+		strlcpy(kp->ki_login, sp->s_login, sizeof(kp->ki_login));
+		if (sp->s_ttyvp)
+			kp->ki_kiflag |= KI_CTTY;
+		if (SESS_LEADER(p))
+			kp->ki_kiflag |= KI_SLEADER;
+		tp = sp->s_ttyp;
+		SESS_UNLOCK(sp);
+	}
+
+	if ((p->p_flag & P_CONTROLT) && tp != NULL) {
+		kp->ki_tdev = tty_udev(tp);
+		kp->ki_tdev_freebsd11 = kp->ki_tdev; /* truncate */
+		kp->ki_tpgid = tp->t_pgrp ? tp->t_pgrp->pg_id : NO_PID;
+		if (tp->t_session)
+			kp->ki_tsid = tp->t_session->s_sid;
+	} else {
+		kp->ki_tdev = NODEV;
+		kp->ki_tdev_freebsd11 = kp->ki_tdev; /* truncate */
+	}
+	kp->ki_reaper = p->p_reaper->p_pid;
+	kp->ki_reapsubtree = p->p_reapsubtree;
+}
+
+/*
+ * Fill in information that is thread specific.  Must be called with
+ * target process locked.  If 'preferthread' is set, overwrite certain
+ * process-related fields that are maintained for both threads and
+ * processes.
+ */
+static void
+fill_kinfo_thread(struct thread *td, struct kinfo_proc *kp, int preferthread)
+{
+	struct proc *p;
+
+	p = td->td_proc;
+	kp->ki_tdaddr = td;
+	PROC_LOCK_ASSERT(p, MA_OWNED);
+
+	if (preferthread)
+		PROC_STATLOCK(p);
+	thread_lock(td);
+	if (td->td_wmesg != NULL)
+		strlcpy(kp->ki_wmesg, td->td_wmesg, sizeof(kp->ki_wmesg));
+	else
+		bzero(kp->ki_wmesg, sizeof(kp->ki_wmesg));
+	if (strlcpy(kp->ki_tdname, td->td_name, sizeof(kp->ki_tdname)) >=
+	    sizeof(kp->ki_tdname)) {
+		strlcpy(kp->ki_moretdname,
+		    td->td_name + sizeof(kp->ki_tdname) - 1,
+		    sizeof(kp->ki_moretdname));
+	} else {
+		bzero(kp->ki_moretdname, sizeof(kp->ki_moretdname));
+	}
+	if (TD_ON_LOCK(td)) {
+		kp->ki_kiflag |= KI_LOCKBLOCK;
+		strlcpy(kp->ki_lockname, td->td_lockname,
+		    sizeof(kp->ki_lockname));
+	} else {
+		kp->ki_kiflag &= ~KI_LOCKBLOCK;
+		bzero(kp->ki_lockname, sizeof(kp->ki_lockname));
+	}
+
+	if (p->p_state == PRS_NORMAL) { /* approximate. */
+		if (TD_ON_RUNQ(td) ||
+		    TD_CAN_RUN(td) ||
+		    TD_IS_RUNNING(td)) {
+			kp->ki_stat = SRUN;
+		} else if (P_SHOULDSTOP(p)) {
+			kp->ki_stat = SSTOP;
+		} else if (TD_IS_SLEEPING(td)) {
+			kp->ki_stat = SSLEEP;
+		} else if (TD_ON_LOCK(td)) {
+			kp->ki_stat = SLOCK;
+		} else {
+			kp->ki_stat = SWAIT;
+		}
+	} else if (p->p_state == PRS_ZOMBIE) {
+		kp->ki_stat = SZOMB;
+	} else {
+		kp->ki_stat = SIDL;
+	}
+
+	/* Things in the thread */
+	kp->ki_wchan = td->td_wchan;
+	kp->ki_pri.pri_level = td->td_priority;
+	kp->ki_pri.pri_native = td->td_base_pri;
+
+	/*
+	 * Note: legacy fields; clamp at the old NOCPU value and/or
+	 * the maximum u_char CPU value.
+	 */
+	if (td->td_lastcpu == NOCPU)
+		kp->ki_lastcpu_old = NOCPU_OLD;
+	else if (td->td_lastcpu > MAXCPU_OLD)
+		kp->ki_lastcpu_old = MAXCPU_OLD;
+	else
+		kp->ki_lastcpu_old = td->td_lastcpu;
+
+	if (td->td_oncpu == NOCPU)
+		kp->ki_oncpu_old = NOCPU_OLD;
+	else if (td->td_oncpu > MAXCPU_OLD)
+		kp->ki_oncpu_old = MAXCPU_OLD;
+	else
+		kp->ki_oncpu_old = td->td_oncpu;
+
+	kp->ki_lastcpu = td->td_lastcpu;
+	kp->ki_oncpu = td->td_oncpu;
+	kp->ki_tdflags = td->td_flags;
+	kp->ki_tid = td->td_tid;
+	kp->ki_numthreads = p->p_numthreads;
+	kp->ki_pcb = td->td_pcb;
+	kp->ki_kstack = (void *)td->td_kstack;
+	kp->ki_slptime = (ticks - td->td_slptick) / hz;
+	kp->ki_pri.pri_class = td->td_pri_class;
+	kp->ki_pri.pri_user = td->td_user_pri;
+
+	if (preferthread) {
+		rufetchtd(td, &kp->ki_rusage);
+		kp->ki_runtime = cputick2usec(td->td_rux.rux_runtime);
+		kp->ki_pctcpu = sched_pctcpu(td);
+		kp->ki_estcpu = sched_estcpu(td);
+		kp->ki_cow = td->td_cow;
+	}
+
+	/* We can't get this anymore but ps etc never used it anyway. */
+	kp->ki_rqindex = 0;
+
+	if (preferthread)
+		kp->ki_siglist = td->td_siglist;
+	kp->ki_sigmask = td->td_sigmask;
+	thread_unlock(td);
+	if (preferthread)
+		PROC_STATUNLOCK(p);
+
+	if ((td->td_pflags & TDP2_UEXTERR) != 0)
+		kp->ki_uerrmsg = td->td_exterr_ptr;
+}
+
+/*
+ * Fill in a kinfo_proc structure for the specified process.
+ * Must be called with the target process locked.
+ */
+void
+fill_kinfo_proc(struct proc *p, struct kinfo_proc *kp)
+{
+	MPASS(FIRST_THREAD_IN_PROC(p) != NULL);
+
+	bzero(kp, sizeof(*kp));
+
+	fill_kinfo_proc_pgrp(p,kp);
+	fill_kinfo_proc_only(p, kp);
+	fill_kinfo_thread(FIRST_THREAD_IN_PROC(p), kp, 0);
+	fill_kinfo_aggregate(p, kp);
+}
+
+struct pstats *
+pstats_alloc(void)
+{
+
+	return (malloc(sizeof(struct pstats), M_SUBPROC, M_ZERO|M_WAITOK));
+}
+
+/*
+ * Copy parts of p_stats; zero the rest of p_stats (statistics).
+ */
+void
+pstats_fork(struct pstats *src, struct pstats *dst)
+{
+
+	bzero(&dst->pstat_startzero,
+	    __rangeof(struct pstats, pstat_startzero, pstat_endzero));
+	bcopy(&src->pstat_startcopy, &dst->pstat_startcopy,
+	    __rangeof(struct pstats, pstat_startcopy, pstat_endcopy));
+}
+
+void
+pstats_free(struct pstats *ps)
+{
+
+	free(ps, M_SUBPROC);
+}
+
+#ifdef COMPAT_FREEBSD32
+
+/*
+ * This function is typically used to copy out the kernel address, so
+ * it can be replaced by assignment of zero.
+ */
+static inline uint32_t
+ptr32_trim(const void *ptr)
+{
+	uintptr_t uptr;
+
+	uptr = (uintptr_t)ptr;
+	return ((uptr > UINT_MAX) ? 0 : uptr);
+}
+
+#define PTRTRIM_CP(src,dst,fld) \
+	do { (dst).fld = ptr32_trim((src).fld); } while (0)
+
+static void
+freebsd32_kinfo_proc_out(const struct kinfo_proc *ki, struct kinfo_proc32 *ki32)
+{
+	int i;
+
+	bzero(ki32, sizeof(struct kinfo_proc32));
+	ki32->ki_structsize = sizeof(struct kinfo_proc32);
+	CP(*ki, *ki32, ki_layout);
+	PTRTRIM_CP(*ki, *ki32, ki_args);
+	PTRTRIM_CP(*ki, *ki32, ki_paddr);
+	PTRTRIM_CP(*ki, *ki32, ki_addr);
+	PTRTRIM_CP(*ki, *ki32, ki_tracep);
+	PTRTRIM_CP(*ki, *ki32, ki_textvp);
+	PTRTRIM_CP(*ki, *ki32, ki_fd);
+	PTRTRIM_CP(*ki, *ki32, ki_vmspace);
+	PTRTRIM_CP(*ki, *ki32, ki_wchan);
+	CP(*ki, *ki32, ki_pid);
+	CP(*ki, *ki32, ki_ppid);
+	CP(*ki, *ki32, ki_pgid);
+	CP(*ki, *ki32, ki_tpgid);
+	CP(*ki, *ki32, ki_sid);
+	CP(*ki, *ki32, ki_tsid);
+	CP(*ki, *ki32, ki_jobc);
+	FU64_CP(*ki, *ki32, ki_tdev);
+	CP(*ki, *ki32, ki_tdev_freebsd11);
+	CP(*ki, *ki32, ki_siglist);
+	CP(*ki, *ki32, ki_sigmask);
+	CP(*ki, *ki32, ki_sigignore);
+	CP(*ki, *ki32, ki_sigcatch);
+	CP(*ki, *ki32, ki_uid);
+	CP(*ki, *ki32, ki_ruid);
+	CP(*ki, *ki32, ki_svuid);
+	CP(*ki, *ki32, ki_rgid);
+	CP(*ki, *ki32, ki_svgid);
+	CP(*ki, *ki32, ki_ngroups);
+	for (i = 0; i < KI_NGROUPS; i++)
+		CP(*ki, *ki32, ki_groups[i]);
+	CP(*ki, *ki32, ki_size);
+	CP(*ki, *ki32, ki_rssize);
+	CP(*ki, *ki32, ki_swrss);
+	CP(*ki, *ki32, ki_tsize);
+	CP(*ki, *ki32, ki_dsize);
+	CP(*ki, *ki32, ki_ssize);
+	CP(*ki, *ki32, ki_xstat);
+	CP(*ki, *ki32, ki_acflag);
+	CP(*ki, *ki32, ki_pctcpu);
+	CP(*ki, *ki32, ki_estcpu);
+	CP(*ki, *ki32, ki_slptime);
+	CP(*ki, *ki32, ki_swtime);
+	CP(*ki, *ki32, ki_cow);
+	FU64_CP(*ki, *ki32, ki_runtime);
+	TV_CP(*ki, *ki32, ki_start);
+	TV_CP(*ki, *ki32, ki_childtime);
+	CP(*ki, *ki32, ki_flag);
+	CP(*ki, *ki32, ki_kiflag);
+	CP(*ki, *ki32, ki_traceflag);
+	CP(*ki, *ki32, ki_stat);
+	CP(*ki, *ki32, ki_nice);
+	CP(*ki, *ki32, ki_lock);
+	CP(*ki, *ki32, ki_rqindex);
+	CP(*ki, *ki32, ki_oncpu);
+	CP(*ki, *ki32, ki_lastcpu);
+
+	/* XXX TODO: wrap cpu value as appropriate */
+	CP(*ki, *ki32, ki_oncpu_old);
+	CP(*ki, *ki32, ki_lastcpu_old);
+
+	bcopy(ki->ki_tdname, ki32->ki_tdname, TDNAMLEN + 1);
+	bcopy(ki->ki_wmesg, ki32->ki_wmesg, WMESGLEN + 1);
+	bcopy(ki->ki_login, ki32->ki_login, LOGNAMELEN + 1);
+	bcopy(ki->ki_lockname, ki32->ki_lockname, LOCKNAMELEN + 1);
+	bcopy(ki->ki_comm, ki32->ki_comm, COMMLEN + 1);
+	bcopy(ki->ki_emul, ki32->ki_emul, KI_EMULNAMELEN + 1);
+	bcopy(ki->ki_loginclass, ki32->ki_loginclass, LOGINCLASSLEN + 1);
+	bcopy(ki->ki_moretdname, ki32->ki_moretdname, MAXCOMLEN - TDNAMLEN + 1);
+	CP(*ki, *ki32, ki_tracer);
+	CP(*ki, *ki32, ki_flag2);
+	CP(*ki, *ki32, ki_fibnum);
+	CP(*ki, *ki32, ki_cr_flags);
+	CP(*ki, *ki32, ki_jid);
+	CP(*ki, *ki32, ki_reaper);
+	CP(*ki, *ki32, ki_reapsubtree);
+	CP(*ki, *ki32, ki_numthreads);
+	CP(*ki, *ki32, ki_tid);
+	CP(*ki, *ki32, ki_pri);
+	freebsd32_rusage_out(&ki->ki_rusage, &ki32->ki_rusage);
+	freebsd32_rusage_out(&ki->ki_rusage_ch, &ki32->ki_rusage_ch);
+	PTRTRIM_CP(*ki, *ki32, ki_pcb);
+	PTRTRIM_CP(*ki, *ki32, ki_kstack);
+	PTRTRIM_CP(*ki, *ki32, ki_udata);
+	PTRTRIM_CP(*ki, *ki32, ki_tdaddr);
+	PTRTRIM_CP(*ki, *ki32, ki_pd);
+	CP(*ki, *ki32, ki_sflag);
+	CP(*ki, *ki32, ki_tdflags);
+	PTRTRIM_CP(*ki, *ki32, ki_uerrmsg);
+}
+#endif
+
+static ssize_t
+kern_proc_out_size(struct proc *p, int flags)
+{
+	ssize_t size = 0;
+
+	PROC_LOCK_ASSERT(p, MA_OWNED);
+
+	if ((flags & KERN_PROC_NOTHREADS) != 0) {
+#ifdef COMPAT_FREEBSD32
+		if ((flags & KERN_PROC_MASK32) != 0) {
+			size += sizeof(struct kinfo_proc32);
+		} else
+#endif
+			size += sizeof(struct kinfo_proc);
+	} else {
+#ifdef COMPAT_FREEBSD32
+		if ((flags & KERN_PROC_MASK32) != 0)
+			size += sizeof(struct kinfo_proc32) * p->p_numthreads;
+		else
+#endif
+			size += sizeof(struct kinfo_proc) * p->p_numthreads;
+	}
+	PROC_UNLOCK(p);
+	return (size);
+}
+
+int
+kern_proc_out(struct proc *p, struct sbuf *sb, int flags)
+{
+	struct thread *td;
+	struct kinfo_proc ki;
+#ifdef COMPAT_FREEBSD32
+	struct kinfo_proc32 ki32;
+#endif
+	int error;
+
+	PROC_LOCK_ASSERT(p, MA_OWNED);
+	MPASS(FIRST_THREAD_IN_PROC(p) != NULL);
+
+	error = 0;
+	fill_kinfo_proc(p, &ki);
+	if ((flags & KERN_PROC_NOTHREADS) != 0) {
+#ifdef COMPAT_FREEBSD32
+		if ((flags & KERN_PROC_MASK32) != 0) {
+			freebsd32_kinfo_proc_out(&ki, &ki32);
+			if (sbuf_bcat(sb, &ki32, sizeof(ki32)) != 0)
+				error = ENOMEM;
+		} else
+#endif
+			if (sbuf_bcat(sb, &ki, sizeof(ki)) != 0)
+				error = ENOMEM;
+	} else {
+		FOREACH_THREAD_IN_PROC(p, td) {
+			fill_kinfo_thread(td, &ki, 1);
+#ifdef COMPAT_FREEBSD32
+			if ((flags & KERN_PROC_MASK32) != 0) {
+				freebsd32_kinfo_proc_out(&ki, &ki32);
+				if (sbuf_bcat(sb, &ki32, sizeof(ki32)) != 0)
+					error = ENOMEM;
+			} else
+#endif
+				if (sbuf_bcat(sb, &ki, sizeof(ki)) != 0)
+					error = ENOMEM;
+			if (error != 0)
+				break;
+		}
+	}
+	PROC_UNLOCK(p);
+	return (error);
+}
+
+static int
+sysctl_out_proc(struct proc *p, struct sysctl_req *req, int flags)
+{
+	struct sbuf sb;
+	struct kinfo_proc ki;
+	int error, error2;
+
+	if (req->oldptr == NULL)
+		return (SYSCTL_OUT(req, 0, kern_proc_out_size(p, flags)));
+
+	sbuf_new_for_sysctl(&sb, (char *)&ki, sizeof(ki), req);
+	sbuf_clear_flags(&sb, SBUF_INCLUDENUL);
+	error = kern_proc_out(p, &sb, flags);
+	error2 = sbuf_finish(&sb);
+	sbuf_delete(&sb);
+	if (error != 0)
+		return (error);
+	else if (error2 != 0)
+		return (error2);
+	return (0);
+}
+
+int
+proc_iterate(int (*cb)(struct proc *, void *), void *cbarg)
+{
+	struct proc *p;
+	int error, i, j;
+
+	for (i = 0; i < pidhashlock + 1; i++) {
+		sx_slock(&proctree_lock);
+		sx_slock(&pidhashtbl_lock[i]);
+		for (j = i; j <= pidhash; j += pidhashlock + 1) {
+			LIST_FOREACH(p, &pidhashtbl[j], p_hash) {
+				if (p->p_state == PRS_NEW)
+					continue;
+				error = cb(p, cbarg);
+				PROC_LOCK_ASSERT(p, MA_NOTOWNED);
+				if (error != 0) {
+					sx_sunlock(&pidhashtbl_lock[i]);
+					sx_sunlock(&proctree_lock);
+					return (error);
+				}
+			}
+		}
+		sx_sunlock(&pidhashtbl_lock[i]);
+		sx_sunlock(&proctree_lock);
+	}
+	return (0);
+}
+
+struct kern_proc_out_args {
+	struct sysctl_req *req;
+	int flags;
+	int oid_number;
+	int *name;
 };
 
-static void fill_rusage(struct krusage *ru, uint64_t ut, uint64_t st) {
-  memset(ru, 0, sizeof(*ru));
-  ru->utime[0] = (int64_t)(ut / HZ);
-  ru->utime[1] = (int64_t)(ut % HZ * (1000000 / HZ));
-  ru->stime[0] = (int64_t)(st / HZ);
-  ru->stime[1] = (int64_t)(st % HZ * (1000000 / HZ));
+static int
+sysctl_kern_proc_iterate(struct proc *p, void *origarg)
+{
+	struct kern_proc_out_args *arg = origarg;
+	int *name = arg->name;
+	int oid_number = arg->oid_number;
+	int flags = arg->flags;
+	struct sysctl_req *req = arg->req;
+	int error = 0;
+
+	PROC_LOCK(p);
+
+	KASSERT(p->p_ucred != NULL,
+	    ("process credential is NULL for non-NEW proc"));
+	/*
+	 * Show a user only appropriate processes.
+	 */
+	if (p_cansee(curthread, p))
+		goto skip;
+	/*
+	 * TODO - make more efficient (see notes below).
+	 * do by session.
+	 */
+	switch (oid_number) {
+	case KERN_PROC_GID:
+		if (p->p_ucred->cr_gid != (gid_t)name[0])
+			goto skip;
+		break;
+
+	case KERN_PROC_PGRP:
+		/* could do this by traversing pgrp */
+		if (p->p_pgrp == NULL ||
+		    p->p_pgrp->pg_id != (pid_t)name[0])
+			goto skip;
+		break;
+
+	case KERN_PROC_RGID:
+		if (p->p_ucred->cr_rgid != (gid_t)name[0])
+			goto skip;
+		break;
+
+	case KERN_PROC_SESSION:
+		if (p->p_session == NULL ||
+		    p->p_session->s_sid != (pid_t)name[0])
+			goto skip;
+		break;
+
+	case KERN_PROC_TTY:
+		if ((p->p_flag & P_CONTROLT) == 0 ||
+		    p->p_session == NULL)
+			goto skip;
+		/* XXX proctree_lock */
+		SESS_LOCK(p->p_session);
+		if (p->p_session->s_ttyp == NULL ||
+		    tty_udev(p->p_session->s_ttyp) !=
+		    (dev_t)name[0]) {
+			SESS_UNLOCK(p->p_session);
+			goto skip;
+		}
+		SESS_UNLOCK(p->p_session);
+		break;
+
+	case KERN_PROC_UID:
+		if (p->p_ucred->cr_uid != (uid_t)name[0])
+			goto skip;
+		break;
+
+	case KERN_PROC_RUID:
+		if (p->p_ucred->cr_ruid != (uid_t)name[0])
+			goto skip;
+		break;
+
+	case KERN_PROC_PROC:
+		break;
+
+	default:
+		break;
+	}
+	error = sysctl_out_proc(p, req, flags);
+	PROC_LOCK_ASSERT(p, MA_NOTOWNED);
+	return (error);
+skip:
+	PROC_UNLOCK(p);
+	return (0);
 }
 
-/* which: P_ALL, P_PID, P_PGID.  Fills *status / info, returns the pid, 0
-   (WNOHANG, nothing yet) or an error. */
-static long do_wait(int which, pid_t id, int options, int *status, struct siginfo *info,
-                    struct krusage *ru) {
-  struct proc *self = cur_proc();
-  uint64_t f = irq_save();
-  bool intr = false;
-  for (;;) {
-    bool any = false;
-    list_for_each_safe(c, n, &self->children) {
-      struct proc *ch = list_entry(c, struct proc, sibling);
-      if (which == P_PID && ch->pid != id)
-        continue;
-      if (which == P_PGID && ch->pgid != id)
-        continue;
-      if (ch->state == P_DEAD)
-        continue;
-      any = true;
-      if (ch->state == P_ZOMBIE && (options & WEXITED)) {
-        pid_t pid = ch->pid;
-        int st = ch->exit_status & 0xffff;
-        *status = st;
-        if (info) {
-          info->signo = SIGCHLD;
-          info->u.chld.pid = pid;
-          info->u.chld.uid = ch->cred.uid;
-          if ((st & 0x7f) == 0) {
-            info->code = CLD_EXITED;
-            info->u.chld.status = (st >> 8) & 0xff;
-          } else {
-            info->code = (st & 0x80) ? CLD_DUMPED : CLD_KILLED;
-            info->u.chld.status = st & 0x7f;
-          }
-        }
-        if (ru)
-          fill_rusage(ru, ch->utime + ch->cutime, ch->stime + ch->cstime);
-        if (!(options & WNOWAIT)) {
-          self->cutime += ch->utime + ch->cutime;
-          self->cstime += ch->stime + ch->cstime;
-          ch->state = P_DEAD;
-          proc_free(ch);
-        }
-        irq_restore(f);
-        return pid;
-      }
-      if (ch->report == CLD_STOPPED && (options & WUNTRACED)) {
-        *status = (ch->stop_sig << 8) | 0x7f;
-        if (info) {
-          info->signo = SIGCHLD;
-          info->code = CLD_STOPPED;
-          info->u.chld.pid = ch->pid;
-          info->u.chld.uid = ch->cred.uid;
-          info->u.chld.status = ch->stop_sig;
-        }
-        if (ru)
-          fill_rusage(ru, ch->utime, ch->stime);
-        if (!(options & WNOWAIT))
-          ch->report = 0;
-        irq_restore(f);
-        return ch->pid;
-      }
-      if (ch->report == CLD_CONTINUED && (options & WCONTINUED)) {
-        *status = 0xffff;
-        if (info) {
-          info->signo = SIGCHLD;
-          info->code = CLD_CONTINUED;
-          info->u.chld.pid = ch->pid;
-          info->u.chld.uid = ch->cred.uid;
-          info->u.chld.status = SIGCONT;
-        }
-        if (ru)
-          fill_rusage(ru, ch->utime, ch->stime);
-        if (!(options & WNOWAIT))
-          ch->report = 0;
-        irq_restore(f);
-        return ch->pid;
-      }
-    }
-    if (!any) {
-      irq_restore(f);
-      return -ECHILD;
-    }
-    if (options & WNOHANG) {
-      irq_restore(f);
-      return 0;
-    }
-    if (intr) {
-      irq_restore(f);
-      return -ERESTARTSYS;
-    }
-    /* interrupted: the children are looked at once more first (a child
-       reaped automatically, SA_NOCLDWAIT, may have been the last: ECHILD) */
-    if (sleep_on(&self->child_wait, 0, true) == -EINTR)
-      intr = true;
-  }
+static int
+sysctl_kern_proc(SYSCTL_HANDLER_ARGS)
+{
+	struct kern_proc_out_args iterarg;
+	int *name = (int *)arg1;
+	u_int namelen = arg2;
+	struct proc *p;
+	int flags, oid_number;
+	int error = 0;
+
+	oid_number = oidp->oid_number;
+	if (oid_number != KERN_PROC_ALL &&
+	    (oid_number & KERN_PROC_INC_THREAD) == 0)
+		flags = KERN_PROC_NOTHREADS;
+	else {
+		flags = 0;
+		oid_number &= ~KERN_PROC_INC_THREAD;
+	}
+#ifdef COMPAT_FREEBSD32
+	if (req->flags & SCTL_MASK32)
+		flags |= KERN_PROC_MASK32;
+#endif
+	if (oid_number == KERN_PROC_PID) {
+		if (namelen != 1)
+			return (EINVAL);
+		error = sysctl_wire_old_buffer(req, 0);
+		if (error)
+			return (error);
+		sx_slock(&proctree_lock);
+		error = pget((pid_t)name[0], PGET_CANSEE, &p);
+		if (error == 0)
+			error = sysctl_out_proc(p, req, flags);
+		sx_sunlock(&proctree_lock);
+		return (error);
+	}
+
+	switch (oid_number) {
+	case KERN_PROC_ALL:
+		if (namelen != 0)
+			return (EINVAL);
+		break;
+	case KERN_PROC_PROC:
+		if (namelen != 0 && namelen != 1)
+			return (EINVAL);
+		break;
+	default:
+		if (namelen != 1)
+			return (EINVAL);
+		break;
+	}
+
+	if (req->oldptr == NULL) {
+		/* overestimate by 5 procs */
+		error = SYSCTL_OUT(req, 0, sizeof (struct kinfo_proc) * 5);
+		if (error)
+			return (error);
+	} else {
+		error = sysctl_wire_old_buffer(req, 0);
+		if (error != 0)
+			return (error);
+	}
+	iterarg.flags = flags;
+	iterarg.oid_number = oid_number;
+	iterarg.req = req;
+	iterarg.name = name;
+	error = proc_iterate(sysctl_kern_proc_iterate, &iterarg);
+	return (error);
 }
 
-long sys_wait4(long pid, long ustatus, long options, long uru) {
-  if (options & ~(WNOHANG | WUNTRACED | WCONTINUED | WALL | WCLONE))
-    return -EINVAL;
-  int which = P_PID;
-  pid_t id = (pid_t)pid;
-  if (pid == -1)
-    which = P_ALL;
-  else if (pid == 0) {
-    which = P_PGID;
-    id = cur_proc()->pgid;
-  } else if (pid < -1) {
-    which = P_PGID;
-    id = (pid_t)-pid;
-  }
-  int status = 0;
-  struct krusage ru;
-  long r = do_wait(which, id, (int)options | WEXITED, &status, NULL, uru ? &ru : NULL);
-  if (r > 0) {
-    if (ustatus && copy_to_user((void *)ustatus, &status, 4))
-      return -EFAULT;
-    if (uru && copy_to_user((void *)uru, &ru, sizeof(ru)))
-      return -EFAULT;
-  }
-  return r;
+struct pargs *
+pargs_alloc(int len)
+{
+	struct pargs *pa;
+
+	pa = malloc(sizeof(struct pargs) + len, M_PARGS,
+		M_WAITOK);
+	refcount_init(&pa->ar_ref, 1);
+	pa->ar_length = len;
+	return (pa);
 }
 
-long sys_waitid(long which, long id, long uinfo, long options, long uru) {
-  if (options & ~(WNOHANG | WUNTRACED | WEXITED | WCONTINUED | WNOWAIT | WALL | WCLONE))
-    return -EINVAL;
-  if (!(options & (WEXITED | WUNTRACED | WCONTINUED)))
-    return -EINVAL;
-  if (which == P_PGID && id == 0)
-    id = cur_proc()->pgid;
-  if (which != P_ALL && which != P_PID && which != P_PGID)
-    return -EINVAL;
-  struct siginfo si;
-  memset(&si, 0, sizeof(si));
-  int status;
-  struct krusage ru;
-  long r = do_wait((int)which, (pid_t)id, (int)options, &status, &si, uru ? &ru : NULL);
-  if (r < 0)
-    return r;
-  if (uinfo && copy_to_user((void *)uinfo, &si, sizeof(si)))
-    return -EFAULT;
-  if (uru && copy_to_user((void *)uru, &ru, sizeof(ru)))
-    return -EFAULT;
-  return 0;
+static void
+pargs_free(struct pargs *pa)
+{
+
+	free(pa, M_PARGS);
 }
 
-/* ---- ids, groups, sessions ---- */
+void
+pargs_hold(struct pargs *pa)
+{
 
-long sys_getpid(void) { return cur_proc()->pid; }
-long sys_gettid(void) { return current->tid; }
-long sys_getppid(void) {
-  return cur_proc()->parent->pid;
-}
-long sys_getpgrp(void) { return cur_proc()->pgid; }
-
-long sys_getpgid(long pid) {
-  struct proc *p = pid ? find_proc((pid_t)pid) : cur_proc();
-  if (!p)
-    return -ESRCH;
-  return p->pgid;
+	if (pa == NULL)
+		return;
+	refcount_acquire(&pa->ar_ref);
 }
 
-long sys_getsid(long pid) {
-  struct proc *p = pid ? find_proc((pid_t)pid) : cur_proc();
-  if (!p)
-    return -ESRCH;
-  return p->sid;
+void
+pargs_drop(struct pargs *pa)
+{
+
+	if (pa == NULL)
+		return;
+	if (refcount_release(&pa->ar_ref))
+		pargs_free(pa);
 }
 
-long sys_setsid(void) {
-  struct proc *p = cur_proc();
-  list_for_each(q, &all_procs) {
-    struct proc *o = list_entry(q, struct proc, all_link);
-    if (o->state != P_DEAD && o->pgid == p->pid)
-      return -EPERM;
-  }
-  p->sid = p->pgid = p->pid;
-  p->ctty = NULL;
-  /* a parent waiting for the old group may have no children left in it */
-  if (p->parent)
-    wake_up(&p->parent->child_wait);
-  return p->sid;
+static int
+proc_read_string(struct thread *td, struct vmspace *vm, const char *sptr,
+    char *buf, size_t len)
+{
+	ssize_t n;
+
+	/*
+	 * This may return a short read if the string is shorter than the chunk
+	 * and is aligned at the end of the page, and the following page is not
+	 * mapped.
+	 */
+	n = vmspace_iop(td, vm, (vm_offset_t)sptr, buf, len, UIO_READ);
+	if (n <= 0)
+		return (ENOMEM);
+	return (0);
 }
 
-long sys_setpgid(long pid, long pgid) {
-  struct proc *self = cur_proc();
-  struct proc *p = pid ? find_proc((pid_t)pid) : self;
-  if (pgid < 0)
-    return -EINVAL;
-  if (!p)
-    return -ESRCH;
-  if (p != self) {
-    if (p->parent != self)
-      return -ESRCH;
-    if (p->sid != self->sid)
-      return -EPERM;
-    if (p->did_exec)
-      return -EACCES;
-  }
-  if (p->sid == p->pid)
-    return -EPERM;
-  if (!pgid)
-    pgid = p->pid;
-  if (pgid != p->pid) {
-    bool ok = false;
-    list_for_each(q, &all_procs) {
-      struct proc *o = list_entry(q, struct proc, all_link);
-      /* a zombie is still a member: its group exists until it is waited for */
-      if (o->state != P_DEAD && o->pgid == pgid && o->sid == p->sid)
-        ok = true;
-    }
-    if (!ok)
-      return -EPERM;
-  }
-  p->pgid = (pid_t)pgid;
-  /* a parent waiting for the old group may have no children left in it */
-  if (p->parent)
-    wake_up(&p->parent->child_wait);
-  return 0;
+#define PROC_AUXV_MAX	256	/* Safety limit on auxv size. */
+
+enum proc_vector_type {
+	PROC_ARG,
+	PROC_ENV,
+	PROC_AUX,
+};
+
+#ifdef COMPAT_FREEBSD32
+static int
+get_proc_vector32(struct thread *td, struct proc *p, struct vmspace *vm,
+    char ***proc_vectorp, size_t *vsizep, enum proc_vector_type type)
+{
+	struct freebsd32_ps_strings pss;
+	Elf32_Auxinfo aux;
+	vm_offset_t vptr, ptr;
+	uint32_t *proc_vector32;
+	char **proc_vector;
+	size_t vsize, size;
+	int i, error;
+
+	error = 0;
+	if (vmspace_iop(td, vm, PROC_PS_STRINGS(p), &pss, sizeof(pss),
+	    UIO_READ) != sizeof(pss))
+		return (ENOMEM);
+	switch (type) {
+	case PROC_ARG:
+		vptr = (vm_offset_t)PTRIN(pss.ps_argvstr);
+		vsize = pss.ps_nargvstr;
+		if (vsize > ARG_MAX)
+			return (ENOEXEC);
+		size = vsize * sizeof(int32_t);
+		break;
+	case PROC_ENV:
+		vptr = (vm_offset_t)PTRIN(pss.ps_envstr);
+		vsize = pss.ps_nenvstr;
+		if (vsize > ARG_MAX)
+			return (ENOEXEC);
+		size = vsize * sizeof(int32_t);
+		break;
+	case PROC_AUX:
+		vptr = (vm_offset_t)PTRIN(pss.ps_envstr) +
+		    (pss.ps_nenvstr + 1) * sizeof(int32_t);
+		if (vptr % 4 != 0)
+			return (ENOEXEC);
+		for (ptr = vptr, i = 0; i < PROC_AUXV_MAX; i++) {
+			if (vmspace_iop(td, vm, ptr, &aux, sizeof(aux),
+			    UIO_READ) != sizeof(aux))
+				return (ENOMEM);
+			if (aux.a_type == AT_NULL)
+				break;
+			ptr += sizeof(aux);
+		}
+		if (aux.a_type != AT_NULL)
+			return (ENOEXEC);
+		vsize = i + 1;
+		size = vsize * sizeof(aux);
+		break;
+	default:
+		KASSERT(0, ("Wrong proc vector type: %d", type));
+		return (EINVAL);
+	}
+	proc_vector32 = malloc(size, M_TEMP, M_WAITOK);
+	if (vmspace_iop(td, vm, vptr, proc_vector32, size, UIO_READ) != size) {
+		error = ENOMEM;
+		goto done;
+	}
+	if (type == PROC_AUX) {
+		*proc_vectorp = (char **)proc_vector32;
+		*vsizep = vsize;
+		return (0);
+	}
+	proc_vector = malloc(vsize * sizeof(char *), M_TEMP, M_WAITOK);
+	for (i = 0; i < (int)vsize; i++)
+		proc_vector[i] = PTRIN(proc_vector32[i]);
+	*proc_vectorp = proc_vector;
+	*vsizep = vsize;
+done:
+	free(proc_vector32, M_TEMP);
+	return (error);
+}
+#endif
+
+static int
+get_proc_vector(struct thread *td, struct proc *p, struct vmspace *vm,
+    char ***proc_vectorp, size_t *vsizep, enum proc_vector_type type)
+{
+	struct ps_strings pss;
+	Elf_Auxinfo aux;
+	vm_offset_t vptr, ptr;
+	char **proc_vector;
+	size_t vsize, size;
+	int i;
+
+#ifdef COMPAT_FREEBSD32
+	if (SV_PROC_FLAG(p, SV_ILP32) != 0) {
+		return (get_proc_vector32(td, p, vm, proc_vectorp,
+		    vsizep, type));
+	}
+#endif
+	if (vmspace_iop(td, vm, PROC_PS_STRINGS(p), &pss, sizeof(pss),
+	    UIO_READ) != sizeof(pss))
+		return (ENOMEM);
+	switch (type) {
+	case PROC_ARG:
+		vptr = (vm_offset_t)pss.ps_argvstr;
+		vsize = pss.ps_nargvstr;
+		if (vsize > ARG_MAX)
+			return (ENOEXEC);
+		size = vsize * sizeof(char *);
+		break;
+	case PROC_ENV:
+		vptr = (vm_offset_t)pss.ps_envstr;
+		vsize = pss.ps_nenvstr;
+		if (vsize > ARG_MAX)
+			return (ENOEXEC);
+		size = vsize * sizeof(char *);
+		break;
+	case PROC_AUX:
+		/*
+		 * The aux array is just above env array on the stack. Check
+		 * that the address is naturally aligned.
+		 */
+		vptr = (vm_offset_t)pss.ps_envstr + (pss.ps_nenvstr + 1)
+		    * sizeof(char *);
+#if __ELF_WORD_SIZE == 64
+		if (vptr % sizeof(uint64_t) != 0)
+#else
+		if (vptr % sizeof(uint32_t) != 0)
+#endif
+			return (ENOEXEC);
+		/*
+		 * We count the array size reading the aux vectors from the
+		 * stack until AT_NULL vector is returned.  So (to keep the code
+		 * simple) we read the process stack twice: the first time here
+		 * to find the size and the second time when copying the vectors
+		 * to the allocated proc_vector.
+		 */
+		for (ptr = vptr, i = 0; i < PROC_AUXV_MAX; i++) {
+			if (vmspace_iop(td, vm, ptr, &aux, sizeof(aux),
+			    UIO_READ) != sizeof(aux))
+				return (ENOMEM);
+			if (aux.a_type == AT_NULL)
+				break;
+			ptr += sizeof(aux);
+		}
+		/*
+		 * If the PROC_AUXV_MAX entries are iterated over, and we have
+		 * not reached AT_NULL, it is most likely we are reading wrong
+		 * data: either the process doesn't have auxv array or data has
+		 * been modified. Return the error in this case.
+		 */
+		if (aux.a_type != AT_NULL)
+			return (ENOEXEC);
+		vsize = i + 1;
+		size = vsize * sizeof(aux);
+		break;
+	default:
+		KASSERT(0, ("Wrong proc vector type: %d", type));
+		return (EINVAL); /* In case we are built without INVARIANTS. */
+	}
+	proc_vector = malloc(size, M_TEMP, M_WAITOK);
+	if (vmspace_iop(td, vm, vptr, proc_vector, size, UIO_READ) != size) {
+		free(proc_vector, M_TEMP);
+		return (ENOMEM);
+	}
+	*proc_vectorp = proc_vector;
+	*vsizep = vsize;
+
+	return (0);
 }
 
-long sys_getuid(void) { return cur_proc()->cred.uid; }
-long sys_geteuid(void) { return cur_proc()->cred.euid; }
-long sys_getgid(void) { return cur_proc()->cred.gid; }
-long sys_getegid(void) { return cur_proc()->cred.egid; }
+#define GET_PS_STRINGS_CHUNK_SZ	256	/* Chunk size (bytes) for ps_strings operations. */
 
-long sys_getresuid(long r, long e, long s) {
-  struct cred *c = &cur_proc()->cred;
-  if (copy_to_user((void *)r, &c->uid, 4) || copy_to_user((void *)e, &c->euid, 4) ||
-      copy_to_user((void *)s, &c->suid, 4))
-    return -EFAULT;
-  return 0;
+static int
+get_ps_strings(struct thread *td, struct proc *p, struct sbuf *sb,
+    enum proc_vector_type type)
+{
+	struct vmspace *vm;
+	size_t done, len, nchr, vsize;
+	int error, i;
+	char **proc_vector, *sptr;
+	char pss_string[GET_PS_STRINGS_CHUNK_SZ];
+
+	PROC_ASSERT_HELD(p);
+
+	/*
+	 * We are not going to read more than 2 * (PATH_MAX + ARG_MAX) bytes.
+	 */
+	nchr = 2 * (PATH_MAX + ARG_MAX);
+
+	error = proc_vmspace_ref(td, p, PRVM_BLOCK_EXEC |
+	    PRVM_CHECK_VISIBILITY, &vm);
+	if (error != 0)
+		return (error);
+
+	error = get_proc_vector(td, p, vm, &proc_vector, &vsize, type);
+	if (error != 0)
+		goto out;
+	for (done = 0, i = 0; i < (int)vsize && done < nchr; i++) {
+		/*
+		 * The program may have scribbled into its argv array, e.g. to
+		 * remove some arguments.  If that has happened, break out
+		 * before trying to read from NULL.
+		 */
+		if (proc_vector[i] == NULL)
+			break;
+		for (sptr = proc_vector[i]; ; sptr += GET_PS_STRINGS_CHUNK_SZ) {
+			error = proc_read_string(td, vm, sptr, pss_string,
+			    sizeof(pss_string));
+			if (error != 0) {
+				if (done != 0)
+					error = 0;
+				goto done;
+			}
+			len = strnlen(pss_string, GET_PS_STRINGS_CHUNK_SZ);
+			if (done + len >= nchr)
+				len = nchr - done - 1;
+			sbuf_bcat(sb, pss_string, len);
+			if (len != GET_PS_STRINGS_CHUNK_SZ)
+				break;
+			done += GET_PS_STRINGS_CHUNK_SZ;
+		}
+		sbuf_bcat(sb, "", 1);
+		done += len + 1;
+	}
+done:
+	free(proc_vector, M_TEMP);
+out:
+	proc_vmspace_unref(td, p, PRVM_BLOCK_EXEC | PRVM_CHECK_VISIBILITY, vm);
+	return (error);
 }
 
-long sys_getresgid(long r, long e, long s) {
-  struct cred *c = &cur_proc()->cred;
-  if (copy_to_user((void *)r, &c->gid, 4) || copy_to_user((void *)e, &c->egid, 4) ||
-      copy_to_user((void *)s, &c->sgid, 4))
-    return -EFAULT;
-  return 0;
+int
+proc_getargv(struct thread *td, struct proc *p, struct sbuf *sb)
+{
+
+	return (get_ps_strings(curthread, p, sb, PROC_ARG));
 }
 
-#define KEEP ((uint32_t)-1)
+int
+proc_getenvv(struct thread *td, struct proc *p, struct sbuf *sb)
+{
 
-static long set_res(uint32_t *real, uint32_t *eff, uint32_t *saved, uint32_t *fs, long r, long e,
-                    long s, bool priv) {
-  uint32_t nr = (uint32_t)r, ne = (uint32_t)e, ns = (uint32_t)s;
-  if (!priv) {
-    if (nr != KEEP && nr != *real && nr != *eff && nr != *saved)
-      return -EPERM;
-    if (ne != KEEP && ne != *real && ne != *eff && ne != *saved)
-      return -EPERM;
-    if (ns != KEEP && ns != *real && ns != *eff && ns != *saved)
-      return -EPERM;
-  }
-  if (nr != KEEP)
-    *real = nr;
-  if (ne != KEEP)
-    *eff = ne;
-  if (ns != KEEP)
-    *saved = ns;
-  *fs = *eff;
-  return 0;
+	return (get_ps_strings(curthread, p, sb, PROC_ENV));
 }
 
-long sys_setresuid(long r, long e, long s) {
-  struct cred *c = &cur_proc()->cred;
-  return set_res(&c->uid, &c->euid, &c->suid, &c->fsuid, r, e, s, c->euid == 0);
+int
+proc_getauxv(struct thread *td, struct proc *p, struct sbuf *sb)
+{
+	struct vmspace *vm;
+	size_t vsize, size;
+	char **auxv;
+	int error;
+
+	error = proc_vmspace_ref(td, p, PRVM_BLOCK_EXEC | PRVM_CHECK_DEBUG,
+	    &vm);
+	if (error != 0)
+		return (error);
+	error = get_proc_vector(td, p, vm, &auxv, &vsize, PROC_AUX);
+	proc_vmspace_unref(td, p, PRVM_BLOCK_EXEC | PRVM_CHECK_DEBUG, vm);
+	if (error == 0) {
+#ifdef COMPAT_FREEBSD32
+		if (SV_PROC_FLAG(p, SV_ILP32) != 0)
+			size = vsize * sizeof(Elf32_Auxinfo);
+		else
+#endif
+			size = vsize * sizeof(Elf_Auxinfo);
+		if (sbuf_bcat(sb, auxv, size) != 0)
+			error = ENOMEM;
+		free(auxv, M_TEMP);
+	}
+	return (error);
 }
 
-long sys_setresgid(long r, long e, long s) {
-  struct cred *c = &cur_proc()->cred;
-  return set_res(&c->gid, &c->egid, &c->sgid, &c->fsgid, r, e, s, c->euid == 0);
+/*
+ * This sysctl allows a process to retrieve the argument list or process
+ * title for another process without groping around in the address space
+ * of the other process.  It also allow a process to set its own "process 
+ * title to a string of its own choice.
+ */
+static int
+sysctl_kern_proc_args(SYSCTL_HANDLER_ARGS)
+{
+	int *name = (int *)arg1;
+	u_int namelen = arg2;
+	struct pargs *newpa, *pa;
+	struct proc *p;
+	struct sbuf sb;
+	int flags, error = 0, error2;
+	pid_t pid;
+
+	if (namelen != 1)
+		return (EINVAL);
+
+	p = curproc;
+	pid = (pid_t)name[0];
+	if (pid == -1) {
+		pid = p->p_pid;
+	}
+
+	/*
+	 * If the query is for this process and it is single-threaded, there
+	 * is nobody to modify pargs, thus we can just read.
+	 */
+	if (pid == p->p_pid && p->p_numthreads == 1 && req->newptr == NULL &&
+	    (pa = p->p_args) != NULL)
+		return (SYSCTL_OUT(req, pa->ar_args, pa->ar_length));
+
+	flags = PGET_CANSEE;
+	if (req->newptr != NULL)
+		flags |= PGET_ISCURRENT;
+	error = pget(pid, flags, &p);
+	if (error)
+		return (error);
+
+	pa = p->p_args;
+	if (pa != NULL) {
+		pargs_hold(pa);
+		PROC_UNLOCK(p);
+		error = SYSCTL_OUT(req, pa->ar_args, pa->ar_length);
+		pargs_drop(pa);
+	} else if ((p->p_flag & (P_WEXIT | P_SYSTEM)) == 0) {
+		_PHOLD(p);
+		PROC_UNLOCK(p);
+		sbuf_new_for_sysctl(&sb, NULL, GET_PS_STRINGS_CHUNK_SZ, req);
+		sbuf_clear_flags(&sb, SBUF_INCLUDENUL);
+		error = proc_getargv(curthread, p, &sb);
+		error2 = sbuf_finish(&sb);
+		PRELE(p);
+		sbuf_delete(&sb);
+		if (error == 0 && error2 != 0)
+			error = error2;
+	} else {
+		PROC_UNLOCK(p);
+	}
+	if (error != 0 || req->newptr == NULL)
+		return (error);
+
+	if (req->newlen > ps_arg_cache_limit - sizeof(struct pargs))
+		return (ENOMEM);
+
+	if (req->newlen == 0) {
+		/*
+		 * Clear the argument pointer, so that we'll fetch arguments
+		 * with proc_getargv() until further notice.
+		 */
+		newpa = NULL;
+	} else {
+		newpa = pargs_alloc(req->newlen);
+		error = SYSCTL_IN(req, newpa->ar_args, req->newlen);
+		if (error != 0) {
+			pargs_free(newpa);
+			return (error);
+		}
+	}
+	PROC_LOCK(p);
+	pa = p->p_args;
+	p->p_args = newpa;
+	PROC_UNLOCK(p);
+	pargs_drop(pa);
+	return (0);
 }
 
-long sys_setuid(long uid) {
-  struct cred *c = &cur_proc()->cred;
-  if (c->euid == 0)
-    return set_res(&c->uid, &c->euid, &c->suid, &c->fsuid, uid, uid, uid, true);
-  if ((uint32_t)uid != c->uid && (uint32_t)uid != c->suid)
-    return -EPERM;
-  c->euid = c->fsuid = (uint32_t)uid;
-  return 0;
+/*
+ * This sysctl allows a process to retrieve environment of another process.
+ */
+static int
+sysctl_kern_proc_env(SYSCTL_HANDLER_ARGS)
+{
+	int *name = (int *)arg1;
+	u_int namelen = arg2;
+	struct proc *p;
+	struct sbuf sb;
+	int error, error2;
+
+	if (namelen != 1)
+		return (EINVAL);
+
+	error = pget((pid_t)name[0], PGET_WANTREAD, &p);
+	if (error != 0)
+		return (error);
+	if ((p->p_flag & P_SYSTEM) != 0) {
+		PRELE(p);
+		return (0);
+	}
+
+	sbuf_new_for_sysctl(&sb, NULL, GET_PS_STRINGS_CHUNK_SZ, req);
+	sbuf_clear_flags(&sb, SBUF_INCLUDENUL);
+	error = proc_getenvv(curthread, p, &sb);
+	error2 = sbuf_finish(&sb);
+	PRELE(p);
+	sbuf_delete(&sb);
+	return (error != 0 ? error : error2);
 }
 
-long sys_setgid(long gid) {
-  struct cred *c = &cur_proc()->cred;
-  if (c->euid == 0)
-    return set_res(&c->gid, &c->egid, &c->sgid, &c->fsgid, gid, gid, gid, true);
-  if ((uint32_t)gid != c->gid && (uint32_t)gid != c->sgid)
-    return -EPERM;
-  c->egid = c->fsgid = (uint32_t)gid;
-  return 0;
+/*
+ * This sysctl allows a process to retrieve ELF auxiliary vector of
+ * another process.
+ */
+static int
+sysctl_kern_proc_auxv(SYSCTL_HANDLER_ARGS)
+{
+	int *name = (int *)arg1;
+	u_int namelen = arg2;
+	struct proc *p;
+	struct sbuf sb;
+	int error, error2;
+
+	if (namelen != 1)
+		return (EINVAL);
+
+	error = pget((pid_t)name[0], PGET_WANTREAD, &p);
+	if (error != 0)
+		return (error);
+	if ((p->p_flag & P_SYSTEM) != 0) {
+		PRELE(p);
+		return (0);
+	}
+	sbuf_new_for_sysctl(&sb, NULL, GET_PS_STRINGS_CHUNK_SZ, req);
+	sbuf_clear_flags(&sb, SBUF_INCLUDENUL);
+	error = proc_getauxv(curthread, p, &sb);
+	error2 = sbuf_finish(&sb);
+	PRELE(p);
+	sbuf_delete(&sb);
+	return (error != 0 ? error : error2);
 }
 
-long sys_setreuid(long r, long e) {
-  struct cred *c = &cur_proc()->cred;
-  uint32_t nr = (uint32_t)r, ne = (uint32_t)e;
-  if (c->euid != 0) {
-    if (nr != KEEP && nr != c->uid && nr != c->euid)
-      return -EPERM;
-    if (ne != KEEP && ne != c->uid && ne != c->euid && ne != c->suid)
-      return -EPERM;
-  }
-  uint32_t oldr = c->uid;
-  if (nr != KEEP)
-    c->uid = nr;
-  if (ne != KEEP)
-    c->euid = ne;
-  if (nr != KEEP || (ne != KEEP && ne != oldr))
-    c->suid = c->euid;
-  c->fsuid = c->euid;
-  return 0;
+/*
+ * Look up the canonical executable path running in the specified process.
+ * It tries to return the same hardlink name as was used for execve(2).
+ * This allows the programs that modify their behavior based on their progname,
+ * to operate correctly.
+ *
+ * Result is returned in retbuf, it must not be freed, similar to vn_fullpath()
+ *   calling conventions.
+ * binname is a pointer to temporary string buffer of length MAXPATHLEN,
+ *   allocated and freed by caller.
+ * freebuf should be freed by caller, from the M_TEMP malloc type.
+ */
+int
+proc_get_binpath(struct proc *p, char *binname, char **retbuf,
+    char **freebuf)
+{
+	struct nameidata nd;
+	struct vnode *vp, *dvp;
+	size_t freepath_size;
+	int error;
+	bool do_fullpath;
+
+	PROC_LOCK_ASSERT(p, MA_OWNED);
+
+	vp = p->p_textvp;
+	if (vp == NULL) {
+		PROC_UNLOCK(p);
+		*retbuf = "";
+		*freebuf = NULL;
+		return (0);
+	}
+	vref(vp);
+	dvp = p->p_textdvp;
+	if (dvp != NULL)
+		vref(dvp);
+	if (p->p_binname != NULL)
+		strlcpy(binname, p->p_binname, MAXPATHLEN);
+	PROC_UNLOCK(p);
+
+	do_fullpath = true;
+	*freebuf = NULL;
+	if (dvp != NULL && binname[0] != '\0') {
+		freepath_size = MAXPATHLEN;
+		if (vn_fullpath_hardlink(vp, dvp, binname, strlen(binname),
+		    retbuf, freebuf, &freepath_size) == 0) {
+			/*
+			 * Recheck the looked up path.  The binary
+			 * might have been renamed or replaced, in
+			 * which case we should not report old name.
+			 */
+			NDINIT(&nd, LOOKUP, FOLLOW, UIO_SYSSPACE, *retbuf);
+			error = namei(&nd);
+			if (error == 0) {
+				if (nd.ni_vp == vp)
+					do_fullpath = false;
+				vrele(nd.ni_vp);
+				NDFREE_PNBUF(&nd);
+			}
+		}
+	}
+	if (do_fullpath) {
+		free(*freebuf, M_TEMP);
+		*freebuf = NULL;
+		error = vn_fullpath(vp, retbuf, freebuf);
+	}
+	vrele(vp);
+	if (dvp != NULL)
+		vrele(dvp);
+	return (error);
 }
 
-long sys_setregid(long r, long e) {
-  struct cred *c = &cur_proc()->cred;
-  uint32_t nr = (uint32_t)r, ne = (uint32_t)e;
-  if (c->euid != 0) {
-    if (nr != KEEP && nr != c->gid && nr != c->egid)
-      return -EPERM;
-    if (ne != KEEP && ne != c->gid && ne != c->egid && ne != c->sgid)
-      return -EPERM;
-  }
-  uint32_t oldr = c->gid;
-  if (nr != KEEP)
-    c->gid = nr;
-  if (ne != KEEP)
-    c->egid = ne;
-  if (nr != KEEP || (ne != KEEP && ne != oldr))
-    c->sgid = c->egid;
-  c->fsgid = c->egid;
-  return 0;
+/*
+ * This sysctl allows a process to retrieve the path of the executable for
+ * itself or another process.
+ */
+static int
+sysctl_kern_proc_pathname(SYSCTL_HANDLER_ARGS)
+{
+	pid_t *pidp = (pid_t *)arg1;
+	unsigned int arglen = arg2;
+	struct proc *p;
+	char *retbuf, *freebuf, *binname;
+	int error;
+
+	if (arglen != 1)
+		return (EINVAL);
+	binname = malloc(MAXPATHLEN, M_TEMP, M_WAITOK);
+	binname[0] = '\0';
+	if (*pidp == -1) {	/* -1 means this process */
+		error = 0;
+		p = req->td->td_proc;
+		PROC_LOCK(p);
+	} else {
+		error = pget(*pidp, PGET_CANSEE, &p);
+	}
+
+	if (error == 0)
+		error = proc_get_binpath(p, binname, &retbuf, &freebuf);
+	free(binname, M_TEMP);
+	if (error != 0)
+		return (error);
+	error = SYSCTL_OUT(req, retbuf, strlen(retbuf) + 1);
+	free(freebuf, M_TEMP);
+	return (error);
 }
 
-long sys_setfsuid(long uid) {
-  struct cred *c = &cur_proc()->cred;
-  uint32_t old = c->fsuid;
-  if (c->euid == 0 || (uint32_t)uid == c->uid || (uint32_t)uid == c->euid || (uint32_t)uid == c->suid)
-    c->fsuid = (uint32_t)uid;
-  return old;
+static int
+sysctl_kern_proc_sv_name(SYSCTL_HANDLER_ARGS)
+{
+	struct proc *p;
+	char *sv_name;
+	int *name;
+	int namelen;
+	int error;
+
+	namelen = arg2;
+	if (namelen != 1)
+		return (EINVAL);
+
+	name = (int *)arg1;
+	error = pget((pid_t)name[0], PGET_CANSEE, &p);
+	if (error != 0)
+		return (error);
+	sv_name = p->p_sysent->sv_name;
+	PROC_UNLOCK(p);
+	return (sysctl_handle_string(oidp, sv_name, 0, req));
 }
 
-long sys_setfsgid(long gid) {
-  struct cred *c = &cur_proc()->cred;
-  uint32_t old = c->fsgid;
-  if (c->euid == 0 || (uint32_t)gid == c->gid || (uint32_t)gid == c->egid || (uint32_t)gid == c->sgid)
-    c->fsgid = (uint32_t)gid;
-  return old;
+#ifdef KINFO_OVMENTRY_SIZE
+CTASSERT(sizeof(struct kinfo_ovmentry) == KINFO_OVMENTRY_SIZE);
+#endif
+
+#ifdef COMPAT_FREEBSD7
+static int
+sysctl_kern_proc_ovmmap(SYSCTL_HANDLER_ARGS)
+{
+	vm_map_entry_t entry, tmp_entry;
+	unsigned int last_timestamp, namelen;
+	char *fullpath, *freepath;
+	struct kinfo_ovmentry *kve;
+	struct vattr va;
+	struct ucred *cred;
+	int error, *name;
+	struct vnode *vp;
+	struct proc *p;
+	struct thread *td;
+	vm_map_t map;
+	struct vmspace *vm;
+
+	namelen = arg2;
+	if (namelen != 1)
+		return (EINVAL);
+
+	name = (int *)arg1;
+	td = curthread;
+	error = pget((pid_t)name[0], PGET_WANTREAD, &p);
+	if (error != 0)
+		return (error);
+	error = proc_vmspace_ref(td, p, PRVM_CHECK_DEBUG, &vm);
+	if (error != 0) {
+		PRELE(p);
+		return (ESRCH);
+	}
+	kve = malloc(sizeof(*kve), M_TEMP, M_WAITOK);
+
+	map = &vm->vm_map;
+	vm_map_lock_read(map);
+	VM_MAP_ENTRY_FOREACH(entry, map) {
+		vm_object_t obj, tobj, lobj;
+		vm_offset_t addr;
+
+		if (entry->eflags & MAP_ENTRY_IS_SUB_MAP)
+			continue;
+
+		bzero(kve, sizeof(*kve));
+		kve->kve_structsize = sizeof(*kve);
+
+		kve->kve_private_resident = 0;
+		obj = entry->object.vm_object;
+		if (obj != NULL) {
+			VM_OBJECT_RLOCK(obj);
+			if (obj->shadow_count == 1)
+				kve->kve_private_resident =
+				    obj->resident_page_count;
+		}
+		kve->kve_resident = 0;
+		addr = entry->start;
+		while (addr < entry->end) {
+			if (pmap_extract(map->pmap, addr))
+				kve->kve_resident++;
+			addr += PAGE_SIZE;
+		}
+
+		for (lobj = tobj = obj; tobj; tobj = tobj->backing_object) {
+			if (tobj != obj) {
+				VM_OBJECT_RLOCK(tobj);
+				kve->kve_offset += tobj->backing_object_offset;
+			}
+			if (lobj != obj)
+				VM_OBJECT_RUNLOCK(lobj);
+			lobj = tobj;
+		}
+
+		kve->kve_start = (void*)entry->start;
+		kve->kve_end = (void*)entry->end;
+		kve->kve_offset += (off_t)entry->offset;
+
+		if (entry->protection & VM_PROT_READ)
+			kve->kve_protection |= KVME_PROT_READ;
+		if (entry->protection & VM_PROT_WRITE)
+			kve->kve_protection |= KVME_PROT_WRITE;
+		if (entry->protection & VM_PROT_EXECUTE)
+			kve->kve_protection |= KVME_PROT_EXEC;
+
+		if (entry->eflags & MAP_ENTRY_COW)
+			kve->kve_flags |= KVME_FLAG_COW;
+		if (entry->eflags & MAP_ENTRY_NEEDS_COPY)
+			kve->kve_flags |= KVME_FLAG_NEEDS_COPY;
+		if (entry->eflags & MAP_ENTRY_NOCOREDUMP)
+			kve->kve_flags |= KVME_FLAG_NOCOREDUMP;
+
+		last_timestamp = map->timestamp;
+		vm_map_unlock_read(map);
+
+		kve->kve_fileid = 0;
+		kve->kve_fsid = 0;
+		freepath = NULL;
+		fullpath = "";
+		if (lobj) {
+			kve->kve_type = vm_object_kvme_type(lobj, &vp);
+			if (kve->kve_type == KVME_TYPE_MGTDEVICE)
+				kve->kve_type = KVME_TYPE_UNKNOWN;
+			if (vp != NULL)
+				vref(vp);
+			if (lobj != obj)
+				VM_OBJECT_RUNLOCK(lobj);
+
+			kve->kve_ref_count = obj->ref_count;
+			kve->kve_shadow_count = obj->shadow_count;
+			VM_OBJECT_RUNLOCK(obj);
+			if (vp != NULL) {
+				vn_fullpath(vp, &fullpath, &freepath);
+				cred = curthread->td_ucred;
+				vn_lock(vp, LK_SHARED | LK_RETRY);
+				if (VOP_GETATTR(vp, &va, cred) == 0) {
+					kve->kve_fileid = va.va_fileid;
+					/* truncate */
+					kve->kve_fsid = va.va_fsid;
+				}
+				vput(vp);
+			}
+		} else {
+			kve->kve_type = KVME_TYPE_NONE;
+			kve->kve_ref_count = 0;
+			kve->kve_shadow_count = 0;
+		}
+
+		strlcpy(kve->kve_path, fullpath, sizeof(kve->kve_path));
+		if (freepath != NULL)
+			free(freepath, M_TEMP);
+
+		error = SYSCTL_OUT(req, kve, sizeof(*kve));
+		vm_map_lock_read(map);
+		if (error)
+			break;
+		if (last_timestamp != map->timestamp) {
+			vm_map_lookup_entry(map, addr - 1, &tmp_entry);
+			entry = tmp_entry;
+		}
+	}
+	vm_map_unlock_read(map);
+	proc_vmspace_unref(td, p, PRVM_CHECK_DEBUG, vm);
+	PRELE(p);
+	free(kve, M_TEMP);
+	return (error);
+}
+#endif	/* COMPAT_FREEBSD7 */
+
+#ifdef KINFO_VMENTRY_SIZE
+CTASSERT(sizeof(struct kinfo_vmentry) == KINFO_VMENTRY_SIZE);
+#endif
+
+void
+kern_proc_vmmap_resident(vm_map_t map, vm_map_entry_t entry,
+    int *resident_count, bool *super)
+{
+	vm_object_t obj, tobj;
+	vm_page_t m, m_adv;
+	vm_offset_t addr;
+	vm_paddr_t pa;
+	vm_pindex_t pi, pi_adv, pindex;
+	int incore;
+
+	*super = false;
+	*resident_count = 0;
+	if (vmmap_skip_res_cnt)
+		return;
+
+	pa = 0;
+	obj = entry->object.vm_object;
+	addr = entry->start;
+	m_adv = NULL;
+	pi = OFF_TO_IDX(entry->offset);
+	for (; addr < entry->end; addr += IDX_TO_OFF(pi_adv), pi += pi_adv) {
+		if (m_adv != NULL) {
+			m = m_adv;
+		} else {
+			pi_adv = atop(entry->end - addr);
+			pindex = pi;
+			for (tobj = obj;; tobj = tobj->backing_object) {
+				m = vm_radix_lookup_ge(&tobj->rtree, pindex);
+				if (m != NULL) {
+					if (m->pindex == pindex)
+						break;
+					if (pi_adv > m->pindex - pindex) {
+						pi_adv = m->pindex - pindex;
+						m_adv = m;
+					}
+				}
+				if (tobj->backing_object == NULL)
+					goto next;
+				pindex += OFF_TO_IDX(tobj->
+				    backing_object_offset);
+			}
+		}
+		m_adv = NULL;
+		if (m->psind != 0 && addr + pagesizes[1] <= entry->end &&
+		    (addr & (pagesizes[1] - 1)) == 0 && (incore =
+		    pmap_mincore(map->pmap, addr, &pa) & MINCORE_SUPER) != 0) {
+			*super = true;
+			/*
+			 * The virtual page might be smaller than the physical
+			 * page, so we use the page size reported by the pmap
+			 * rather than m->psind.
+			 */
+			pi_adv = atop(pagesizes[incore >> MINCORE_PSIND_SHIFT]);
+		} else {
+			/*
+			 * We do not test the found page on validity.
+			 * Either the page is busy and being paged in,
+			 * or it was invalidated.  The first case
+			 * should be counted as resident, the second
+			 * is not so clear; we do account both.
+			 */
+			pi_adv = 1;
+		}
+		*resident_count += pi_adv;
+next:;
+	}
 }
 
-long sys_getgroups(long n, long ulist) {
-  struct cred *c = &cur_proc()->cred;
-  if (n < 0)
-    return -EINVAL;
-  if (n == 0)
-    return c->ngroups;
-  if (n < c->ngroups)
-    return -EINVAL;
-  if (copy_to_user((void *)ulist, c->groups, c->ngroups * sizeof(gid_t)))
-    return -EFAULT;
-  return c->ngroups;
+/*
+ * Must be called with the process locked and will return unlocked.
+ */
+int
+kern_proc_vmmap_out(struct proc *p, struct sbuf *sb, ssize_t maxlen, int flags)
+{
+	vm_map_entry_t entry, tmp_entry;
+	struct vattr va;
+	vm_map_t map;
+	vm_object_t lobj, nobj, obj, tobj;
+	char *fullpath, *freepath;
+	struct kinfo_vmentry *kve;
+	struct ucred *cred;
+	struct vnode *vp;
+	struct vmspace *vm;
+	struct thread *td;
+	vm_offset_t addr;
+	unsigned int last_timestamp;
+	int error;
+	key_t key;
+	unsigned short seq;
+	bool guard, super;
+
+	PROC_LOCK_ASSERT(p, MA_OWNED);
+
+	_PHOLD(p);
+	PROC_UNLOCK(p);
+	td = curthread;
+	error = proc_vmspace_ref(td, p, PRVM_CHECK_DEBUG, &vm);
+	if (error != 0) {
+		PRELE(p);
+		return (error);
+	}
+	kve = malloc(sizeof(*kve), M_TEMP, M_WAITOK | M_ZERO);
+
+	error = 0;
+	map = &vm->vm_map;
+	vm_map_lock_read(map);
+	VM_MAP_ENTRY_FOREACH(entry, map) {
+		if (entry->eflags & MAP_ENTRY_IS_SUB_MAP)
+			continue;
+
+		addr = entry->end;
+		bzero(kve, sizeof(*kve));
+		obj = entry->object.vm_object;
+		if (obj != NULL) {
+			if ((obj->flags & OBJ_ANON) != 0)
+				kve->kve_obj = (uintptr_t)obj;
+
+			for (tobj = obj; tobj != NULL;
+			    tobj = tobj->backing_object) {
+				VM_OBJECT_RLOCK(tobj);
+				kve->kve_offset += tobj->backing_object_offset;
+				lobj = tobj;
+			}
+			if (obj->backing_object == NULL)
+				kve->kve_private_resident =
+				    obj->resident_page_count;
+			kern_proc_vmmap_resident(map, entry,
+			    &kve->kve_resident, &super);
+			if (super)
+				kve->kve_flags |= KVME_FLAG_SUPER;
+			for (tobj = obj; tobj != NULL; tobj = nobj) {
+				nobj = tobj->backing_object;
+				if (tobj != obj && tobj != lobj)
+					VM_OBJECT_RUNLOCK(tobj);
+			}
+		} else {
+			lobj = NULL;
+		}
+
+		kve->kve_start = entry->start;
+		kve->kve_end = entry->end;
+		kve->kve_offset += entry->offset;
+
+		if (entry->protection & VM_PROT_READ)
+			kve->kve_protection |= KVME_PROT_READ;
+		if (entry->protection & VM_PROT_WRITE)
+			kve->kve_protection |= KVME_PROT_WRITE;
+		if (entry->protection & VM_PROT_EXECUTE)
+			kve->kve_protection |= KVME_PROT_EXEC;
+		if (entry->max_protection & VM_PROT_READ)
+			kve->kve_protection |= KVME_MAX_PROT_READ;
+		if (entry->max_protection & VM_PROT_WRITE)
+			kve->kve_protection |= KVME_MAX_PROT_WRITE;
+		if (entry->max_protection & VM_PROT_EXECUTE)
+			kve->kve_protection |= KVME_MAX_PROT_EXEC;
+
+		if (entry->eflags & MAP_ENTRY_COW)
+			kve->kve_flags |= KVME_FLAG_COW;
+		if (entry->eflags & MAP_ENTRY_NEEDS_COPY)
+			kve->kve_flags |= KVME_FLAG_NEEDS_COPY;
+		if (entry->eflags & MAP_ENTRY_NOCOREDUMP)
+			kve->kve_flags |= KVME_FLAG_NOCOREDUMP;
+		if (entry->eflags & MAP_ENTRY_GROWS_DOWN)
+			kve->kve_flags |= KVME_FLAG_GROWS_DOWN;
+		if (entry->eflags & MAP_ENTRY_USER_WIRED)
+			kve->kve_flags |= KVME_FLAG_USER_WIRED;
+
+		guard = (entry->eflags & MAP_ENTRY_GUARD) != 0;
+
+		last_timestamp = map->timestamp;
+		vm_map_unlock_read(map);
+
+		freepath = NULL;
+		fullpath = "";
+		if (lobj != NULL) {
+			kve->kve_type = vm_object_kvme_type(lobj, &vp);
+			if (vp != NULL)
+				vref(vp);
+			if (lobj != obj)
+				VM_OBJECT_RUNLOCK(lobj);
+
+			kve->kve_ref_count = obj->ref_count;
+			kve->kve_shadow_count = obj->shadow_count;
+			if (obj->type == OBJT_DEVICE ||
+			    obj->type == OBJT_MGTDEVICE) {
+				cdev_pager_get_path(obj, kve->kve_path,
+				    sizeof(kve->kve_path));
+			}
+			VM_OBJECT_RUNLOCK(obj);
+			if ((lobj->flags & OBJ_SYSVSHM) != 0) {
+				kve->kve_flags |= KVME_FLAG_SYSVSHM;
+				shmobjinfo(lobj, &key, &seq);
+				kve->kve_vn_fileid = key;
+				kve->kve_vn_fsid_freebsd11 = seq;
+			}
+			if ((lobj->flags & OBJ_POSIXSHM) != 0) {
+				kve->kve_flags |= KVME_FLAG_POSIXSHM;
+				shm_get_path(lobj, kve->kve_path,
+				    sizeof(kve->kve_path));
+			}
+			if (vp != NULL) {
+				vn_fullpath(vp, &fullpath, &freepath);
+				kve->kve_vn_type = vntype_to_kinfo(vp->v_type);
+				cred = td->td_ucred;
+				vn_lock(vp, LK_SHARED | LK_RETRY);
+				if (VOP_GETATTR(vp, &va, cred) == 0) {
+					kve->kve_vn_fileid = va.va_fileid;
+					kve->kve_vn_fsid = va.va_fsid;
+					kve->kve_vn_fsid_freebsd11 =
+					    kve->kve_vn_fsid; /* truncate */
+					kve->kve_vn_mode =
+					    MAKEIMODE(va.va_type, va.va_mode);
+					kve->kve_vn_size = va.va_size;
+					kve->kve_vn_rdev = va.va_rdev;
+					kve->kve_vn_rdev_freebsd11 =
+					    kve->kve_vn_rdev; /* truncate */
+					kve->kve_status = KF_ATTR_VALID;
+				}
+				vput(vp);
+				strlcpy(kve->kve_path, fullpath, sizeof(
+				    kve->kve_path));
+				free(freepath, M_TEMP);
+			}
+		} else {
+			kve->kve_type = guard ? KVME_TYPE_GUARD :
+			    KVME_TYPE_NONE;
+			kve->kve_ref_count = 0;
+			kve->kve_shadow_count = 0;
+		}
+
+		/* Pack record size down */
+		if ((flags & KERN_VMMAP_PACK_KINFO) != 0)
+			kve->kve_structsize =
+			    offsetof(struct kinfo_vmentry, kve_path) +
+			    strlen(kve->kve_path) + 1;
+		else
+			kve->kve_structsize = sizeof(*kve);
+		kve->kve_structsize = roundup(kve->kve_structsize,
+		    sizeof(uint64_t));
+
+		/* Halt filling and truncate rather than exceeding maxlen */
+		if (maxlen != -1 && maxlen < kve->kve_structsize) {
+			error = 0;
+			vm_map_lock_read(map);
+			break;
+		} else if (maxlen != -1)
+			maxlen -= kve->kve_structsize;
+
+		if (sbuf_bcat(sb, kve, kve->kve_structsize) != 0)
+			error = ENOMEM;
+		vm_map_lock_read(map);
+		if (error != 0)
+			break;
+		if (last_timestamp != map->timestamp) {
+			vm_map_lookup_entry(map, addr - 1, &tmp_entry);
+			entry = tmp_entry;
+		}
+	}
+	vm_map_unlock_read(map);
+	proc_vmspace_unref(td, p, PRVM_CHECK_DEBUG, vm);
+	PRELE(p);
+	free(kve, M_TEMP);
+	return (error);
 }
 
-long sys_setgroups(long n, long ulist) {
-  struct cred *c = &cur_proc()->cred;
-  if (!capable())
-    return -EPERM;
-  if (n < 0 || n > NGROUPS_MAX)
-    return -EINVAL;
-  gid_t *g = n ? kmalloc(n * sizeof(gid_t)) : NULL;
-  if (n && !g)
-    return -ENOMEM;
-  if (n && copy_from_user(g, (void *)ulist, n * sizeof(gid_t))) {
-    kfree(g);
-    return -EFAULT;
-  }
-  kfree(c->groups);
-  c->groups = g;
-  c->ngroups = (int)n;
-  return 0;
+static int
+sysctl_kern_proc_vmmap(SYSCTL_HANDLER_ARGS)
+{
+	struct proc *p;
+	struct sbuf sb;
+	u_int namelen;
+	int error, error2, *name;
+
+	namelen = arg2;
+	if (namelen != 1)
+		return (EINVAL);
+
+	name = (int *)arg1;
+	sbuf_new_for_sysctl(&sb, NULL, sizeof(struct kinfo_vmentry), req);
+	sbuf_clear_flags(&sb, SBUF_INCLUDENUL);
+	error = pget((pid_t)name[0], PGET_CANDEBUG | PGET_NOTWEXIT, &p);
+	if (error != 0) {
+		sbuf_delete(&sb);
+		return (error);
+	}
+	error = kern_proc_vmmap_out(p, &sb, -1, KERN_VMMAP_PACK_KINFO);
+	error2 = sbuf_finish(&sb);
+	sbuf_delete(&sb);
+	return (error != 0 ? error : error2);
 }
 
-bool in_group(gid_t g) {
-  struct cred *c = &cur_proc()->cred;
-  if (g == c->fsgid)
-    return true;
-  for (int i = 0; i < c->ngroups; i++)
-    if (c->groups[i] == g)
-      return true;
-  return false;
+#if defined(STACK) || defined(DDB)
+static int
+sysctl_kern_proc_kstack(SYSCTL_HANDLER_ARGS)
+{
+	struct kinfo_kstack *kkstp;
+	int error, i, *name, numthreads;
+	lwpid_t *lwpidarray;
+	struct thread *td, *ctd;
+	struct stack *st;
+	struct sbuf sb;
+	struct proc *p;
+	u_int namelen;
+
+	namelen = arg2;
+	if (namelen != 1)
+		return (EINVAL);
+
+	name = (int *)arg1;
+	ctd = curthread;
+	error = pget((pid_t)name[0], PGET_WANTREAD, &p);
+	if (error != 0)
+		return (error);
+
+	kkstp = malloc(sizeof(*kkstp), M_TEMP, M_WAITOK);
+	st = stack_create(M_WAITOK);
+
+	lwpidarray = NULL;
+	PROC_LOCK(p);
+	execve_block_wait(ctd, p);
+	error = p_candebug(ctd, p);
+	if (error != 0) {
+		execve_unblock(ctd, p);
+		_PRELE(p);
+		PROC_UNLOCK(p);
+		stack_destroy(st);
+		free(kkstp, M_TEMP);
+		return (error);
+	}
+	do {
+		if (lwpidarray != NULL) {
+			free(lwpidarray, M_TEMP);
+			lwpidarray = NULL;
+		}
+		numthreads = p->p_numthreads;
+		PROC_UNLOCK(p);
+		lwpidarray = malloc(sizeof(*lwpidarray) * numthreads, M_TEMP,
+		    M_WAITOK | M_ZERO);
+		PROC_LOCK(p);
+	} while (numthreads < p->p_numthreads);
+
+	i = 0;
+	FOREACH_THREAD_IN_PROC(p, td) {
+		KASSERT(i < numthreads,
+		    ("sysctl_kern_proc_kstack: numthreads"));
+		lwpidarray[i] = td->td_tid;
+		i++;
+	}
+	PROC_UNLOCK(p);
+	numthreads = i;
+	for (i = 0; i < numthreads; i++) {
+		td = tdfind(lwpidarray[i], p->p_pid);
+		if (td == NULL) {
+			continue;
+		}
+		bzero(kkstp, sizeof(*kkstp));
+		(void)sbuf_new(&sb, kkstp->kkst_trace,
+		    sizeof(kkstp->kkst_trace), SBUF_FIXEDLEN);
+		thread_lock(td);
+		kkstp->kkst_tid = td->td_tid;
+		if (stack_save_td(st, td) == 0)
+			kkstp->kkst_state = KKST_STATE_STACKOK;
+		else
+			kkstp->kkst_state = KKST_STATE_RUNNING;
+		thread_unlock(td);
+		PROC_UNLOCK(p);
+		stack_sbuf_print(&sb, st);
+		sbuf_finish(&sb);
+		sbuf_delete(&sb);
+		error = SYSCTL_OUT(req, kkstp, sizeof(*kkstp));
+		if (error)
+			break;
+	}
+	PROC_LOCK(p);
+	execve_unblock(ctd, p);
+	_PRELE(p);
+	PROC_UNLOCK(p);
+	if (lwpidarray != NULL)
+		free(lwpidarray, M_TEMP);
+	stack_destroy(st);
+	free(kkstp, M_TEMP);
+	return (error);
+}
+#endif
+
+/*
+ * This sysctl allows a process to retrieve the full list of groups from
+ * itself or another process.
+ */
+static int
+sysctl_kern_proc_groups(SYSCTL_HANDLER_ARGS)
+{
+	pid_t *pidp = (pid_t *)arg1;
+	unsigned int arglen = arg2;
+	struct proc *p;
+	struct ucred *cred;
+	int error;
+
+	if (arglen != 1)
+		return (EINVAL);
+	if (*pidp == -1) {	/* -1 means this process */
+		p = req->td->td_proc;
+		PROC_LOCK(p);
+	} else {
+		error = pget(*pidp, PGET_CANSEE, &p);
+		if (error != 0)
+			return (error);
+	}
+
+	cred = crhold(p->p_ucred);
+	PROC_UNLOCK(p);
+
+	error = SYSCTL_OUT(req, &cred->cr_gid, sizeof(gid_t));
+	if (error == 0)
+		error = SYSCTL_OUT(req, cred->cr_groups,
+		    cred->cr_ngroups * sizeof(gid_t));
+
+	crfree(cred);
+	return (error);
 }
 
-/* ---- limits, usage, misc ---- */
+/*
+ * This sysctl allows a process to retrieve or/and set the resource limit for
+ * another process.
+ */
+static int
+sysctl_kern_proc_rlimit(SYSCTL_HANDLER_ARGS)
+{
+	int *name = (int *)arg1;
+	u_int namelen = arg2;
+	struct rlimit rlim;
+	struct proc *p;
+	struct thread *td;
+	u_int which;
+	int error;
 
-long sys_umask(long m) {
-  struct proc *p = cur_proc();
-  long old = p->umask;
-  p->umask = (mode_t)m & 0777;
-  return old;
+	if (namelen != 2)
+		return (EINVAL);
+
+	which = (u_int)name[1];
+	if (which >= RLIM_NLIMITS)
+		return (EINVAL);
+
+	if (req->newptr != NULL && req->newlen != sizeof(rlim))
+		return (EINVAL);
+
+	td = curthread;
+	error = pget((pid_t)name[0], PGET_NOTWEXIT, &p);
+	if (error != 0)
+		return (error);
+	_PHOLD(p);
+	execve_block_wait(td, p);
+	error = req->newptr != NULL ? p_candebug(td, p) : p_cansee(td, p);
+	if (error != 0)
+		goto errout1;
+
+	/*
+	 * Retrieve limit.
+	 */
+	if (req->oldptr != NULL) {
+		lim_rlimit_proc(p, which, &rlim);
+	}
+	PROC_UNLOCK(p);
+
+	error = SYSCTL_OUT(req, &rlim, sizeof(rlim));
+	if (error != 0)
+		goto errout;
+
+	/*
+	 * Set limit.
+	 */
+	if (req->newptr != NULL) {
+		error = SYSCTL_IN(req, &rlim, sizeof(rlim));
+		if (error == 0)
+			error = kern_proc_setrlimit(curthread, p, which, &rlim);
+	}
+
+errout:
+	PROC_LOCK(p);
+errout1:
+	_PRELE(p);
+	execve_unblock(td, p);
+	PROC_UNLOCK(p);
+	return (error);
 }
 
-long sys_prlimit64(long pid, long res, long unew, long uold) {
-  struct proc *p = pid ? find_proc((pid_t)pid) : cur_proc();
-  if (!p)
-    return -ESRCH;
-  if (res < 0 || res >= RLIM_NLIMITS)
-    return -EINVAL;
-  struct rlimit64 n, o = p->rlim[res];
-  if (unew) {
-    if (copy_from_user(&n, (void *)unew, sizeof(n)))
-      return -EFAULT;
-    if (n.cur > n.max)
-      return -EINVAL;
-    if (n.max > p->rlim[res].max && !capable())
-      return -EPERM;
-    if (res == RLIMIT_NOFILE && n.max > 1024 * 1024)
-      return -EPERM;
-  }
-  if (uold && copy_to_user((void *)uold, &o, sizeof(o)))
-    return -EFAULT;
-  if (unew)
-    p->rlim[res] = n;
-  return 0;
+/*
+ * This sysctl allows a process to retrieve ps_strings structure location of
+ * another process.
+ */
+static int
+sysctl_kern_proc_ps_strings(SYSCTL_HANDLER_ARGS)
+{
+	int *name = (int *)arg1;
+	u_int namelen = arg2;
+	struct proc *p;
+	vm_offset_t ps_strings;
+	int error;
+#ifdef COMPAT_FREEBSD32
+	uint32_t ps_strings32;
+#endif
+
+	if (namelen != 1)
+		return (EINVAL);
+
+	error = pget((pid_t)name[0], PGET_CANDEBUG, &p);
+	if (error != 0)
+		return (error);
+#ifdef COMPAT_FREEBSD32
+	if ((req->flags & SCTL_MASK32) != 0) {
+		/*
+		 * We return 0 if the 32 bit emulation request is for a 64 bit
+		 * process.
+		 */
+		ps_strings32 = SV_PROC_FLAG(p, SV_ILP32) != 0 ?
+		    PTROUT(PROC_PS_STRINGS(p)) : 0;
+		PROC_UNLOCK(p);
+		error = SYSCTL_OUT(req, &ps_strings32, sizeof(ps_strings32));
+		return (error);
+	}
+#endif
+	ps_strings = PROC_PS_STRINGS(p);
+	PROC_UNLOCK(p);
+	error = SYSCTL_OUT(req, &ps_strings, sizeof(ps_strings));
+	return (error);
 }
 
-long sys_getrlimit(long res, long u) { return sys_prlimit64(0, res, 0, u); }
-long sys_setrlimit(long res, long u) { return sys_prlimit64(0, res, u, 0); }
+/*
+ * This sysctl allows a process to retrieve umask of another process.
+ */
+static int
+sysctl_kern_proc_umask(SYSCTL_HANDLER_ARGS)
+{
+	int *name = (int *)arg1;
+	u_int namelen = arg2;
+	struct proc *p;
+	int error;
+	u_short cmask;
+	pid_t pid;
 
-long sys_getrusage(long who, long uru) {
-  struct proc *p = cur_proc();
-  struct krusage ru;
-  if (who == 0)
-    fill_rusage(&ru, p->utime, p->stime);
-  else if (who == -1)
-    fill_rusage(&ru, p->cutime, p->cstime);
-  else if (who == 1)
-    fill_rusage(&ru, current->utime, current->stime);
-  else
-    return -EINVAL;
-  return copy_to_user((void *)uru, &ru, sizeof(ru)) ? -EFAULT : 0;
+	if (namelen != 1)
+		return (EINVAL);
+
+	pid = (pid_t)name[0];
+	p = curproc;
+	if (pid == p->p_pid || pid == 0) {
+		cmask = p->p_pd->pd_cmask;
+		goto out;
+	}
+
+	error = pget(pid, PGET_WANTREAD, &p);
+	if (error != 0)
+		return (error);
+
+	cmask = p->p_pd->pd_cmask;
+	PRELE(p);
+out:
+	error = SYSCTL_OUT(req, &cmask, sizeof(cmask));
+	return (error);
 }
 
-/* priority: process-wide nice (POSIX); Linux returns 20 - nice */
-#define PRIO_PROCESS 0
-#define PRIO_PGRP 1
-#define PRIO_USER 2
+/*
+ * This sysctl allows a process to set and retrieve binary osreldate of
+ * another process.
+ */
+static int
+sysctl_kern_proc_osrel(SYSCTL_HANDLER_ARGS)
+{
+	int *name = (int *)arg1;
+	u_int namelen = arg2;
+	struct proc *p;
+	int flags, error, old_osrel, osrel;
 
-long sys_getpriority(long which, long who) {
-  int best = 100;
-  list_for_each(q, &all_procs) {
-    struct proc *p = list_entry(q, struct proc, all_link);
-    if (p->state != P_ALIVE || p == kernel_proc)
-      continue;
-    bool m = which == PRIO_PROCESS ? p->pid == (who ? who : cur_proc()->pid)
-           : which == PRIO_PGRP    ? p->pgid == (who ? who : cur_proc()->pgid)
-           : which == PRIO_USER    ? p->cred.uid == (uint32_t)(who ? who : cur_proc()->cred.uid)
-                                   : false;
-    if (m && 20 - p->nice < 100 && (best == 100 || 20 - p->nice > best))
-      best = 20 - p->nice;
-  }
-  if (which < 0 || which > 2)
-    return -EINVAL;
-  return best == 100 ? -ESRCH : best;
+	if (namelen != 1)
+		return (EINVAL);
+
+	flags = PGET_NOTWEXIT;
+	if (req->newptr != NULL) {
+		if (req->newlen != sizeof(osrel))
+			return (EINVAL);
+		error = SYSCTL_IN(req, &osrel, sizeof(osrel));
+		if (error != 0)
+			return (error);
+		if (osrel < 0)
+			return (EINVAL);
+		flags |= PGET_CANDEBUG;
+	} else {
+		flags |= PGET_CANSEE;
+	}
+	error = pget((pid_t)name[0], flags, &p);
+	if (error != 0)
+		return (error);
+	if ((p->p_flag & P_INEXEC) != 0) {
+		error = EBUSY;
+	} else {
+		old_osrel = p->p_osrel;
+		if (req->newptr != NULL)
+			p->p_osrel = osrel;
+	}
+	PROC_UNLOCK(p);
+
+	if (error == 0)
+		error = SYSCTL_OUT(req, &old_osrel, sizeof(old_osrel));
+	return (error);
 }
 
-long sys_setpriority(long which, long who, long nice) {
-  if (which < 0 || which > 2)
-    return -EINVAL;
-  if (nice < -20)
-    nice = -20;
-  if (nice > 19)
-    nice = 19;
-  bool found = false;
-  struct cred *me = &cur_proc()->cred;
-  list_for_each(q, &all_procs) {
-    struct proc *p = list_entry(q, struct proc, all_link);
-    if (p->state != P_ALIVE || p == kernel_proc)
-      continue;
-    bool m = which == PRIO_PROCESS ? p->pid == (who ? who : cur_proc()->pid)
-           : which == PRIO_PGRP    ? p->pgid == (who ? who : cur_proc()->pgid)
-                                   : p->cred.uid == (uint32_t)(who ? who : me->uid);
-    if (!m)
-      continue;
-    found = true;
-    if (me->euid != 0 && me->euid != p->cred.uid && me->euid != p->cred.euid)
-      return -EPERM;
-    if (nice < p->nice && me->euid != 0)
-      return -EACCES;
-    p->nice = (int)nice;
-  }
-  return found ? 0 : -ESRCH;
+static int
+sysctl_kern_proc_sigtramp(SYSCTL_HANDLER_ARGS)
+{
+	int *name = (int *)arg1;
+	u_int namelen = arg2;
+	struct proc *p;
+	struct kinfo_sigtramp kst;
+	const struct sysentvec *sv;
+	int error;
+#ifdef COMPAT_FREEBSD32
+	struct kinfo_sigtramp32 kst32;
+#endif
+
+	if (namelen != 1)
+		return (EINVAL);
+
+	error = pget((pid_t)name[0], PGET_CANDEBUG, &p);
+	if (error != 0)
+		return (error);
+	sv = p->p_sysent;
+#ifdef COMPAT_FREEBSD32
+	if ((req->flags & SCTL_MASK32) != 0) {
+		bzero(&kst32, sizeof(kst32));
+		if (SV_PROC_FLAG(p, SV_ILP32)) {
+			if (PROC_HAS_SHP(p)) {
+				kst32.ksigtramp_start = PROC_SIGCODE(p);
+				kst32.ksigtramp_end = kst32.ksigtramp_start +
+				    ((sv->sv_flags & SV_DSO_SIG) == 0 ?
+				    *sv->sv_szsigcode :
+				    (uintptr_t)sv->sv_szsigcode);
+			} else {
+				kst32.ksigtramp_start = PROC_PS_STRINGS(p) -
+				    *sv->sv_szsigcode;
+				kst32.ksigtramp_end = PROC_PS_STRINGS(p);
+			}
+		}
+		PROC_UNLOCK(p);
+		error = SYSCTL_OUT(req, &kst32, sizeof(kst32));
+		return (error);
+	}
+#endif
+	bzero(&kst, sizeof(kst));
+	if (PROC_HAS_SHP(p)) {
+		kst.ksigtramp_start = (char *)PROC_SIGCODE(p);
+		kst.ksigtramp_end = (char *)kst.ksigtramp_start +
+		    ((sv->sv_flags & SV_DSO_SIG) == 0 ? *sv->sv_szsigcode :
+		    (uintptr_t)sv->sv_szsigcode);
+	} else {
+		kst.ksigtramp_start = (char *)PROC_PS_STRINGS(p) -
+		    *sv->sv_szsigcode;
+		kst.ksigtramp_end = (char *)PROC_PS_STRINGS(p);
+	}
+	PROC_UNLOCK(p);
+	error = SYSCTL_OUT(req, &kst, sizeof(kst));
+	return (error);
 }
 
-long sys_set_tid_address(long a) {
-  current->clear_child_tid = (uint64_t)a;
-  return current->tid;
+static int
+sysctl_kern_proc_sigfastblk(SYSCTL_HANDLER_ARGS)
+{
+	int *name = (int *)arg1;
+	u_int namelen = arg2;
+	pid_t pid;
+	struct proc *p;
+	struct thread *td1;
+	uintptr_t addr;
+#ifdef COMPAT_FREEBSD32
+	uint32_t addr32;
+#endif
+	int error;
+
+	if (namelen != 1 || req->newptr != NULL)
+		return (EINVAL);
+
+	pid = (pid_t)name[0];
+	error = pget(pid, PGET_HOLD | PGET_NOTWEXIT | PGET_CANDEBUG, &p);
+	if (error != 0)
+		return (error);
+
+	PROC_LOCK(p);
+#ifdef COMPAT_FREEBSD32
+	if (SV_CURPROC_FLAG(SV_ILP32)) {
+		if (!SV_PROC_FLAG(p, SV_ILP32)) {
+			error = EINVAL;
+			goto errlocked;
+		}
+	}
+#endif
+	if (pid <= PID_MAX) {
+		td1 = FIRST_THREAD_IN_PROC(p);
+	} else {
+		FOREACH_THREAD_IN_PROC(p, td1) {
+			if (td1->td_tid == pid)
+				break;
+		}
+	}
+	if (td1 == NULL) {
+		error = ESRCH;
+		goto errlocked;
+	}
+	/*
+	 * The access to the private thread flags.  It is fine as far
+	 * as no out-of-thin-air values are read from td_pflags, and
+	 * usermode read of the td_sigblock_ptr is racy inherently,
+	 * since target process might have already changed it
+	 * meantime.
+	 */
+	if ((td1->td_pflags & TDP_SIGFASTBLOCK) != 0)
+		addr = (uintptr_t)td1->td_sigblock_ptr;
+	else
+		error = ENOTTY;
+
+errlocked:
+	_PRELE(p);
+	PROC_UNLOCK(p);
+	if (error != 0)
+		return (error);
+
+#ifdef COMPAT_FREEBSD32
+	if (SV_CURPROC_FLAG(SV_ILP32)) {
+		addr32 = addr;
+		error = SYSCTL_OUT(req, &addr32, sizeof(addr32));
+	} else
+#endif
+		error = SYSCTL_OUT(req, &addr, sizeof(addr));
+	return (error);
 }
 
-long sys_set_robust_list(long head, long len) {
-  if (len != 24)
-    return -EINVAL;
-  current->robust_list = (uint64_t)head;
-  return 0;
+static int
+sysctl_kern_proc_vm_layout(SYSCTL_HANDLER_ARGS)
+{
+	struct kinfo_vm_layout kvm;
+	struct proc *p;
+	struct thread *td;
+	struct vmspace *vmspace;
+	int error, *name;
+
+	name = (int *)arg1;
+	if ((u_int)arg2 != 1)
+		return (EINVAL);
+
+	td = curthread;
+	error = pget((pid_t)name[0], PGET_CANDEBUG, &p);
+	if (error != 0)
+		return (error);
+#ifdef COMPAT_FREEBSD32
+	if (SV_CURPROC_FLAG(SV_ILP32)) {
+		if (!SV_PROC_FLAG(p, SV_ILP32)) {
+			PROC_UNLOCK(p);
+			return (EINVAL);
+		}
+	}
+#endif
+	_PHOLD(p);
+	PROC_UNLOCK(p);
+	error = proc_vmspace_ref(td, p, PRVM_CHECK_DEBUG, &vmspace);
+	if (error != 0) {
+		PRELE(p);
+		return (error);
+	}
+
+	memset(&kvm, 0, sizeof(kvm));
+	kvm.kvm_min_user_addr = vm_map_min(&vmspace->vm_map);
+	kvm.kvm_max_user_addr = vm_map_max(&vmspace->vm_map);
+	kvm.kvm_text_addr = (uintptr_t)vmspace->vm_taddr;
+	kvm.kvm_text_size = vmspace->vm_tsize;
+	kvm.kvm_data_addr = (uintptr_t)vmspace->vm_daddr;
+	kvm.kvm_data_size = vmspace->vm_dsize;
+	kvm.kvm_stack_addr = (uintptr_t)vmspace->vm_maxsaddr;
+	kvm.kvm_stack_size = vmspace->vm_ssize;
+	kvm.kvm_shp_addr = vmspace->vm_shp_base;
+	kvm.kvm_shp_size = p->p_sysent->sv_shared_page_len;
+	if ((vmspace->vm_map.flags & MAP_WIREFUTURE) != 0)
+		kvm.kvm_map_flags |= KMAP_FLAG_WIREFUTURE;
+	if ((vmspace->vm_map.flags & MAP_ASLR) != 0)
+		kvm.kvm_map_flags |= KMAP_FLAG_ASLR;
+	if ((vmspace->vm_map.flags & MAP_ASLR_IGNSTART) != 0)
+		kvm.kvm_map_flags |= KMAP_FLAG_ASLR_IGNSTART;
+	if ((vmspace->vm_map.flags & MAP_WXORX) != 0)
+		kvm.kvm_map_flags |= KMAP_FLAG_WXORX;
+	if ((vmspace->vm_map.flags & MAP_ASLR_STACK) != 0)
+		kvm.kvm_map_flags |= KMAP_FLAG_ASLR_STACK;
+	if (vmspace->vm_shp_base != p->p_sysent->sv_shared_page_base &&
+	    PROC_HAS_SHP(p))
+		kvm.kvm_map_flags |= KMAP_FLAG_ASLR_SHARED_PAGE;
+
+#ifdef COMPAT_FREEBSD32
+	if (SV_CURPROC_FLAG(SV_ILP32)) {
+		struct kinfo_vm_layout32 kvm32;
+
+		memset(&kvm32, 0, sizeof(kvm32));
+		kvm32.kvm_min_user_addr = (uint32_t)kvm.kvm_min_user_addr;
+		kvm32.kvm_max_user_addr = (uint32_t)kvm.kvm_max_user_addr;
+		kvm32.kvm_text_addr = (uint32_t)kvm.kvm_text_addr;
+		kvm32.kvm_text_size = (uint32_t)kvm.kvm_text_size;
+		kvm32.kvm_data_addr = (uint32_t)kvm.kvm_data_addr;
+		kvm32.kvm_data_size = (uint32_t)kvm.kvm_data_size;
+		kvm32.kvm_stack_addr = (uint32_t)kvm.kvm_stack_addr;
+		kvm32.kvm_stack_size = (uint32_t)kvm.kvm_stack_size;
+		kvm32.kvm_shp_addr = (uint32_t)kvm.kvm_shp_addr;
+		kvm32.kvm_shp_size = (uint32_t)kvm.kvm_shp_size;
+		kvm32.kvm_map_flags = kvm.kvm_map_flags;
+		error = SYSCTL_OUT(req, &kvm32, sizeof(kvm32));
+		goto out;
+	}
+#endif
+
+	error = SYSCTL_OUT(req, &kvm, sizeof(kvm));
+#ifdef COMPAT_FREEBSD32
+out:
+#endif
+	proc_vmspace_unref(td, p, PRVM_CHECK_DEBUG, vmspace);
+	PRELE(p);
+	return (error);
 }
 
-long sys_get_robust_list(long pid, long uhead, long ulen) {
-  struct task *t = pid ? find_task((pid_t)pid) : current;
-  if (!t)
-    return -ESRCH;
-  uint64_t len = 24;
-  if (copy_to_user((void *)uhead, &t->robust_list, 8) || copy_to_user((void *)ulen, &len, 8))
-    return -EFAULT;
-  return 0;
+SYSCTL_NODE(_kern, KERN_PROC, proc, CTLFLAG_RD | CTLFLAG_MPSAFE,  0,
+    "Process table");
+
+SYSCTL_PROC(_kern_proc, KERN_PROC_ALL, all, CTLFLAG_RD|CTLTYPE_STRUCT|
+	CTLFLAG_MPSAFE, 0, 0, sysctl_kern_proc, "S,proc",
+	"Return entire process table");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_GID, gid, CTLFLAG_RD | CTLFLAG_MPSAFE,
+	sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_PGRP, pgrp, CTLFLAG_RD | CTLFLAG_MPSAFE,
+	sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_RGID, rgid, CTLFLAG_RD | CTLFLAG_MPSAFE,
+	sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_SESSION, sid, CTLFLAG_RD |
+	CTLFLAG_MPSAFE, sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_TTY, tty, CTLFLAG_RD | CTLFLAG_MPSAFE,
+	sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_UID, uid, CTLFLAG_RD | CTLFLAG_MPSAFE,
+	sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_RUID, ruid, CTLFLAG_RD | CTLFLAG_MPSAFE,
+	sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_PID, pid, CTLFLAG_RD | CTLFLAG_MPSAFE,
+	sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_PROC, proc, CTLFLAG_RD | CTLFLAG_MPSAFE,
+	sysctl_kern_proc, "Return process table, no threads");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_ARGS, args,
+	CTLFLAG_RW | CTLFLAG_CAPWR | CTLFLAG_ANYBODY | CTLFLAG_MPSAFE,
+	sysctl_kern_proc_args, "Process argument list");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_ENV, env, CTLFLAG_RD | CTLFLAG_MPSAFE,
+	sysctl_kern_proc_env, "Process environment");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_AUXV, auxv, CTLFLAG_RD |
+	CTLFLAG_MPSAFE, sysctl_kern_proc_auxv, "Process ELF auxiliary vector");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_PATHNAME, pathname, CTLFLAG_RD |
+	CTLFLAG_MPSAFE, sysctl_kern_proc_pathname, "Process executable path");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_SV_NAME, sv_name, CTLFLAG_RD |
+	CTLFLAG_MPSAFE, sysctl_kern_proc_sv_name,
+	"Process syscall vector name (ABI type)");
+
+static SYSCTL_NODE(_kern_proc, (KERN_PROC_GID | KERN_PROC_INC_THREAD), gid_td,
+	CTLFLAG_RD | CTLFLAG_MPSAFE, sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, (KERN_PROC_PGRP | KERN_PROC_INC_THREAD), pgrp_td,
+	CTLFLAG_RD | CTLFLAG_MPSAFE, sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, (KERN_PROC_RGID | KERN_PROC_INC_THREAD), rgid_td,
+	CTLFLAG_RD | CTLFLAG_MPSAFE, sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, (KERN_PROC_SESSION | KERN_PROC_INC_THREAD),
+	sid_td, CTLFLAG_RD | CTLFLAG_MPSAFE, sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, (KERN_PROC_TTY | KERN_PROC_INC_THREAD), tty_td,
+	CTLFLAG_RD | CTLFLAG_MPSAFE, sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, (KERN_PROC_UID | KERN_PROC_INC_THREAD), uid_td,
+	CTLFLAG_RD | CTLFLAG_MPSAFE, sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, (KERN_PROC_RUID | KERN_PROC_INC_THREAD), ruid_td,
+	CTLFLAG_RD | CTLFLAG_MPSAFE, sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, (KERN_PROC_PID | KERN_PROC_INC_THREAD), pid_td,
+	CTLFLAG_RD | CTLFLAG_MPSAFE, sysctl_kern_proc, "Process table");
+
+static SYSCTL_NODE(_kern_proc, (KERN_PROC_PROC | KERN_PROC_INC_THREAD), proc_td,
+	CTLFLAG_RD | CTLFLAG_MPSAFE, sysctl_kern_proc,
+	"Return process table, including threads");
+
+#ifdef COMPAT_FREEBSD7
+static SYSCTL_NODE(_kern_proc, KERN_PROC_OVMMAP, ovmmap, CTLFLAG_RD |
+	CTLFLAG_MPSAFE, sysctl_kern_proc_ovmmap, "Old Process vm map entries");
+#endif
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_VMMAP, vmmap, CTLFLAG_RD |
+	CTLFLAG_MPSAFE, sysctl_kern_proc_vmmap, "Process vm map entries");
+
+#if defined(STACK) || defined(DDB)
+static SYSCTL_NODE(_kern_proc, KERN_PROC_KSTACK, kstack, CTLFLAG_RD |
+	CTLFLAG_MPSAFE, sysctl_kern_proc_kstack, "Process kernel stacks");
+#endif
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_GROUPS, groups, CTLFLAG_RD |
+	CTLFLAG_MPSAFE, sysctl_kern_proc_groups, "Process groups");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_RLIMIT, rlimit, CTLFLAG_RW |
+	CTLFLAG_ANYBODY | CTLFLAG_MPSAFE, sysctl_kern_proc_rlimit,
+	"Process resource limits");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_PS_STRINGS, ps_strings, CTLFLAG_RD |
+	CTLFLAG_MPSAFE, sysctl_kern_proc_ps_strings,
+	"Process ps_strings location");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_UMASK, umask, CTLFLAG_RD |
+	CTLFLAG_MPSAFE, sysctl_kern_proc_umask, "Process umask");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_OSREL, osrel, CTLFLAG_RW |
+	CTLFLAG_ANYBODY | CTLFLAG_MPSAFE, sysctl_kern_proc_osrel,
+	"Process binary osreldate");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_SIGTRAMP, sigtramp, CTLFLAG_RD |
+	CTLFLAG_MPSAFE, sysctl_kern_proc_sigtramp,
+	"Process signal trampoline location");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_SIGFASTBLK, sigfastblk, CTLFLAG_RD |
+	CTLFLAG_ANYBODY | CTLFLAG_MPSAFE, sysctl_kern_proc_sigfastblk,
+	"Thread sigfastblock address");
+
+static SYSCTL_NODE(_kern_proc, KERN_PROC_VM_LAYOUT, vm_layout, CTLFLAG_RD |
+	CTLFLAG_ANYBODY | CTLFLAG_MPSAFE, sysctl_kern_proc_vm_layout,
+	"Process virtual address space layout info");
+
+static struct sx stop_all_proc_blocker;
+SX_SYSINIT(stop_all_proc_blocker, &stop_all_proc_blocker, "sapblk");
+
+bool
+stop_all_proc_block(void)
+{
+	return (sx_xlock_sig(&stop_all_proc_blocker) == 0);
 }
 
-#define ARCH_SET_GS 0x1001
-#define ARCH_SET_FS 0x1002
-#define ARCH_GET_FS 0x1003
-#define ARCH_GET_GS 0x1004
-
-long sys_arch_prctl(long code, long addr) {
-  switch (code) {
-  case ARCH_SET_FS:
-    if ((uint64_t)addr >= USER_TOP)
-      return -EPERM;
-    current->fsbase = (uint64_t)addr;
-    wrmsr(MSR_FS_BASE, (uint64_t)addr);
-    return 0;
-  case ARCH_GET_FS:
-    return copy_to_user((void *)addr, &current->fsbase, 8) ? -EFAULT : 0;
-  case ARCH_SET_GS:
-    return 0;
-  case ARCH_GET_GS: {
-    uint64_t z = 0;
-    return copy_to_user((void *)addr, &z, 8) ? -EFAULT : 0;
-  }
-  }
-  return -EINVAL;
+void
+stop_all_proc_unblock(void)
+{
+	sx_xunlock(&stop_all_proc_blocker);
 }
 
-#define PR_SET_PDEATHSIG 1
-#define PR_GET_PDEATHSIG 2
-#define PR_GET_DUMPABLE 3
-#define PR_SET_DUMPABLE 4
-#define PR_SET_NAME 15
-#define PR_GET_NAME 16
+int allproc_gen;
 
-long sys_prctl(long op, long a2) {
-  struct proc *p = cur_proc();
-  switch (op) {
-  case PR_SET_NAME: {
-    char n[16];
-    long r = strncpy_from_user(n, (const char *)a2, 16);
-    if (r == -ENAMETOOLONG) {
-      if (copy_from_user(n, (void *)a2, 15))
-        return -EFAULT;
-      n[15] = 0;
-    } else if (r < 0)
-      return r;
-    memcpy(p->comm, n, 16);
-    return 0;
-  }
-  case PR_GET_NAME:
-    return copy_to_user((void *)a2, p->comm, 16) ? -EFAULT : 0;
-  case PR_SET_PDEATHSIG:
-  case PR_SET_DUMPABLE:
-    return 0;
-  case PR_GET_DUMPABLE:
-    return 1;
-  case PR_GET_PDEATHSIG: {
-    int z = 0;
-    return copy_to_user((void *)a2, &z, 4) ? -EFAULT : 0;
-  }
-  }
-  return -EINVAL;
+/*
+ * stop_all_proc() purpose is to stop all process which have usermode,
+ * except current process for obvious reasons.  This makes it somewhat
+ * unreliable when invoked from multithreaded process.  The service
+ * must not be user-callable anyway.
+ */
+void
+stop_all_proc(void)
+{
+	struct proc *cp, *p;
+	int r, gen;
+	bool restart, seen_stopped, seen_exiting, stopped_some;
+
+	if (!stop_all_proc_block())
+		return;
+
+	cp = curproc;
+allproc_loop:
+	sx_xlock(&allproc_lock);
+	gen = allproc_gen;
+	seen_exiting = seen_stopped = stopped_some = restart = false;
+	LIST_REMOVE(cp, p_list);
+	LIST_INSERT_HEAD(&allproc, cp, p_list);
+	for (;;) {
+		p = LIST_NEXT(cp, p_list);
+		if (p == NULL)
+			break;
+		LIST_REMOVE(cp, p_list);
+		LIST_INSERT_AFTER(p, cp, p_list);
+		PROC_LOCK(p);
+		if ((p->p_flag & (P_KPROC | P_SYSTEM | P_TOTAL_STOP |
+		    P_STOPPED_SIG)) != 0) {
+			PROC_UNLOCK(p);
+			continue;
+		}
+		if ((p->p_flag2 & P2_WEXIT) != 0) {
+			seen_exiting = true;
+			PROC_UNLOCK(p);
+			continue;
+		}
+		if (P_SHOULDSTOP(p) == P_STOPPED_SINGLE) {
+			/*
+			 * Stopped processes are tolerated when there
+			 * are no other processes which might continue
+			 * them.  P_STOPPED_SINGLE but not
+			 * P_TOTAL_STOP process still has at least one
+			 * thread running.
+			 */
+			seen_stopped = true;
+			PROC_UNLOCK(p);
+			continue;
+		}
+		if ((p->p_flag & P_TRACED) != 0) {
+			/*
+			 * thread_single() below cannot stop traced p,
+			 * so skip it.  OTOH, we cannot require
+			 * restart because debugger might be either
+			 * already stopped or traced as well.
+			 */
+			PROC_UNLOCK(p);
+			continue;
+		}
+		sx_xunlock(&allproc_lock);
+		_PHOLD(p);
+		r = thread_single(p, SINGLE_ALLPROC);
+		if (r != 0)
+			restart = true;
+		else
+			stopped_some = true;
+		_PRELE(p);
+		PROC_UNLOCK(p);
+		sx_xlock(&allproc_lock);
+	}
+	/* Catch forked children we did not see in iteration. */
+	if (gen != allproc_gen)
+		restart = true;
+	sx_xunlock(&allproc_lock);
+	if (restart || stopped_some || seen_exiting || seen_stopped) {
+		kern_yield(PRI_USER);
+		goto allproc_loop;
+	}
 }
 
-/* ---- scheduling parameters (one processor, round robin for all) ---- */
+void
+resume_all_proc(void)
+{
+	struct proc *cp, *p;
 
-#define SCHED_OTHER 0
-#define SCHED_FIFO 1
-#define SCHED_RR 2
-#define SCHED_BATCH 3
-#define SCHED_IDLE 5
+	cp = curproc;
+	sx_xlock(&allproc_lock);
+again:
+	LIST_REMOVE(cp, p_list);
+	LIST_INSERT_HEAD(&allproc, cp, p_list);
+	for (;;) {
+		p = LIST_NEXT(cp, p_list);
+		if (p == NULL)
+			break;
+		LIST_REMOVE(cp, p_list);
+		LIST_INSERT_AFTER(p, cp, p_list);
+		PROC_LOCK(p);
+		if ((p->p_flag & P_TOTAL_STOP) != 0) {
+			sx_xunlock(&allproc_lock);
+			_PHOLD(p);
+			thread_single_end(p, SINGLE_ALLPROC);
+			_PRELE(p);
+			PROC_UNLOCK(p);
+			sx_xlock(&allproc_lock);
+		} else {
+			PROC_UNLOCK(p);
+		}
+	}
+	/*  Did the loop above missed any stopped process ? */
+	FOREACH_PROC_IN_SYSTEM(p) {
+		/* No need for proc lock. */
+		if ((p->p_flag & P_TOTAL_STOP) != 0)
+			goto again;
+	}
+	sx_xunlock(&allproc_lock);
 
-static struct task *sched_target(long pid) {
-  if (pid < 0)
-    return NULL;
-  struct task *t = pid ? find_task((pid_t)pid) : current;
-  return t && t->is_kthread ? NULL : t;
+	stop_all_proc_unblock();
 }
 
-long sys_sched_getscheduler(long pid) {
-  if (pid < 0)
-    return -EINVAL;
-  struct task *t = sched_target(pid);
-  return t ? t->policy : -ESRCH;
+/* #define	TOTAL_STOP_DEBUG	1 */
+#ifdef TOTAL_STOP_DEBUG
+volatile static int ap_resume;
+#include <sys/mount.h>
+
+static int
+sysctl_debug_stop_all_proc(SYSCTL_HANDLER_ARGS)
+{
+	int error, val;
+
+	val = 0;
+	ap_resume = 0;
+	error = sysctl_handle_int(oidp, &val, 0, req);
+	if (error != 0 || req->newptr == NULL)
+		return (error);
+	if (val != 0) {
+		stop_all_proc();
+		syncer_suspend();
+		while (ap_resume == 0)
+			;
+		syncer_resume();
+		resume_all_proc();
+	}
+	return (0);
 }
 
-long sys_sched_getparam(long pid, long up) {
-  if (pid < 0 || !up)
-    return -EINVAL;
-  struct task *t = sched_target(pid);
-  if (!t)
-    return -ESRCH;
-  if (t->policy == SCHED_SPORADIC) { /* the long struct sched_param */
-    struct ss_param sp;
-    ss_get(t, &sp);
-    return copy_to_user((void *)up, &sp, sizeof(sp)) ? -EFAULT : 0;
-  }
-  int32_t prio = t->rtprio;
-  return copy_to_user((void *)up, &prio, 4) ? -EFAULT : 0;
-}
-
-static long set_sched(long pid, int policy, long up) {
-  if (pid < 0 || !up)
-    return -EINVAL;
-  struct task *t = sched_target(pid);
-  if (!t)
-    return -ESRCH;
-  int32_t prio;
-  if (copy_from_user(&prio, (void *)up, 4))
-    return -EFAULT;
-  if (policy < 0)
-    policy = t->policy;
-  policy &= ~0x40000000; /* SCHED_RESET_ON_FORK */
-  if (policy == SCHED_SPORADIC) {
-    struct ss_param sp;
-    if (copy_from_user(&sp, (void *)up, sizeof(sp)))
-      return -EFAULT;
-    if (!capable())
-      return -EPERM;
-    struct cred *me = &cur_proc()->cred;
-    if (me->euid != 0 && me->euid != t->proc->cred.uid && me->euid != t->proc->cred.euid)
-      return -EPERM;
-    return ss_set(t, &sp);
-  }
-  if (policy == SCHED_FIFO || policy == SCHED_RR) {
-    if (prio < 1 || prio > 99)
-      return -EINVAL;
-    if (!capable())
-      return -EPERM;
-  } else if (policy == SCHED_OTHER || policy == SCHED_BATCH || policy == SCHED_IDLE) {
-    if (prio != 0)
-      return -EINVAL;
-  } else
-    return -EINVAL;
-  struct cred *me = &cur_proc()->cred;
-  if (me->euid != 0 && me->euid != t->proc->cred.uid && me->euid != t->proc->cred.euid)
-    return -EPERM;
-  ss_free(t);
-  t->policy = policy;
-  t->rtprio = prio;
-  task_prio_changed(t);
-  return 0;
-}
-
-long sys_sched_setscheduler(long pid, long policy, long up) {
-  if (policy < 0)
-    return -EINVAL;
-  return set_sched(pid, (int)policy, up);
-}
-long sys_sched_setparam(long pid, long up) { return set_sched(pid, -1, up); }
-
-long sys_sched_get_priority_max(long policy) {
-  return policy == SCHED_FIFO || policy == SCHED_RR || policy == SCHED_SPORADIC ? 99 : policy == SCHED_OTHER || policy == SCHED_BATCH || policy == SCHED_IDLE ? 0 : -EINVAL;
-}
-long sys_sched_get_priority_min(long policy) {
-  return policy == SCHED_FIFO || policy == SCHED_RR || policy == SCHED_SPORADIC ? 1 : policy == SCHED_OTHER || policy == SCHED_BATCH || policy == SCHED_IDLE ? 0 : -EINVAL;
-}
-
-long sys_sched_rr_get_interval(long pid, long uts) {
-  if (pid < 0)
-    return -EINVAL;
-  if (!sched_target(pid))
-    return -ESRCH;
-  struct timespec64 ts = {0, 10000000};
-  return copy_to_user((void *)uts, &ts, sizeof(ts)) ? -EFAULT : 0;
-}
-
-long sys_sched_yield(void) {
-  yield();
-  return 0;
-}
-
-long sys_sched_getaffinity(long pid, long len, long umask) {
-  if (!sched_target(pid))
-    return -ESRCH;
-  if (len < 8 || (len & 7))
-    return -EINVAL;
-  uint64_t m = 1;
-  if (clear_user((void *)umask, (size_t)len) || copy_to_user((void *)umask, &m, 8))
-    return -EFAULT;
-  return 8;
-}
-
-long sys_sched_setaffinity(long pid, long len, long umask) {
-  (void)len;
-  (void)umask;
-  return sched_target(pid) ? 0 : -ESRCH;
-}
-
-long sys_getcpu(long ucpu, long unode) {
-  uint32_t z = 0;
-  if (ucpu && copy_to_user((void *)ucpu, &z, 4))
-    return -EFAULT;
-  if (unode && copy_to_user((void *)unode, &z, 4))
-    return -EFAULT;
-  return 0;
-}
+SYSCTL_PROC(_debug, OID_AUTO, stop_all_proc, CTLTYPE_INT | CTLFLAG_RW |
+    CTLFLAG_MPSAFE, __DEVOLATILE(int *, &ap_resume), 0,
+    sysctl_debug_stop_all_proc, "I",
+    "");
+#endif

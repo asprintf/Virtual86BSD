@@ -1,64 +1,161 @@
-/*
- * Copyright (c) 2026, Joost Orchidee Winter
- * All rights reserved.
+/*	$NetBSD: msg.h,v 1.4 1994/06/29 06:44:43 cgd Exp $	*/
+
+/*-
+ * SVID compatible msg.h file
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * Author:  Daniel Boulet
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
+ * Copyright 1993 Daniel Boulet and RTMX Inc.
  *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
+ * This system call was implemented by Daniel Boulet under contract from RTMX.
  *
- * 3. Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived from
- *    this software without specific prior written permission.
+ * Redistribution and use in source forms, with and without modification,
+ * are permitted provided that this entire comment appears intact.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * Redistribution in binary form may occur without any restrictions.
+ * Obviously, it would be nice if you gave credit where credit is due
+ * but requiring it would be too onerous.
+ *
+ * This software is provided ``AS IS'' without any warranties of any kind.
  */
 
-#ifndef _SYS_MSG_H
-#define _SYS_MSG_H
-#include <bits/features.h>
+#ifndef _SYS_MSG_H_
+#define _SYS_MSG_H_
+
+#include <sys/cdefs.h>
+#include <sys/_types.h>
+#ifdef _WANT_SYSVMSG_INTERNALS
+#define	_WANT_SYSVIPC_INTERNALS
+#endif
 #include <sys/ipc.h>
-#define __NEED_pid_t
-#define __NEED_size_t
-#define __NEED_ssize_t
-#define __NEED_time_t
-#include <bits/alltypes.h>
 
-typedef unsigned long msgqnum_t;
-typedef unsigned long msglen_t;
+/*
+ * The MSG_NOERROR identifier value, the msqid_ds struct and the msg struct
+ * are as defined by the SV API Intel 386 Processor Supplement.
+ */
 
-/* the kernel's struct msqid64_ds on x86-64 */
+#define MSG_NOERROR	010000		/* don't complain about too long msgs */
+
+typedef	unsigned long	msglen_t;
+typedef	unsigned long	msgqnum_t;
+
+#ifndef _PID_T_DECLARED
+typedef	__pid_t		pid_t;
+#define	_PID_T_DECLARED
+#endif
+
+#ifndef _SIZE_T_DECLARED
+typedef	__size_t	size_t;
+#define	_SIZE_T_DECLARED
+#endif
+
+#ifndef _SSIZE_T_DECLARED
+typedef	__ssize_t	ssize_t;
+#define	_SSIZE_T_DECLARED
+#endif
+
+#ifndef _TIME_T_DECLARED
+typedef	__time_t	time_t;
+#define	_TIME_T_DECLARED
+#endif
+
+#if defined(COMPAT_FREEBSD4) || defined(COMPAT_FREEBSD5) || \
+    defined(COMPAT_FREEBSD6) || defined(COMPAT_FREEBSD7)
+struct msqid_ds_old {
+	struct	ipc_perm_old msg_perm;	/* msg queue permission bits */
+	struct	msg *__msg_first;	/* first message in the queue */
+	struct	msg *__msg_last;	/* last message in the queue */
+	msglen_t msg_cbytes;	/* number of bytes in use on the queue */
+	msgqnum_t msg_qnum;	/* number of msgs in the queue */
+	msglen_t msg_qbytes;	/* max # of bytes on the queue */
+	pid_t	msg_lspid;	/* pid of last msgsnd() */
+	pid_t	msg_lrpid;	/* pid of last msgrcv() */
+	time_t	msg_stime;	/* time of last msgsnd() */
+	long	msg_pad1;
+	time_t	msg_rtime;	/* time of last msgrcv() */
+	long	msg_pad2;
+	time_t	msg_ctime;	/* time of last msgctl() */
+	long	msg_pad3;
+	long	msg_pad4[4];
+};
+#endif
+
+/*
+ * XXX there seems to be no prefix reserved for this header, so the name
+ * "msg" in "struct msg" and the names of all of the nonstandard members
+ * are namespace pollution.
+ */
+
 struct msqid_ds {
-	struct ipc_perm msg_perm;
-	time_t msg_stime;
-	time_t msg_rtime;
-	time_t msg_ctime;
-	unsigned long __msg_cbytes;
-	msgqnum_t msg_qnum;
-	msglen_t msg_qbytes;
-	pid_t msg_lspid;
-	pid_t msg_lrpid;
-	unsigned long __unused[2];
+	struct	ipc_perm msg_perm;	/* msg queue permission bits */
+	struct	msg *__msg_first;	/* first message in the queue */
+	struct	msg *__msg_last;	/* last message in the queue */
+	msglen_t msg_cbytes;	/* number of bytes in use on the queue */
+	msgqnum_t msg_qnum;	/* number of msgs in the queue */
+	msglen_t msg_qbytes;	/* max # of bytes on the queue */
+	pid_t	msg_lspid;	/* pid of last msgsnd() */
+	pid_t	msg_lrpid;	/* pid of last msgrcv() */
+	time_t	msg_stime;	/* time of last msgsnd() */
+	time_t	msg_rtime;	/* time of last msgrcv() */
+	time_t	msg_ctime;	/* time of last msgctl() */
 };
 
-#define MSG_NOERROR 010000
-#if __EXT_VISIBLE
-#define MSG_EXCEPT  020000
+#ifdef _KERNEL
+struct msg {
+	struct	msg *msg_next;  /* next msg in the chain */
+	long	msg_type; 	/* type of this message */
+				/* >0 -> type of this message */
+				/* 0 -> free header */
+	u_short	msg_ts;		/* size of this message */
+	short	msg_spot;	/* location of start of msg in buffer */
+	struct	label *label;	/* MAC Framework label */
+};
 #endif
+
+#if defined(_KERNEL) || defined(_WANT_SYSVMSG_INTERNALS)
+/*
+ * Based on the configuration parameters described in an SVR2 (yes, two)
+ * config(1m) man page.
+ *
+ * Each message is broken up and stored in segments that are msgssz bytes
+ * long.  For efficiency reasons, this should be a power of two.  Also,
+ * it doesn't make sense if it is less than 8 or greater than about 256.
+ * Consequently, msginit in kern/sysv_msg.c checks that msgssz is a power of
+ * two between 8 and 1024 inclusive (and panic's if it isn't).
+ */
+struct msginfo {
+	int	msgmax;		/* max chars in a message */
+	int	msgmni;		/* max message queue identifiers */
+	int	msgmnb;		/* max chars in a queue */
+	int	msgtql;		/* max messages in system */
+	int	msgssz;		/* size of a message segment (see note) */
+	int	msgseg;		/* number of message segments */
+};
+
+/*
+ * Kernel wrapper for the user-level structure.
+ */
+struct msqid_kernel {
+	/*
+	 * Data structure exposed to user space.
+	 */
+	struct	msqid_ds u;
+
+	/*
+	 * Kernel-private components of the message queue.
+	 */
+	struct	label *label;	/* MAC label */
+	struct	ucred *cred;	/* creator's credentials */
+};
+#endif
+
+#ifdef _KERNEL
+extern struct msginfo	msginfo;
+
+int	kern_get_msqids(struct thread *td, struct msqid_kernel **res,
+	    size_t *sz);
+
+#else /* _KERNEL */
 
 __BEGIN_DECLS
 int msgctl(int, int, struct msqid_ds *);
@@ -66,5 +163,6 @@ int msgget(key_t, int);
 ssize_t msgrcv(int, void *, size_t, long, int);
 int msgsnd(int, const void *, size_t, int);
 __END_DECLS
+#endif /* !_KERNEL */
 
-#endif
+#endif /* !_SYS_MSG_H_ */

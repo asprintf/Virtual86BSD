@@ -1,350 +1,299 @@
-/*
- * Copyright (c) 2026, asprintf
- * All rights reserved.
+/*-
+ * SPDX-License-Identifier: Beerware
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * ----------------------------------------------------------------------------
+ * "THE BEER-WARE LICENSE" (Revision 42):
+ * <phk@FreeBSD.ORG> wrote this file.  As long as you retain this notice you
+ * can do whatever you want with this stuff. If we meet some day, and you think
+ * this stuff is worth it, you can buy me a beer in return.   Poul-Henning Kamp
+ * ----------------------------------------------------------------------------
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived from
- *    this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * The bioq_disksort() (and the specification of the bioq API)
+ * have been written by Luigi Rizzo and Fabio Checconi under the same
+ * license as above.
  */
 
-/* subr_disk.c - disks as autoconf devices, named as macOS's: disk0, disk1 ...
-   in the order they attach, whichever controller they are on (pciide,
-   vioblk), as OpenBSD's sd is whichever bus; disk0s1, disk0s2 ... the
-   partitions of a disk (numbers from 1) that its MBR or GPT tells; rdisk0,
-   rdisk0s1 ... the raw devices: character devices that read and write
-   the disk's sectors, with no buffer cache.
+#include <sys/cdefs.h>
+#include "opt_geom.h"
 
-   The block devices are in /dev as disk0, disk0s1; a partition is a block
-   device of its own, made from the disk's (its sectors from an offset), so
-   a file system on it has its own buffers: nothing should write disk0
-   while one of its partitions is mounted.  The device numbers are
-   Linux's sd: major 8, minor unit * 16 + partition; the raw ones are major
-   RDISK_MAJOR with the same minors.
-
-   The table is read when the disk attaches, and the lines of dmesg are
-   OpenBSD's:
-
-     disk0: 512MB, 512 bytes/sector, 1048576 sectors
-     disk0: MBR, 1 partition
-   A GPT is used if the MBR is a protective one (type 0xee); its headers
-   and entry array must have good CRC-32s, else it says so and there are
-   no partitions. */
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/device.h>
+#include <sys/bio.h>
+#include <sys/conf.h>
 #include <sys/disk.h>
-#include <sys/file.h>
-#include <uvm/uvm.h>
+#include <sys/sysctl.h>
+#include <geom/geom_disk.h>
 
-#define DISK_MAJOR 8
-#define MAXPARTS 15 /* the minors of a disk: unit * 16 + 0 (the disk), 1 .. 15 */
+static int bioq_batchsize = 128;
+SYSCTL_INT(_debug, OID_AUTO, bioq_batchsize, CTLFLAG_RW,
+    &bioq_batchsize, 0, "BIOQ batch size");
 
-/* ---- the partition table (a function of the sectors: no I/O) ---- */
+/*-
+ * Disk error is the preface to plaintive error messages
+ * about failing disk transfers.  It prints messages of the form
+ * 	"hp0g: BLABLABLA cmd=read fsbn 12345 of 12344-12347"
+ * blkdone should be -1 if the position of the error is unknown.
+ * The message is printed with printf.
+ */
+void
+disk_err(struct bio *bp, const char *what, int blkdone, int nl)
+{
+	daddr_t sn;
 
-static uint32_t le32(const uint8_t *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
-static uint64_t le64(const uint8_t *p) { return (uint64_t)le32(p) | (uint64_t)le32(p + 4) << 32; }
-
-uint32_t crc32(const void *buf, size_t n) {
-  static uint32_t table[256];
-  if (!table[1])
-    for (uint32_t i = 0; i < 256; i++) {
-      uint32_t c = i;
-      for (int k = 0; k < 8; k++)
-        c = c & 1 ? 0xedb88320U ^ (c >> 1) : c >> 1;
-      table[i] = c;
-    }
-  const uint8_t *p = buf;
-  uint32_t c = 0xffffffffU;
-  while (n--)
-    c = table[(c ^ *p++) & 255] ^ (c >> 8);
-  return ~c;
+	if (bp->bio_dev != NULL)
+		printf("%s: %s ", devtoname(bp->bio_dev), what);
+	else if (bp->bio_disk != NULL)
+		printf("%s%d: %s ",
+		    bp->bio_disk->d_name, bp->bio_disk->d_unit, what);
+	else
+		printf("disk??: %s ", what);
+	switch(bp->bio_cmd) {
+	case BIO_READ:		printf("cmd=read "); break;
+	case BIO_WRITE:		printf("cmd=write "); break;
+	case BIO_DELETE:	printf("cmd=delete "); break;
+	case BIO_GETATTR:	printf("cmd=getattr "); break;
+	case BIO_FLUSH:		printf("cmd=flush "); break;
+	default:		printf("cmd=%x ", bp->bio_cmd); break;
+	}
+	sn = bp->bio_pblkno;
+	if (bp->bio_bcount <= DEV_BSIZE) {
+		printf("fsbn %jd%s", (intmax_t)sn, nl ? "\n" : "");
+		return;
+	}
+	if (blkdone >= 0) {
+		sn += blkdone;
+		printf("fsbn %jd of ", (intmax_t)sn);
+	}
+	printf("%jd-%jd", (intmax_t)bp->bio_pblkno,
+	    (intmax_t)(bp->bio_pblkno + (bp->bio_bcount - 1) / DEV_BSIZE));
+	if (nl)
+		printf("\n");
 }
 
-/* the 4 primary entries of the MBR in sector 0: ptab_mbr: how many partitions
-   there are (0: not an MBR), and 1 if the table is a protective one (a GPT
-   follows) */
-int ptab_mbr(const uint8_t *s0, uint64_t disksectors, struct ptab_entry *e, bool *protective) {
-  *protective = false;
-  if (s0[510] != 0x55 || s0[511] != 0xaa)
-    return 0;
-  int n = 0;
-  for (int i = 0; i < 4; i++) {
-    const uint8_t *p = s0 + 446 + 16 * i;
-    uint8_t type = p[4];
-    uint64_t start = le32(p + 8), len = le32(p + 12);
-    if (!type || !len)
-      continue;
-    if (type == 0xee) {
-      *protective = true;
-      continue;
-    }
-    if (start + len > disksectors)
-      continue; /* out of the disk: not a table of this disk */
-    e[n].index = i + 1;
-    e[n].start = start;
-    e[n].sectors = len;
-    e[n].type = type;
-    n++;
-  }
-  return n;
+/*
+ * BIO queue implementation
+ *
+ * Please read carefully the description below before making any change
+ * to the code, or you might change the behaviour of the data structure
+ * in undesirable ways.
+ *
+ * A bioq stores disk I/O request (bio), normally sorted according to
+ * the distance of the requested position (bio->bio_offset) from the
+ * current head position (bioq->last_offset) in the scan direction, i.e.
+ *
+ * 	(uoff_t)(bio_offset - last_offset)
+ *
+ * Note that the cast to unsigned (uoff_t) is fundamental to insure
+ * that the distance is computed in the scan direction.
+ *
+ * The main methods for manipulating the bioq are:
+ *
+ *   bioq_disksort()	performs an ordered insertion;
+ *
+ *   bioq_first()	return the head of the queue, without removing;
+ *
+ *   bioq_takefirst()	return and remove the head of the queue,
+ *		updating the 'current head position' as
+ *		bioq->last_offset = bio->bio_offset + bio->bio_length;
+ *
+ * When updating the 'current head position', we assume that the result of
+ * bioq_takefirst() is dispatched to the device, so bioq->last_offset
+ * represents the head position once the request is complete.
+ *
+ * If the bioq is manipulated using only the above calls, it starts
+ * with a sorted sequence of requests with bio_offset >= last_offset,
+ * possibly followed by another sorted sequence of requests with
+ * 0 <= bio_offset < bioq->last_offset 
+ *
+ * NOTE: historical behaviour was to ignore bio->bio_length in the
+ *	update, but its use tracks the head position in a better way.
+ *	Historical behaviour was also to update the head position when
+ *	the request under service is complete, rather than when the
+ *	request is extracted from the queue. However, the current API
+ *	has no method to update the head position; secondly, once
+ *	a request has been submitted to the disk, we have no idea of
+ *	the actual head position, so the final one is our best guess.
+ *
+ * --- Direct queue manipulation ---
+ *
+ * A bioq uses an underlying TAILQ to store requests, so we also
+ * export methods to manipulate the TAILQ, in particular:
+ *
+ * bioq_insert_tail()	insert an entry at the end.
+ *		It also creates a 'barrier' so all subsequent
+ *		insertions through bioq_disksort() will end up
+ *		after this entry;
+ *
+ * bioq_insert_head()	insert an entry at the head, update
+ *		bioq->last_offset = bio->bio_offset so that
+ *		all subsequent insertions through bioq_disksort()
+ *		will end up after this entry;
+ *
+ * bioq_remove()	remove a generic element from the queue, act as
+ *		bioq_takefirst() if invoked on the head of the queue.
+ *
+ * The semantic of these methods is the same as the operations
+ * on the underlying TAILQ, but with additional guarantees on
+ * subsequent bioq_disksort() calls. E.g. bioq_insert_tail()
+ * can be useful for making sure that all previous ops are flushed
+ * to disk before continuing.
+ *
+ * Updating bioq->last_offset on a bioq_insert_head() guarantees
+ * that the bio inserted with the last bioq_insert_head() will stay
+ * at the head of the queue even after subsequent bioq_disksort().
+ *
+ * Note that when the direct queue manipulation functions are used,
+ * the queue may contain multiple inversion points (i.e. more than
+ * two sorted sequences of requests).
+ *
+ */
+
+void
+bioq_init(struct bio_queue_head *head)
+{
+
+	TAILQ_INIT(&head->queue);
+	head->last_offset = 0;
+	head->insert_point = NULL;
+	head->total = 0;
+	head->batched = 0;
 }
 
-/* the GPT: header (sector 1) and the entries (read by get, the sectors
-   from lba), or a message in *why.  Entries with an all-zero type are
-   unused; the partitions keep their number in the array (nr 1 is the
-   first entry) */
-int ptab_gpt(const uint8_t *hdr, uint64_t disksectors, int (*get)(void *arg, uint64_t lba, unsigned n, void *buf),
-             void *arg, struct ptab_entry *e, int maxe, const char **why) {
-  if (memcmp(hdr, "EFI PART", 8)) {
-    *why = "no GPT header";
-    return -1;
-  }
-  uint32_t hsize = le32(hdr + 12);
-  if (hsize < 92 || hsize > 512) {
-    *why = "bad GPT header size";
-    return -1;
-  }
-  uint8_t h[512];
-  memcpy(h, hdr, hsize);
-  uint32_t crc = le32(h + 16);
-  memset(h + 16, 0, 4);
-  if (crc32(h, hsize) != crc) {
-    *why = "GPT header checksum is bad";
-    return -1;
-  }
-  uint64_t lba = le64(hdr + 72);
-  uint32_t nent = le32(hdr + 80), esize = le32(hdr + 84), ecrc = le32(hdr + 88);
-  if (esize < 128 || esize > 512 || (esize & (esize - 1)) || nent == 0 || nent > 128) {
-    *why = "bad GPT entry array";
-    return -1;
-  }
-  unsigned nsect = (nent * esize + 511) / 512;
-  if (lba + nsect > disksectors) {
-    *why = "GPT entries beyond the disk";
-    return -1;
-  }
-  uint8_t *a = kmalloc((size_t)nsect * 512);
-  if (!a) {
-    *why = "out of memory";
-    return -1;
-  }
-  int n = -1;
-  if (get(arg, lba, nsect, a)) {
-    *why = "cannot read the GPT entries";
-  } else if (crc32(a, (size_t)nent * esize) != ecrc) {
-    *why = "GPT entries checksum is bad";
-  } else {
-    uint64_t first = le64(hdr + 40), last = le64(hdr + 48);
-    n = 0;
-    for (uint32_t i = 0; i < nent; i++) {
-      const uint8_t *p = a + (size_t)i * esize;
-      bool used = false;
-      for (int k = 0; k < 16; k++)
-        used |= p[k] != 0;
-      uint64_t s = le64(p + 32), t = le64(p + 40);
-      if (!used || t < s || s < first || t > last || t >= disksectors)
-        continue;
-      if (n < maxe) {
-        e[n].index = (int)i + 1;
-        e[n].start = s;
-        e[n].sectors = t - s + 1;
-        e[n].type = 0;
-        n++;
-      }
-    }
-  }
-  kfree(a);
-  return n;
+void
+bioq_remove(struct bio_queue_head *head, struct bio *bp)
+{
+
+	if (head->insert_point == NULL) {
+		if (bp == TAILQ_FIRST(&head->queue))
+			head->last_offset = bp->bio_offset + bp->bio_length;
+	} else if (bp == head->insert_point)
+		head->insert_point = NULL;
+
+	TAILQ_REMOVE(&head->queue, bp, bio_queue);
+	if (TAILQ_EMPTY(&head->queue))
+		head->batched = 0;
+	head->total--;
 }
 
-/* ---- a partition: a block device of the disk's sectors from an offset ---- */
+void
+bioq_flush(struct bio_queue_head *head, struct devstat *stp, int error)
+{
+	struct bio *bp;
 
-struct part {
-  struct blockdev *disk;
-  uint64_t start;
-};
-
-static int part_read(struct blockdev *b, uint64_t sector, unsigned count, void *buf) {
-  struct part *p = b->priv;
-  if (sector + count > b->sectors)
-    return -EIO;
-  return p->disk->read(p->disk, p->start + sector, count, buf);
+	while ((bp = bioq_takefirst(head)) != NULL)
+		biofinish(bp, stp, error);
 }
 
-static int part_write(struct blockdev *b, uint64_t sector, unsigned count, const void *buf) {
-  struct part *p = b->priv;
-  if (sector + count > b->sectors)
-    return -EIO;
-  return p->disk->write(p->disk, p->start + sector, count, buf);
+void
+bioq_insert_head(struct bio_queue_head *head, struct bio *bp)
+{
+
+	if (head->insert_point == NULL)
+		head->last_offset = bp->bio_offset;
+	TAILQ_INSERT_HEAD(&head->queue, bp, bio_queue);
+	head->total++;
+	head->batched = 0;
 }
 
-static int part_flush(struct blockdev *b) {
-  struct part *p = b->priv;
-  return p->disk->flush ? p->disk->flush(p->disk) : 0;
+void
+bioq_insert_tail(struct bio_queue_head *head, struct bio *bp)
+{
+
+	TAILQ_INSERT_TAIL(&head->queue, bp, bio_queue);
+	head->total++;
+	head->batched = 0;
+	head->insert_point = bp;
+	head->last_offset = bp->bio_offset;
 }
 
-static void part_make(struct blockdev *disk, int unit, int nr, uint64_t start, uint64_t sectors) {
-  struct blockdev *b = kzalloc(sizeof(*b));
-  struct part *p = kzalloc(sizeof(*p));
-  if (!b || !p)
-    return;
-  p->disk = disk;
-  p->start = start;
-  snprintf(b->name, sizeof(b->name), "%ss%d", disk->name, nr);
-  b->dev = MKDEV(DISK_MAJOR, (unsigned)(unit * 16 + nr));
-  b->sectors = sectors;
-  b->read = part_read;
-  b->write = part_write;
-  b->flush = part_flush;
-  b->priv = p;
-  blockdev_register(b);
+struct bio *
+bioq_first(struct bio_queue_head *head)
+{
+
+	return (TAILQ_FIRST(&head->queue));
 }
 
-static int read_disk(void *arg, uint64_t lba, unsigned n, void *buf) {
-  struct blockdev *b = arg;
-  return b->read(b, lba, n, buf);
+struct bio *
+bioq_takefirst(struct bio_queue_head *head)
+{
+	struct bio *bp;
+
+	bp = TAILQ_FIRST(&head->queue);
+	if (bp != NULL)
+		bioq_remove(head, bp);
+	return (bp);
 }
 
-static void disk_partitions(struct blockdev *b, int unit, const char *xname) {
-  struct ptab_entry e[MAXPARTS + 1];
-  uint8_t s[1024];
-  bool prot;
-  const char *why = NULL;
-  if (b->sectors < 2 || read_disk(b, 0, 2, s))
-    return;
-  int n = ptab_mbr(s, b->sectors, e, &prot), nm = n;
-  const char *kind = "MBR";
-  if (prot) {
-    kind = "GPT";
-    n = ptab_gpt(s + 512, b->sectors, read_disk, b, e, MAXPARTS, &why);
-    if (n < 0) {
-      printf("%s: %s\n", xname, why);
-      return;
-    }
-  } else if (!nm)
-    return;
-  printf("%s: %s, %d partition%s\n", xname, kind, n, n == 1 ? "" : "s");
-  for (int i = 0; i < n; i++)
-    if (e[i].index <= MAXPARTS)
-      part_make(b, unit, e[i].index, e[i].start, e[i].sectors);
+/*
+ * Compute the sorting key. The cast to unsigned is
+ * fundamental for correctness, see the description
+ * near the beginning of the file.
+ */
+static inline uoff_t
+bioq_bio_key(struct bio_queue_head *head, struct bio *bp)
+{
+
+	return ((uoff_t)(bp->bio_offset - head->last_offset));
 }
 
-/* ---- the disk as a device ---- */
+/*
+ * Seek sort for disks.
+ *
+ * Sort all requests in a single queue while keeping
+ * track of the current position of the disk with last_offset.
+ * See above for details.
+ */
+void
+bioq_disksort(struct bio_queue_head *head, struct bio *bp)
+{
+	struct bio *cur, *prev;
+	uoff_t key;
 
-static void rdisk_register(void);
+	if ((bp->bio_flags & BIO_ORDERED) != 0) {
+		/*
+		 * Ordered transactions can only be dispatched
+		 * after any currently queued transactions.  They
+		 * also have barrier semantics - no transactions
+		 * queued in the future can pass them.
+		 */
+		bioq_insert_tail(head, bp);
+		return;
+	}
 
-static int disk_match(struct device *parent, void *match, void *aux) {
-  (void)parent;
-  (void)match;
-  (void)aux;
-  return 1; /* only a controller offers one */
-}
+	/*
+	 * We should only sort requests of types that have concept of offset.
+	 * Other types, such as BIO_FLUSH or BIO_ZONE, may imply some degree
+	 * of ordering even if strict ordering is not requested explicitly.
+	 */
+	if (bp->bio_cmd != BIO_READ && bp->bio_cmd != BIO_WRITE &&
+	    bp->bio_cmd != BIO_DELETE) {
+		bioq_insert_tail(head, bp);
+		return;
+	}
 
-static void disk_attach(struct device *parent, struct device *self, void *aux) {
-  struct disk_attach_args *da = aux;
-  struct blockdev *b = da->da_bd;
-  (void)parent;
-  snprintf(b->name, sizeof(b->name), "%s", self->dv_xname);
-  b->dev = MKDEV(DISK_MAJOR, (unsigned)(self->dv_unit * 16));
-  printf(": <%s>\n", da->da_desc);
-  printf("%s: %luMB, 512 bytes/sector, %lu sectors\n", self->dv_xname, (b->sectors + 1024) / 2048, b->sectors);
-  blockdev_register(b);
-  rdisk_register();
-  disk_partitions(b, self->dv_unit, self->dv_xname);
-}
+	if (bioq_batchsize > 0 && head->batched > bioq_batchsize) {
+		bioq_insert_tail(head, bp);
+		return;
+	}
 
-struct cfdriver disk_cd = {NULL, "disk", DV_DISK, 0};
-struct cfattach disk_ca = {sizeof(struct device), disk_match, disk_attach};
+	prev = NULL;
+	key = bioq_bio_key(head, bp);
+	cur = TAILQ_FIRST(&head->queue);
 
-/* ---- the raw devices: rdisk0, rdisk0s1 ---- */
+	if (head->insert_point) {
+		prev = head->insert_point;
+		cur = TAILQ_NEXT(head->insert_point, bio_queue);
+	}
 
-/* the sectors straight to or from the driver, in pieces that the kernel
-   has a buffer for; the offset and the length are whole sectors */
-static ssize_t raw_rw(struct file *f, char *buf, size_t n, off_t *pos, bool write) {
-  struct blockdev *b = f->priv;
-  uint64_t size = b->sectors * 512;
-  if (*pos < 0 || ((uint64_t)*pos | n) & 511)
-    return -EINVAL;
-  if ((uint64_t)*pos >= size)
-    return write && n ? -ENOSPC : 0;
-  n = (size_t)MIN((uint64_t)n, size - (uint64_t)*pos);
-  enum { CHUNK = 65536 };
-  uint8_t *tmp = kmalloc(CHUNK);
-  if (!tmp)
-    return -ENOMEM;
-  size_t done = 0;
-  int err = 0;
-  while (done < n) {
-    size_t c = MIN(n - done, (size_t)CHUNK);
-    uint64_t sector = (uint64_t)*pos / 512;
-    if (write) {
-      if (copy_from_user(tmp, buf + done, c)) {
-        err = -EFAULT;
-        break;
-      }
-      err = b->write(b, sector, (unsigned)(c / 512), tmp);
-      b->unflushed = true;
-    } else {
-      err = b->read(b, sector, (unsigned)(c / 512), tmp);
-      if (!err && copy_to_user(buf + done, tmp, c))
-        err = -EFAULT;
-    }
-    if (err)
-      break;
-    done += c;
-    *pos += (off_t)c;
-  }
-  kfree(tmp);
-  return done ? (ssize_t)done : err;
-}
+	while (cur != NULL && key >= bioq_bio_key(head, cur)) {
+		prev = cur;
+		cur = TAILQ_NEXT(cur, bio_queue);
+	}
 
-static ssize_t raw_read(struct file *f, char *buf, size_t n, off_t *pos) { return raw_rw(f, buf, n, pos, false); }
-static ssize_t raw_write(struct file *f, const char *buf, size_t n, off_t *pos) {
-  return raw_rw(f, (char *)buf, n, pos, true);
-}
-static int raw_fsync(struct file *f) {
-  struct blockdev *b = f->priv;
-  return b->flush ? b->flush(b) : 0;
-}
-static const struct file_ops raw_fops = {.read = raw_read, .write = raw_write, .fsync = raw_fsync, .seekable = true};
-
-static int rdisk_open(struct inode *ino, struct file *f) {
-  struct blockdev *b = blockdev_get(MKDEV(DISK_MAJOR, MINOR(ino->rdev)));
-  if (!b)
-    return -ENXIO;
-  f->priv = b;
-  f->fops = &raw_fops;
-  return 0;
-}
-static const struct chrdev rdisk_dev = {"rdisk", rdisk_open};
-
-/* the first disk makes the raw devices there (devtmpfs has /dev/rdisk* of
-   every block device then) */
-bool rdisk_present;
-static void rdisk_register(void) {
-  if (!rdisk_present) {
-    chrdev_register(RDISK_MAJOR, &rdisk_dev);
-    rdisk_present = true;
-  }
+	if (prev == NULL)
+		TAILQ_INSERT_HEAD(&head->queue, bp, bio_queue);
+	else
+		TAILQ_INSERT_AFTER(&head->queue, prev, bp, bio_queue);
+	head->total++;
+	head->batched++;
 }

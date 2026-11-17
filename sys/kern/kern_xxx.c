@@ -1,182 +1,425 @@
-/*
- * Copyright (c) 2026, Joost Orchidee Winter
- * All rights reserved.
+/*-
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
+ * Copyright (c) 1982, 1986, 1989, 1993
+ *	The Regents of the University of California.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ * 3. Neither the name of the University nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
  *
- * 1. Redistributions of source code must retain the above copyright notice, this
- *    list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- *    contributors may be used to endorse or promote products derived from
- *    this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+ * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
  * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  */
 
-/* misc.c - uname, host names, sysinfo, reboot, syslog, capabilities. */
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/file.h>
-#include <sys/buf.h>
-#include <sys/reboot.h>
-#include <uvm/uvm.h>
-#include <machine/cpu.h>
+#include <sys/sysproto.h>
+#include <sys/kernel.h>
+#include <sys/priv.h>
+#include <sys/proc.h>
+#include <sys/lock.h>
+#include <sys/mutex.h>
+#include <sys/socket.h>
+#include <sys/sysctl.h>
+#include <sys/utsname.h>
 
-/* uname: the system's identity is that of vers.c (conf/newvers.sh): V86BSD,
-   the release, GENERIC#1.  The Linux emulation has its own
-   (compat/linux/linux_misc.c). */
-char uts_nodename[65] = "v86bsd";
-char uts_domain[65] = "(none)";
+#include <vm/vm_param.h>
 
-long sys_nosys(void) { return -ENOSYS; }
+#if defined(COMPAT_43)
 
-long sys_uname(long ubuf) {
-  char u[6][65];
-  memset(u, 0, sizeof(u));
-  strcpy(u[0], ostype);
-  strcpy(u[1], uts_nodename);
-  strcpy(u[2], osrelease);
-  strcpy(u[3], osversion);
-  strcpy(u[4], "amd64");
-  strcpy(u[5], uts_domain);
-  return copy_to_user((void *)ubuf, u, sizeof(u)) ? -EFAULT : 0;
+int
+ogethostname(struct thread *td, struct ogethostname_args *uap)
+{
+	int name[2];
+	size_t len = uap->len;
+
+	name[0] = CTL_KERN;
+	name[1] = KERN_HOSTNAME;
+	return (userland_sysctl(td, name, 2, uap->hostname, &len,
+	    1, 0, 0, 0, 0));
 }
 
-static long set_name(char *dst, long uname, long len) {
-  if (!capable())
-    return -EPERM;
-  if (len < 0 || len > 64)
-    return -EINVAL;
-  char tmp[65];
-  if (copy_from_user(tmp, (void *)uname, (size_t)len))
-    return -EFAULT;
-  tmp[len] = 0;
-  strcpy(dst, tmp);
-  return 0;
+int
+osethostname(struct thread *td, struct osethostname_args *uap)
+{
+	int name[2];
+
+	name[0] = CTL_KERN;
+	name[1] = KERN_HOSTNAME;
+	return (userland_sysctl(td, name, 2, 0, 0, 0, uap->hostname,
+	    uap->len, 0, 0));
 }
 
-long sys_sethostname(long name, long len) { return set_name(uts_nodename, name, len); }
-long sys_setdomainname(long name, long len) { return set_name(uts_domain, name, len); }
-
-struct ksysinfo {
-  int64_t uptime;
-  uint64_t loads[3], totalram, freeram, sharedram, bufferram, totalswap, freeswap;
-  uint16_t procs, pad;
-  uint32_t pad2;
-  uint64_t totalhigh, freehigh;
-  uint32_t mem_unit;
-  char rest[4];
+#ifndef _SYS_SYSPROTO_H_
+struct ogethostid_args {
+	int	dummy;
 };
+#endif
+/* ARGSUSED */
+int
+ogethostid(struct thread *td, struct ogethostid_args *uap)
+{
+	size_t len = sizeof(long);
+	int name[2];
 
-long sys_sysinfo(long u) {
-  struct ksysinfo si;
-  memset(&si, 0, sizeof(si));
-  si.uptime = (int64_t)(monotonic_ns() / 1000000000UL);
-  si.totalram = total_pages * PAGE_SIZE;
-  si.freeram = free_pages_count * PAGE_SIZE;
-  int n = 0;
-  list_for_each(p, &all_tasks) n++;
-  si.procs = (uint16_t)n;
-  si.mem_unit = 1;
-  return copy_to_user((void *)u, &si, sizeof(si)) ? -EFAULT : 0;
+	name[0] = CTL_KERN;
+	name[1] = KERN_HOSTID;
+	return (kernel_sysctl(td, name, 2, (long *)td->td_retval, &len,
+	    NULL, 0, NULL, 0));
 }
 
-/* reboot(2): howto is RB_* of <sys/reboot.h>.  Called also for the Linux
-   emulation (linux_sys_reboot translates). */
-long sys_reboot(long howto) {
-  if (!capable())
-    return -EPERM;
-  if (!(howto & RB_NOSYNC)) {
-    printf("syncing disks... ");
-    sync_all();
-    bsync(NULL);
-    list_for_each(p, &mounts) {
-      struct mount *m = list_entry(p, struct mount, link);
-      if (m->sb->ops && m->sb->ops->shutdown)
-        m->sb->ops->shutdown(m->sb);
-    }
-    printf("done\n");
-  }
-  bool power = (howto & RB_POWERDOWN) != 0, halt = (howto & RB_HALT) != 0;
-  if (power)
-    printf("powering off...\n");
-  else if (halt)
-    printf("The operating system has halted.\n");
-  else
-    printf("rebooting...\n");
-  cli();
-  if (power) {
-    outw(0x604, 0x2000);  /* QEMU q35 / piix ACPI */
-    outw(0xb004, 0x2000); /* older QEMU, Bochs */
-  } else if (!halt) {
-    outb(0x64, 0xfe); /* keyboard controller reset */
-  }
-  for (;;)
-    hlt();
+int
+osethostid(struct thread *td, struct osethostid_args *uap)
+{
+	int name[2];
+
+	name[0] = CTL_KERN;
+	name[1] = KERN_HOSTID;
+	return (kernel_sysctl(td, name, 2, NULL, NULL, &uap->hostid,
+	    sizeof(uap->hostid), NULL, 0));
 }
 
-/* syslog(2): the kernel log */
-long sys_syslog(long type, long ubuf, long len) {
-  switch (type) {
-  case 0:
-  case 1:
-  case 5:
-  case 6:
-  case 7:
-  case 8:
-    return 0;
-  case 2:
-  case 3:
-  case 4: {
-    if (len < 0)
-      return -EINVAL;
-    char *tmp = kmalloc(65536);
-    if (!tmp)
-      return -ENOMEM;
-    size_t n = log_read(tmp, MIN((size_t)len, 65536UL));
-    long r = copy_to_user((void *)ubuf, tmp, n) ? -EFAULT : (long)n;
-    kfree(tmp);
-    return r;
-  }
-  case 9:
-    return 0;
-  case 10:
-    return 65536;
-  }
-  return -EINVAL;
+int
+oquota(struct thread *td, struct oquota_args *uap)
+{
+
+	return (ENOSYS);
 }
 
-/* capabilities: root has them all, others none */
-long sys_capget(long uhdr, long udata) {
-  uint32_t hdr[2];
-  if (copy_from_user(hdr, (void *)uhdr, 8))
-    return -EFAULT;
-  if (!udata)
-    return 0;
-  uint32_t d[6] = {0};
-  if (capable())
-    for (int i = 0; i < 6; i++)
-      d[i] = i % 3 == 2 ? 0 : 0xffffffff;
-  return copy_to_user((void *)udata, d, sizeof(d)) ? -EFAULT : 0;
+#define	KINFO_PROC		(0<<8)
+#define	KINFO_RT		(1<<8)
+/* UNUSED, was KINFO_VNODE (2<<8) */
+#define	KINFO_FILE		(3<<8)
+#define	KINFO_METER		(4<<8)
+#define	KINFO_LOADAVG		(5<<8)
+#define	KINFO_CLOCKRATE		(6<<8)
+
+/* Non-standard BSDI extension - only present on their 4.3 net-2 releases */
+#define	KINFO_BSDI_SYSINFO	(101<<8)
+
+/*
+ * XXX this is bloat, but I hope it's better here than on the potentially
+ * limited kernel stack...  -Peter
+ */
+
+static struct {
+	int	bsdi_machine;		/* "i386" on BSD/386 */
+/*      ^^^ this is an offset to the string, relative to the struct start */
+	char	*pad0;
+	long	pad1;
+	long	pad2;
+	long	pad3;
+	u_long	pad4;
+	u_long	pad5;
+	u_long	pad6;
+
+	int	bsdi_ostype;		/* "BSD/386" on BSD/386 */
+	int	bsdi_osrelease;		/* "1.1" on BSD/386 */
+	long	pad7;
+	long	pad8;
+	char	*pad9;
+
+	long	pad10;
+	long	pad11;
+	int	pad12;
+	long	pad13;
+	quad_t	pad14;
+	long	pad15;
+
+	struct	timeval pad16;
+	/* we dont set this, because BSDI's uname used gethostname() instead */
+	int	bsdi_hostname;		/* hostname on BSD/386 */
+
+	/* the actual string data is appended here */
+
+} bsdi_si;
+
+/*
+ * this data is appended to the end of the bsdi_si structure during copyout.
+ * The "char *" offsets are relative to the base of the bsdi_si struct.
+ * This contains "FreeBSD\02.0-BUILT-nnnnnn\0i386\0", and these strings
+ * should not exceed the length of the buffer here... (or else!! :-)
+ */
+static char bsdi_strings[80];	/* It had better be less than this! */
+
+int
+ogetkerninfo(struct thread *td, struct ogetkerninfo_args *uap)
+{
+	int error, name[6];
+	size_t size;
+	u_int needed = 0;
+
+	switch (uap->op & 0xff00) {
+	case KINFO_RT:
+		name[0] = CTL_NET;
+		name[1] = PF_ROUTE;
+		name[2] = 0;
+		name[3] = (uap->op & 0xff0000) >> 16;
+		name[4] = uap->op & 0xff;
+		name[5] = uap->arg;
+		error = userland_sysctl(td, name, 6, uap->where, uap->size,
+			0, 0, 0, &size, 0);
+		break;
+
+	case KINFO_PROC:
+		name[0] = CTL_KERN;
+		name[1] = KERN_PROC;
+		name[2] = uap->op & 0xff;
+		name[3] = uap->arg;
+		error = userland_sysctl(td, name, 4, uap->where, uap->size,
+			0, 0, 0, &size, 0);
+		break;
+
+	case KINFO_FILE:
+		name[0] = CTL_KERN;
+		name[1] = KERN_FILE;
+		error = userland_sysctl(td, name, 2, uap->where, uap->size,
+			0, 0, 0, &size, 0);
+		break;
+
+	case KINFO_METER:
+		name[0] = CTL_VM;
+		name[1] = VM_TOTAL;
+		error = userland_sysctl(td, name, 2, uap->where, uap->size,
+			0, 0, 0, &size, 0);
+		break;
+
+	case KINFO_LOADAVG:
+		name[0] = CTL_VM;
+		name[1] = VM_LOADAVG;
+		error = userland_sysctl(td, name, 2, uap->where, uap->size,
+			0, 0, 0, &size, 0);
+		break;
+
+	case KINFO_CLOCKRATE:
+		name[0] = CTL_KERN;
+		name[1] = KERN_CLOCKRATE;
+		error = userland_sysctl(td, name, 2, uap->where, uap->size,
+			0, 0, 0, &size, 0);
+		break;
+
+	case KINFO_BSDI_SYSINFO: {
+		/*
+		 * this is pretty crude, but it's just enough for uname()
+		 * from BSDI's 1.x libc to work.
+		 *
+		 * *size gives the size of the buffer before the call, and
+		 * the amount of data copied after a successful call.
+		 * If successful, the return value is the amount of data
+		 * available, which can be larger than *size.
+		 *
+		 * BSDI's 2.x product apparently fails with ENOMEM if *size
+		 * is too small.
+		 */
+
+		u_int left;
+		char *s;
+
+		bzero((char *)&bsdi_si, sizeof(bsdi_si));
+		bzero(bsdi_strings, sizeof(bsdi_strings));
+
+		s = bsdi_strings;
+
+		bsdi_si.bsdi_ostype = (s - bsdi_strings) + sizeof(bsdi_si);
+		strcpy(s, ostype);
+		s += strlen(s) + 1;
+
+		bsdi_si.bsdi_osrelease = (s - bsdi_strings) + sizeof(bsdi_si);
+		strcpy(s, osrelease);
+		s += strlen(s) + 1;
+
+		bsdi_si.bsdi_machine = (s - bsdi_strings) + sizeof(bsdi_si);
+		strcpy(s, machine);
+		s += strlen(s) + 1;
+
+		needed = sizeof(bsdi_si) + (s - bsdi_strings);
+
+		if ((uap->where == NULL) || (uap->size == NULL)) {
+			/* process is asking how much buffer to supply.. */
+			size = needed;
+			error = 0;
+			break;
+		}
+
+		if ((error = copyin(uap->size, &size, sizeof(size))) != 0)
+			break;
+
+		/* if too much buffer supplied, trim it down */
+		if (size > needed)
+			size = needed;
+
+		/* how much of the buffer is remaining */
+		left = size;
+
+		if ((error = copyout((char *)&bsdi_si, uap->where, left)) != 0)
+			break;
+
+		/* is there any point in continuing? */
+		if (left > sizeof(bsdi_si)) {
+			left -= sizeof(bsdi_si);
+			error = copyout(&bsdi_strings,
+					uap->where + sizeof(bsdi_si), left);
+		}
+		break;
+	}
+
+	default:
+		error = EOPNOTSUPP;
+		break;
+	}
+	if (error == 0) {
+		td->td_retval[0] = needed ? needed : size;
+		if (uap->size) {
+			error = copyout(&size, uap->size, sizeof(size));
+		}
+	}
+	return (error);
+}
+#endif /* COMPAT_43 */
+
+#ifdef COMPAT_FREEBSD4
+/*
+ * This is the FreeBSD-1.1 compatible uname(2) interface.  These days it is
+ * done in libc as a wrapper around a bunch of sysctl's.  This must maintain
+ * the old 1.1 binary ABI.
+ */
+#if SYS_NMLN != 32
+#error "FreeBSD-1.1 uname syscall has been broken"
+#endif
+#ifndef _SYS_SYSPROTO_H_
+struct uname_args {
+	struct utsname  *name;
+};
+#endif
+/* ARGSUSED */
+int
+freebsd4_uname(struct thread *td, struct freebsd4_uname_args *uap)
+{
+	int name[2], error;
+	size_t len;
+	const char *s;
+	char *us;
+
+	name[0] = CTL_KERN;
+	name[1] = KERN_OSTYPE;
+	len = sizeof (uap->name->sysname);
+	error = userland_sysctl(td, name, 2, uap->name->sysname, &len, 
+		1, 0, 0, 0, 0);
+	if (error)
+		return (error);
+	error = subyte(uap->name->sysname + sizeof(uap->name->sysname) - 1, 0);
+	if (error)
+		return (EFAULT);
+
+	name[1] = KERN_HOSTNAME;
+	len = sizeof uap->name->nodename;
+	error = userland_sysctl(td, name, 2, uap->name->nodename, &len, 
+		1, 0, 0, 0, 0);
+	if (error)
+		return (error);
+	error = subyte(uap->name->nodename + sizeof(uap->name->nodename) - 1, 0);
+	if (error)
+		return (EFAULT);
+
+	name[1] = KERN_OSRELEASE;
+	len = sizeof uap->name->release;
+	error = userland_sysctl(td, name, 2, uap->name->release, &len, 
+		1, 0, 0, 0, 0);
+	if (error)
+		return (error);
+	error = subyte(uap->name->release + sizeof(uap->name->release) - 1, 0);
+	if (error)
+		return (EFAULT);
+
+/*
+	name = KERN_VERSION;
+	len = sizeof uap->name->version;
+	error = userland_sysctl(td, name, 2, uap->name->version, &len, 
+		1, 0, 0, 0, 0);
+	if (error)
+		return (error);
+	subyte( uap->name->version + sizeof(uap->name->version) - 1, 0);
+*/
+
+/*
+ * this stupid hackery to make the version field look like FreeBSD 1.1
+ */
+	for(s = version; *s && *s != '#'; s++);
+
+	for(us = uap->name->version; *s && *s != ':'; s++) {
+		if (subyte(us++, *s) != 0)
+			return (EFAULT);
+	}
+	if (subyte(us++, 0) != 0)
+		return (EFAULT);
+
+	name[0] = CTL_HW;
+	name[1] = HW_MACHINE;
+	len = sizeof uap->name->machine;
+	error = userland_sysctl(td, name, 2, uap->name->machine, &len, 
+		1, 0, 0, 0, 0);
+	if (error)
+		return (error);
+	error = subyte(uap->name->machine + sizeof(uap->name->machine) - 1, 0);
+	if (error)
+		return (EFAULT);
+	return (0);
 }
 
-long sys_capset(long uhdr, long udata) {
-  (void)uhdr;
-  (void)udata;
-  return capable() ? 0 : -EPERM;
+#ifndef _SYS_SYSPROTO_H_
+struct getdomainname_args {
+	char    *domainname;
+	int     len;
+};
+#endif
+/* ARGSUSED */
+int
+freebsd4_getdomainname(struct thread *td,
+    struct freebsd4_getdomainname_args *uap)
+{
+	int name[2];
+	size_t len = uap->len;
+
+	name[0] = CTL_KERN;
+	name[1] = KERN_NISDOMAINNAME;
+	return (userland_sysctl(td, name, 2, uap->domainname, &len,
+	    1, 0, 0, 0, 0));
 }
+
+#ifndef _SYS_SYSPROTO_H_
+struct setdomainname_args {
+	char    *domainname;
+	int     len;
+};
+#endif
+/* ARGSUSED */
+int
+freebsd4_setdomainname(struct thread *td,
+    struct freebsd4_setdomainname_args *uap)
+{
+	int name[2];
+
+	name[0] = CTL_KERN;
+	name[1] = KERN_NISDOMAINNAME;
+	return (userland_sysctl(td, name, 2, 0, 0, 0, uap->domainname,
+	    uap->len, 0, 0));
+}
+#endif /* COMPAT_FREEBSD4 */

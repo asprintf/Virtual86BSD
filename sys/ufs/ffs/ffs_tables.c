@@ -1,7 +1,6 @@
-/*	$OpenBSD: ffs_tables.c,v 1.6 2011/07/03 18:23:10 tedu Exp $	*/
-/*	$NetBSD: ffs_tables.c,v 1.2 1994/06/29 06:46:35 cgd Exp $	*/
-
-/*
+/*-
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * Copyright (c) 1982, 1986, 1993
  *	The Regents of the University of California.  All rights reserved.
  *
@@ -28,26 +27,21 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)ffs_tables.c	8.1 (Berkeley) 6/11/93
- */
-
-/*
- * Adapted for V86BSD from OpenBSD sys/ufs/ffs/ffs_tables.c (revision 1.6).
- * Changes: integer types from <stdint.h>; otherwise as OpenBSD.
  */
 
 #include <sys/param.h>
+#include <sys/types.h>
+#include <ufs/ufs/dinode.h>
 #include <ufs/ffs/fs.h>
 
 /*
  * Bit patterns for identifying fragments in the block map
  * used as ((map & around) == inside)
  */
-const int around[9] = {
+int around[9] = {
 	0x3, 0x7, 0xf, 0x1f, 0x3f, 0x7f, 0xff, 0x1ff, 0x3ff
 };
-const int inside[9] = {
+int inside[9] = {
 	0x0, 0x2, 0x6, 0xe, 0x1e, 0x3e, 0x7e, 0xfe, 0x1fe
 };
 
@@ -63,7 +57,7 @@ const int inside[9] = {
  * These tables are used by the scanc instruction on the VAX to
  * quickly find an appropriate fragment.
  */
-const unsigned char fragtbl124[256] = {
+static uint8_t fragtbl124[256] = {
 	0x00, 0x16, 0x16, 0x2a, 0x16, 0x16, 0x26, 0x4e,
 	0x16, 0x16, 0x16, 0x3e, 0x2a, 0x3e, 0x4e, 0x8a,
 	0x16, 0x16, 0x16, 0x3e, 0x16, 0x16, 0x36, 0x5e,
@@ -98,7 +92,7 @@ const unsigned char fragtbl124[256] = {
 	0x9e, 0x9e, 0x9e, 0xbe, 0xaa, 0xbe, 0xce, 0x8a,
 };
 
-const unsigned char fragtbl8[256] = {
+static uint8_t fragtbl8[256] = {
 	0x00, 0x01, 0x01, 0x02, 0x01, 0x01, 0x02, 0x04,
 	0x01, 0x01, 0x01, 0x03, 0x02, 0x03, 0x04, 0x08,
 	0x01, 0x01, 0x01, 0x03, 0x01, 0x01, 0x03, 0x05,
@@ -136,7 +130,6 @@ const unsigned char fragtbl8[256] = {
 /*
  * The actual fragtbl array.
  */
-const unsigned char *fragtbl[MAXFRAG + 1] = {
-	NULL, fragtbl124, fragtbl124, NULL, fragtbl124, NULL, NULL, NULL,
-	fragtbl8,
+uint8_t *fragtbl[MAXFRAG + 1] = {
+	0, fragtbl124, fragtbl124, 0, fragtbl124, 0, 0, 0, fragtbl8,
 };

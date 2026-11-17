@@ -1,0 +1,71 @@
+# V86 -- kernel configuration of V86BSD: QEMU/KVM guests only.
+# Derived from FreeBSD's MINIMAL.
+
+cpu		HAMMER
+ident		V86
+
+makeoptions	DEBUG=-g		# kernel.full keeps the debug symbols
+makeoptions	MODULES_OVERRIDE="tmpfs nullfs fdescfs linprocfs ext2fs"
+
+options 	SCHED_ULE
+options 	NUMA
+options 	PREEMPTION
+options 	INET
+options 	INET6
+options 	FFS
+options 	SOFTUPDATES
+options 	UFS_ACL
+options 	UFS_DIRHASH
+options 	MD_ROOT
+options 	GEOM_PART_GPT
+options 	GEOM_PART_MBR
+options 	GEOM_LABEL
+options 	TMPFS
+options 	PSEUDOFS
+options 	PROCFS
+options 	SCSI_DELAY=5000
+options 	KTRACE
+options 	STACK
+options 	_KPOSIX_PRIORITY_SCHEDULING
+options 	PRINTF_BUFR_SIZE=128
+options 	KBD_INSTALL_CDEV
+options 	CAPABILITY_MODE
+options 	CAPABILITIES
+options 	INCLUDE_CONFIG_FILE
+options 	KDB
+options 	KDB_TRACE
+options 	DDB
+options 	GZIO
+options 	ZSTDIO
+options 	SMP
+
+device		acpi
+device		pci
+device		ahci			# q35's SATA controller
+device		scbus
+device		da
+device		cd
+device		pass
+device		atkbdc
+device		atkbd
+device		kbdmux
+device		vga
+device		vt
+device		vt_vga
+device		vt_efifb
+device		vt_vbefb
+device		uart			# COM1
+device		loop
+device		ether
+device		bpf
+device		rdrand_rng
+device		md
+device		virtio
+device		virtio_pci
+device		vtnet
+device		virtio_blk
+device		virtio_scsi
+device		virtio_console
+device		virtio_balloon
+device		virtio_random
+device		kvm_clock

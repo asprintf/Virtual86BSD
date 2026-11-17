@@ -1,7 +1,6 @@
-/*	$OpenBSD: dir.h,v 1.13 2024/01/09 03:15:59 guenther Exp $	*/
-/*	$NetBSD: dir.h,v 1.8 1996/03/09 19:42:41 scottr Exp $	*/
-
-/*
+/*-
+ * SPDX-License-Identifier: BSD-3-Clause
+ *
  * Copyright (c) 1982, 1986, 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
  * (c) UNIX System Laboratories, Inc.
@@ -33,26 +32,10 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)dir.h	8.4 (Berkeley) 8/10/94
  */
 
-/*
- * Adapted for V86BSD from OpenBSD sys/ufs/ufs/dir.h (revision 1.13).
- * Changes: integer types from <stdint.h> or the kernel's <sys/types.h>, <stddef.h> for offsetof; otherwise
- *   as OpenBSD.
- */
-
-#ifndef _DIR_H_
-#define	_DIR_H_
-
-#ifdef _KERNEL
-#include <sys/types.h>
-#else
-#include <stddef.h>
-#include <stdint.h>
-#include <sys/types.h>
-#endif
+#ifndef _UFS_UFS_DIR_H_
+#define	_UFS_UFS_DIR_H_
 
 /*
  * Theoretically, directories can be more than 2Gb in length, however, in
@@ -73,11 +56,11 @@
  * the length of the entry, and the length of the name contained in
  * the entry.  These are followed by the name padded to a 4 byte boundary
  * with null bytes.  All names are guaranteed null terminated.
- * The maximum length of a name in a directory is MAXNAMLEN.
+ * The maximum length of a name in a directory is UFS_MAXNAMLEN.
  *
- * The macro DIRSIZ(dp) gives the amount of space required to represent
+ * The macro DIRSIZ(fmt, dp) gives the amount of space required to represent
  * a directory entry.  Free space in a directory is represented by
- * entries which have dp->d_reclen > DIRSIZ(dp).  All DIRBLKSIZ bytes
+ * entries which have dp->d_reclen > DIRSIZ(fmt, dp).  All DIRBLKSIZ bytes
  * in a directory block are claimed by the directory entries.  This
  * usually results in the last entry in a directory having a large
  * dp->d_reclen.  When entries are deleted from a directory, the
@@ -87,15 +70,16 @@
  * Entries other than the first in a directory do not normally have
  * dp->d_ino set to 0.
  */
-#define DIRBLKSIZ	DEV_BSIZE
-#define	MAXNAMLEN	255
+#define	DIRBLKSIZ	DEV_BSIZE
+#define	UFS_MAXNAMLEN	255
 
 struct	direct {
 	uint32_t d_ino;		/* inode number of entry */
 	uint16_t d_reclen;		/* length of this record */
 	uint8_t  d_type; 		/* file type, see below */
 	uint8_t  d_namlen;		/* length of string in d_name */
-	char	  d_name[MAXNAMLEN + 1];/* name with length <= MAXNAMLEN */
+	char	  d_name[UFS_MAXNAMLEN + 1];
+					/* name with length <= UFS_MAXNAMLEN */
 };
 
 /*
@@ -109,6 +93,7 @@ struct	direct {
 #define	DT_REG		 8
 #define	DT_LNK		10
 #define	DT_SOCK		12
+#define	DT_WHT		14
 
 /*
  * Convert between stat structure types and directory types.
@@ -120,18 +105,24 @@ struct	direct {
  * The DIRSIZ macro gives the minimum record length which will hold
  * the directory entry.  This requires the amount of space in struct direct
  * without the d_name field, plus enough space for the name with a terminating
- * null byte (dp->d_namlen+1), rounded up to a 4 byte boundary.
+ * null byte (dp->d_namlen + 1), rounded up to a 4 byte boundary.
  */
-#define DIR_ROUNDUP	4	/* Directory name roundup size */
-#define DIRECTSIZ(namlen)						\
-	((offsetof(struct direct, d_name) +				\
-	  ((namlen)+1)*sizeof(((struct direct *)0)->d_name[0]) + 3) & ~3)
-#define DIRSIZ(dp) \
-    ((sizeof(struct direct) - (MAXNAMLEN+1)) + (((dp)->d_namlen+1 + 3) &~ 3))
+#define	DIR_ROUNDUP	4	/* Directory name roundup size */
+#define	DIRECTSIZ(namlen) \
+    (roundup2(__offsetof(struct direct, d_name) + (namlen) + 1, DIR_ROUNDUP))
+#if (BYTE_ORDER == LITTLE_ENDIAN)
+#define	DIRSIZ(oldfmt, dp) \
+    ((oldfmt) ? DIRECTSIZ((dp)->d_type) : DIRECTSIZ((dp)->d_namlen))
+#else
+#define	DIRSIZ(oldfmt, dp) \
+    DIRECTSIZ((dp)->d_namlen)
+#endif
+#define	OLDDIRFMT	1
+#define	NEWDIRFMT	0
 
 /*
  * Template for manipulating directories.  Should use struct direct's,
- * but the name field is MAXNAMLEN - 1, and this just won't do.
+ * but the name field is UFS_MAXNAMLEN - 1, and this just won't do.
  */
 struct dirtemplate {
 	uint32_t	dot_ino;
@@ -143,6 +134,20 @@ struct dirtemplate {
 	int16_t		dotdot_reclen;
 	uint8_t	dotdot_type;
 	uint8_t	dotdot_namlen;
+	char		dotdot_name[4];	/* ditto */
+};
+
+/*
+ * This is the old format of directories, sanz type element.
+ */
+struct odirtemplate {
+	uint32_t	dot_ino;
+	int16_t		dot_reclen;
+	uint16_t	dot_namlen;
+	char		dot_name[4];	/* must be multiple of 4 */
+	uint32_t	dotdot_ino;
+	int16_t		dotdot_reclen;
+	uint16_t	dotdot_namlen;
 	char		dotdot_name[4];	/* ditto */
 };
 #endif /* !_DIR_H_ */

@@ -1,7 +1,6 @@
-/*	$OpenBSD: ffs_balloc.c,v 1.47 2024/04/13 23:44:11 jsg Exp $	*/
-/*	$NetBSD: ffs_balloc.c,v 1.3 1996/02/09 22:22:21 christos Exp $	*/
-
-/*
+/*-
+ * SPDX-License-Identifier: (BSD-2-Clause AND BSD-3-Clause)
+ *
  * Copyright (c) 2002 Networks Associates Technology, Inc.
  * All rights reserved.
  *
@@ -9,7 +8,28 @@
  * Kirk McKusick and Network Associates Laboratories, the Security
  * Research Division of Network Associates, Inc. under DARPA/SPAWAR
  * contract N66001-01-C-8035 ("CBOSS"), as part of the DARPA CHATS
- * research program.
+ * research program
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
  *
  * Copyright (c) 1982, 1986, 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -37,711 +57,1156 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- *	@(#)ffs_balloc.c	8.4 (Berkeley) 9/23/93
  */
 
-/*	$OpenBSD: ffs_inode.c,v 1.83 2024/02/03 18:51:58 beck Exp $	*/
-/*	$NetBSD: ffs_inode.c,v 1.10 1996/05/11 18:27:19 mycroft Exp $	*/
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/bio.h>
+#include <sys/buf.h>
+#include <sys/lock.h>
+#include <sys/mount.h>
+#include <sys/stat.h>
+#include <sys/vnode.h>
+#include <sys/vmmeter.h>
+
+#include <ufs/ufs/quota.h>
+#include <ufs/ufs/inode.h>
+#include <ufs/ufs/ufs_extern.h>
+#include <ufs/ufs/extattr.h>
+#include <ufs/ufs/ufsmount.h>
+
+#include <ufs/ffs/fs.h>
+#include <ufs/ffs/ffs_extern.h>
 
 /*
- * Copyright (c) 1982, 1986, 1989, 1993
- *	The Regents of the University of California.  All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)ffs_inode.c	8.8 (Berkeley) 10/19/94
- */
-
-/*	$OpenBSD: ufs_bmap.c,v 1.37 2021/12/12 09:14:59 visa Exp $	*/
-/*	$NetBSD: ufs_bmap.c,v 1.3 1996/02/09 22:36:00 christos Exp $	*/
-
-/*
- * Copyright (c) 1989, 1991, 1993
- *	The Regents of the University of California.  All rights reserved.
- * (c) UNIX System Laboratories, Inc.
- * All or some portions of this file are derived from material licensed
- * to the University of California by American Telephone and Telegraph
- * Co. or Unix System Laboratories, Inc. and are reproduced herein with
- * the permission of UNIX System Laboratories, Inc.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
- *    may be used to endorse or promote products derived from this software
- *    without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE REGENTS AND CONTRIBUTORS ``AS IS'' AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED.  IN NO EVENT SHALL THE REGENTS OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
- * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
- * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
- * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
- * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
- * SUCH DAMAGE.
- *
- *	@(#)ufs_bmap.c	8.6 (Berkeley) 1/21/94
- */
-
-/*
- * Adapted for V86BSD from OpenBSD sys/ufs/ffs/ffs_balloc.c (revision 1.47), sys/ufs/ffs/ffs_inode.c (revision 1.83), sys/ufs/ufs/ufs_bmap.c (revision 1.37).
- * Changes: ffs2_balloc(), ffs_truncate() and ffs_indirtrunc() of FFS2, and ufs_getlbns(), on
- *   V86BSD's inode and buffer cache: no buffers (blocks are given by their address and
- *   read and written in fragment-sized buffers by ffs_rw), no quota, no soft updates,
- *   a failed allocation is undone from a list of what it allocated, the new blocks are
- *   zeroed when they are allocated; ffs_bmap() is ufs_bmaparray() without the cluster
- *   read-ahead; otherwise as OpenBSD.
- */
-
-#include <ufs/ffs/ffs_vfs.h>
-
-#define SINGLE	0	/* index of single indirect block */
-#define DOUBLE	1	/* index of double indirect block */
-#define TRIPLE	2	/* index of triple indirect block */
-
-/* the pointers of a file as the inode keeps them */
-#define DBPREV(din, n)	((n) > 0 ? (din)->di_db[(n) - 1] : 0)
-
-/* a block pointer, 64 bits, entry idx of the indirect block at fragment bn */
-static int64_t
-rd64(struct ffsmount *um, daddr_t bn, int idx)
-{
-	int64_t v;
-
-	ffs_rw(um, bn, (uint64_t)idx * sizeof(v), &v, sizeof(v), false, false);
-	return v;
-}
-
-static void
-wr64(struct ffsmount *um, daddr_t bn, int idx, int64_t v)
-{
-	ffs_rw(um, bn, (uint64_t)idx * sizeof(v), &v, sizeof(v), true, false);
-}
-
-/* is that a block address inside the file system? */
-static bool
-okblk(struct fs *fs, int64_t b)
-{
-	return b > 0 && b < fs->fs_size;
-}
-
-/*
- * The indirect blocks to logical block lbn (OpenBSD's ufs_getlbns): the
- * number of them (1, 2 or 3), off[0] the index of the first in the inode
- * (di_ib[off[0]]), off[1 .. n] the index in each indirect block on the
- * way, the last one the pointer to the data block.  -1: beyond what
- * triple indirection reaches.
- */
-static int
-ffs_getlbns(struct fs *fs, daddr_t lbn, int off[NIADDR + 1])
-{
-	int64_t nindir = NINDIR(fs), span = nindir;
-	int level, l;
-
-	lbn -= NDADDR;
-	for (level = 1; level <= NIADDR; level++) {
-		if (lbn < span)
-			break;
-		lbn -= span;
-		span *= nindir;
-	}
-	if (level > NIADDR)
-		return -1;
-	off[0] = level - 1;
-	for (l = level - 1; l >= 0; l--) {
-		int64_t div = 1;
-		int k;
-
-		for (k = 0; k < l; k++)
-			div *= nindir;
-		off[level - l] = (int)(lbn / div);
-		lbn %= div;
-	}
-	return level;
-}
-
-/*
- * The fragment address of block lbn of the file, *bnp, 0 where it is a
- * hole.
+ * Balloc defines the structure of filesystem storage
+ * by allocating the physical blocks on a device given
+ * the inode and the logical block number in a file.
+ * This is the allocation strategy for UFS1. Below is
+ * the allocation strategy for UFS2.
  */
 int
-ffs_bmap(struct inode *ip, daddr_t lbn, daddr_t *bnp)
+ffs_balloc_ufs1(struct vnode *vp, off_t startoffset, int size,
+    struct ucred *cred, int flags, struct buf **bpp)
 {
-	struct ffsmount *um = ITOUM(ip);
-	struct fs *fs = um->um_fs;
-	struct ufs2_dinode *din = DINO(ip);
-	int off[NIADDR + 1], level, i;
-	int64_t nb;
+	struct inode *ip;
+	struct ufs1_dinode *dp;
+	ufs_lbn_t lbn, lastlbn;
+	struct fs *fs;
+	ufs1_daddr_t nb;
+	struct buf *bp, *nbp;
+	struct mount *mp;
+	struct ufsmount *ump;
+	struct indir indirs[UFS_NIADDR + 2];
+	int deallocated, osize, nsize, num, i, error;
+	ufs2_daddr_t newb;
+	ufs1_daddr_t *bap, pref;
+	ufs1_daddr_t *allocib, *blkp, *allocblk, allociblk[UFS_NIADDR + 1];
+	ufs2_daddr_t *lbns_remfree, lbns[UFS_NIADDR + 1];
+	int unwindidx = -1;
+	int saved_inbdflush;
+	int gbflags, reclaimed;
 
-	*bnp = 0;
-	if (lbn < 0)
-		return -EFBIG;
-	if (lbn < NDADDR) {
-		nb = din->di_db[lbn];
-		if (nb != 0 && !okblk(fs, nb))
-			return -EIO;
-		*bnp = nb;
-		return 0;
-	}
-	level = ffs_getlbns(fs, lbn, off);
-	if (level < 0)
-		return -EFBIG;
-	nb = din->di_ib[off[0]];
-	for (i = 1; i <= level && nb != 0; i++) {
-		if (!okblk(fs, nb))
-			return -EIO;
-		nb = rd64(um, nb, off[i]);
-	}
-	if (nb != 0 && !okblk(fs, nb))
-		return -EIO;
-	*bnp = nb;
-	return 0;
-}
-
-/*
- * Balloc defines the structure of file system storage by allocating the
- * physical blocks given the inode and the logical block number in a file.
- * The file's contents from byte offset `off' for `size' bytes (within one
- * block) are to be written: the block is allocated if it is not, a block
- * that is a fragment (the end of the file) is made as big as that needs.
- * *bnp is the fragment address of the block.  Blocks (and what is added to
- * a fragment) are zeroed, and the indirect blocks that lead to the block
- * are written before they are linked in.
- *
- * (From OpenBSD's ffs2_balloc(): without the buffers, which the callers
- * here get from the address, and with its failure unwinding done from a
- * list of what was allocated.)
- */
-int
-ffs_balloc(struct inode *ip, uint64_t off, int size, daddr_t *bnp)
-{
-	struct ffsmount *um = ITOUM(ip);
-	struct fs *fs = um->um_fs;
-	struct ufs2_dinode *din = DINO(ip);
-	daddr_t lbn, lastlbn, nb, newb, pref;
-	int osize, nsize, error, i, level, offs[NIADDR + 1];
-	struct {
-		daddr_t blk;	/* what was allocated */
-		daddr_t ind;	/* the indirect block its pointer is in, 0: the inode */
-		int idx;	/* the index of the pointer */
-	} alloc[NIADDR + 1];
-	int nalloc = 0;
-	daddr_t ind;
-
-	*bnp = 0;
-	lbn = lblkno(fs, off);
-	size = (int)blkoff(fs, off) + size;
+	ip = VTOI(vp);
+	dp = ip->i_din1;
+	fs = ITOFS(ip);
+	mp = ITOVFS(ip);
+	ump = ITOUMP(ip);
+	lbn = lblkno(fs, startoffset);
+	size = blkoff(fs, startoffset) + size;
+	reclaimed = 0;
 	if (size > fs->fs_bsize)
-		return -EINVAL;
+		panic("ffs_balloc_ufs1: blk too big");
+	*bpp = NULL;
+	if (flags & IO_EXT)
+		return (EOPNOTSUPP);
 	if (lbn < 0)
-		return -EFBIG;
+		return (EFBIG);
+	gbflags = (flags & BA_UNMAPPED) != 0 ? GB_UNMAPPED : 0;
+
+	vn_seqc_write_begin(vp);
 
 	/*
-	 * If the next write will extend the file into a new block, and the
-	 * file is currently composed of a fragment, this fragment has to be
-	 * extended to be a full block.
+	 * If the next write will extend the file into a new block,
+	 * and the file is currently composed of a fragment
+	 * this fragment has to be extended to be a full block.
 	 */
-	lastlbn = lblkno(fs, ip->size);
-	if (lastlbn < NDADDR && lastlbn < lbn) {
+	lastlbn = lblkno(fs, ip->i_size);
+	if (lastlbn < UFS_NDADDR && lastlbn < lbn) {
 		nb = lastlbn;
-		osize = (int)ffs_blksize(fs, ip->size, nb);
+		osize = blksize(fs, ip, nb);
 		if (osize < fs->fs_bsize && osize > 0) {
-			error = ffs_realloccg(ip, nb, ffs2_blkpref(ip,
-			    lastlbn, (int)nb, DBPREV(din, nb)), osize,
-			    (int)fs->fs_bsize, &newb);
+			UFS_LOCK(ump);
+			error = ffs_realloccg(ip, nb, dp->di_db[nb],
+			   ffs_blkpref_ufs1(ip, lastlbn, (int)nb,
+			   &dp->di_db[0]), osize, (int)fs->fs_bsize, flags,
+			   cred, &bp);
 			if (error)
-				return error;
-
-			ip->size = lblktosize(fs, nb + 1);
-			pcache_resize(ip);
-			din->di_db[nb] = newb;
-			ip->dirty = true;
+				goto done;
+			if (DOINGSOFTDEP(vp))
+				softdep_setup_allocdirect(ip, nb,
+				    dbtofsb(fs, bp->b_blkno), dp->di_db[nb],
+				    fs->fs_bsize, osize, bp);
+			ip->i_size = smalllblktosize(fs, nb + 1);
+			dp->di_size = ip->i_size;
+			dp->di_db[nb] = dbtofsb(fs, bp->b_blkno);
+			UFS_INODE_SET_FLAG(ip,
+			    IN_SIZEMOD | IN_CHANGE | IN_UPDATE | IN_IBLKDATA);
+			if (flags & IO_SYNC)
+				bwrite(bp);
+			else if (DOINGASYNC(vp))
+				bdwrite(bp);
+			else
+				bawrite(bp);
 		}
 	}
-
 	/*
-	 * The first NDADDR blocks are direct.
+	 * The first UFS_NDADDR blocks are direct blocks
 	 */
-	if (lbn < NDADDR) {
-		nb = din->di_db[lbn];
-
-		if (nb != 0 && !okblk(fs, nb))
-			return -EIO;
-		if (nb != 0 && ip->size >= lblktosize(fs, lbn + 1)) {
-			/*
-			 * The direct block is already allocated and the file
-			 * extends past this block, thus this must be a whole
-			 * block.
-			 */
-			*bnp = nb;
-			return 0;
+	if (lbn < UFS_NDADDR) {
+		if (flags & BA_METAONLY)
+			panic("ffs_balloc_ufs1: BA_METAONLY for direct block");
+		nb = dp->di_db[lbn];
+		if (nb != 0 && ip->i_size >= smalllblktosize(fs, lbn + 1)) {
+			if ((flags & BA_CLRBUF) != 0) {
+				error = bread(vp, lbn, fs->fs_bsize, NOCRED,
+				    &bp);
+				if (error != 0)
+					goto done;
+			} else {
+				bp = getblk(vp, lbn, fs->fs_bsize, 0, 0,
+				    gbflags);
+				if (bp == NULL) {
+					error = EIO;
+					goto done;
+				}
+				vfs_bio_clrbuf(bp);
+			}
+			bp->b_blkno = fsbtodb(fs, nb);
+			*bpp = bp;
+			error = 0;
+			goto done;
 		}
-
 		if (nb != 0) {
 			/*
-			 * Consider the need to allocate a fragment.
+			 * Consider need to reallocate a fragment.
 			 */
-			osize = (int)fragroundup(fs, blkoff(fs, ip->size));
-			nsize = (int)fragroundup(fs, size);
-
+			osize = fragroundup(fs, blkoff(fs, ip->i_size));
+			nsize = fragroundup(fs, size);
 			if (nsize <= osize) {
-				/*
-				 * The existing block is already at least as
-				 * big as we want.
-				 */
-				*bnp = nb;
-				return 0;
-			} else {
-				/*
-				 * The existing block is smaller than we want,
-				 * grow it.
-				 */
-				error = ffs_realloccg(ip, lbn,
-				    ffs2_blkpref(ip, lbn, (int)lbn,
-				    DBPREV(din, lbn)), osize, nsize, &newb);
+				error = bread(vp, lbn, osize, NOCRED, &bp);
 				if (error)
-					return error;
+					goto done;
+				bp->b_blkno = fsbtodb(fs, nb);
+			} else {
+				UFS_LOCK(ump);
+				error = ffs_realloccg(ip, lbn, dp->di_db[lbn],
+				    ffs_blkpref_ufs1(ip, lbn, (int)lbn,
+				    &dp->di_db[0]), osize, nsize, flags,
+				    cred, &bp);
+				if (error)
+					goto done;
+				if (DOINGSOFTDEP(vp))
+					softdep_setup_allocdirect(ip, lbn,
+					    dbtofsb(fs, bp->b_blkno), nb,
+					    nsize, osize, bp);
 			}
 		} else {
-			/*
-			 * The block was not previously allocated, allocate a
-			 * new block or fragment.
-			 */
-			if (ip->size < lblktosize(fs, lbn + 1))
-				nsize = (int)fragroundup(fs, size);
+			if (ip->i_size < smalllblktosize(fs, lbn + 1))
+				nsize = fragroundup(fs, size);
 			else
 				nsize = fs->fs_bsize;
-
-			error = ffs_alloc(ip, lbn, ffs2_blkpref(ip, lbn,
-			    (int)lbn, DBPREV(din, lbn)), nsize, &newb);
+			UFS_LOCK(ump);
+			error = ffs_alloc(ip, lbn,
+			    ffs_blkpref_ufs1(ip, lbn, (int)lbn, &dp->di_db[0]),
+			    nsize, flags, cred, &newb);
 			if (error)
-				return error;
-			ffs_rw(um, newb, 0, NULL, (size_t)nsize, true, false);
+				goto done;
+			bp = getblk(vp, lbn, nsize, 0, 0, gbflags);
+			bp->b_blkno = fsbtodb(fs, newb);
+			if (flags & BA_CLRBUF)
+				vfs_bio_clrbuf(bp);
+			if (DOINGSOFTDEP(vp))
+				softdep_setup_allocdirect(ip, lbn, newb, 0,
+				    nsize, 0, bp);
 		}
-
-		din->di_db[lbn] = newb;
-		ip->dirty = true;
-		*bnp = newb;
-		return 0;
+		dp->di_db[lbn] = dbtofsb(fs, bp->b_blkno);
+		UFS_INODE_SET_FLAG(ip, IN_CHANGE | IN_UPDATE | IN_IBLKDATA);
+		*bpp = bp;
+		error = 0;
+		goto done;
 	}
-
 	/*
 	 * Determine the number of levels of indirection.
 	 */
-	level = ffs_getlbns(fs, lbn, offs);
-	if (level < 0)
-		return -EFBIG;
-
-	/*
-	 * Fetch the first indirect block allocating it necessary.
-	 */
 	pref = 0;
-	nb = din->di_ib[offs[0]];
-	if (nb != 0 && !okblk(fs, nb))
-		return -EIO;
+	if ((error = ufs_getlbns(vp, lbn, indirs, &num)) != 0)
+		goto done;
+#ifdef INVARIANTS
+	if (num < 1)
+		panic ("ffs_balloc_ufs1: ufs_getlbns returned indirect block");
+#endif
+	saved_inbdflush = curthread_pflags_set(TDP_INBDFLUSH);
+	/*
+	 * Fetch the first indirect block allocating if necessary.
+	 */
+	--num;
+	nb = dp->di_ib[indirs[0].in_off];
+	allocib = NULL;
+	allocblk = allociblk;
+	lbns_remfree = lbns;
 	if (nb == 0) {
-		pref = ffs2_blkpref(ip, lbn, -offs[0] - 1, 0);
-		error = ffs_alloc(ip, lbn, pref, (int)fs->fs_bsize, &newb);
-		if (error)
-			goto fail;
-
+		UFS_LOCK(ump);
+		pref = ffs_blkpref_ufs1(ip, lbn, -indirs[0].in_off - 1,
+		    (ufs1_daddr_t *)0);
+		if ((error = ffs_alloc(ip, lbn, pref, (int)fs->fs_bsize,
+		    flags, cred, &newb)) != 0) {
+			curthread_pflags_restore(saved_inbdflush);
+			goto done;
+		}
+		pref = newb + fs->fs_frag;
 		nb = newb;
-		alloc[nalloc].blk = nb;
-		alloc[nalloc].ind = 0;
-		alloc[nalloc++].idx = offs[0];
-		/*
-		 * Write synchronously so that indirect blocks never
-		 * point at garbage.
-		 */
-		ffs_rw(um, nb, 0, NULL, (size_t)fs->fs_bsize, true, true);
-
-		din->di_ib[offs[0]] = nb;
-		ip->dirty = true;
+		MPASS(allocblk < allociblk + nitems(allociblk));
+		MPASS(lbns_remfree < lbns + nitems(lbns));
+		*allocblk++ = nb;
+		*lbns_remfree++ = indirs[1].in_lbn;
+		bp = getblk(vp, indirs[1].in_lbn, fs->fs_bsize, 0, 0, gbflags);
+		bp->b_blkno = fsbtodb(fs, nb);
+		vfs_bio_clrbuf(bp);
+		if (DOINGSOFTDEP(vp)) {
+			softdep_setup_allocdirect(ip,
+			    UFS_NDADDR + indirs[0].in_off, newb, 0,
+			    fs->fs_bsize, 0, bp);
+			bdwrite(bp);
+		} else if ((flags & IO_SYNC) == 0 && DOINGASYNC(vp)) {
+			if (bp->b_bufsize == fs->fs_bsize)
+				bp->b_flags |= B_CLUSTEROK;
+			bdwrite(bp);
+		} else {
+			if ((error = bwrite(bp)) != 0)
+				goto fail;
+		}
+		allocib = &dp->di_ib[indirs[0].in_off];
+		*allocib = nb;
+		UFS_INODE_SET_FLAG(ip, IN_CHANGE | IN_UPDATE | IN_IBLKDATA);
 	}
-
 	/*
 	 * Fetch through the indirect blocks, allocating as necessary.
 	 */
-	ind = nb;
-	for (i = 1;; i++) {
-		nb = rd64(um, ind, offs[i]);
-		if (nb != 0 && !okblk(fs, nb)) {
-			error = -EIO;
+retry:
+	for (i = 1;;) {
+		error = bread(vp,
+		    indirs[i].in_lbn, (int)fs->fs_bsize, NOCRED, &bp);
+		if (error) {
 			goto fail;
 		}
-		if (i == level)
-			break;
-		if (nb == 0) {
-			if (pref == 0)
-				pref = ffs2_blkpref(ip, lbn, i - level, 0);
-
-			error = ffs_alloc(ip, lbn, pref, (int)fs->fs_bsize, &newb);
-			if (error)
-				goto fail;
-
-			nb = newb;
-			alloc[nalloc].blk = nb;
-			alloc[nalloc].ind = ind;
-			alloc[nalloc++].idx = offs[i];
-			ffs_rw(um, nb, 0, NULL, (size_t)fs->fs_bsize, true, true);
-			wr64(um, ind, offs[i], nb);
+		bap = (ufs1_daddr_t *)bp->b_data;
+		nb = bap[indirs[i].in_off];
+		if ((error = UFS_CHECK_BLKNO(mp, ip->i_number, nb,
+		    fs->fs_bsize)) != 0) {
+			brelse(bp);
+			goto fail;
 		}
-		ind = nb;
+		if (i == num)
+			break;
+		i += 1;
+		if (nb != 0) {
+			bqrelse(bp);
+			continue;
+		}
+		UFS_LOCK(ump);
+		/*
+		 * If parent indirect has just been allocated, try to cluster
+		 * immediately following it.
+		 */
+		if (pref == 0)
+			pref = ffs_blkpref_ufs1(ip, lbn, i - num - 1,
+			    (ufs1_daddr_t *)0);
+		if ((error = ffs_alloc(ip, lbn, pref, (int)fs->fs_bsize,
+		    flags | IO_BUFLOCKED, cred, &newb)) != 0) {
+			brelse(bp);
+			UFS_LOCK(ump);
+			if (DOINGSOFTDEP(vp) && ++reclaimed == 1) {
+				softdep_request_cleanup(fs, vp, cred,
+				    FLUSH_BLOCKS_WAIT);
+				UFS_UNLOCK(ump);
+				goto retry;
+			}
+			if (!ffs_fsfail_cleanup_locked(ump, error) &&
+			    ppsratecheck(&ump->um_last_fullmsg,
+			    &ump->um_secs_fullmsg, 1)) {
+				UFS_UNLOCK(ump);
+				ffs_fserr(fs, ip->i_number, "filesystem full");
+				uprintf("\n%s: write failed, filesystem "
+				    "is full\n", fs->fs_fsmnt);
+			} else {
+				UFS_UNLOCK(ump);
+			}
+			goto fail;
+		}
+		pref = newb + fs->fs_frag;
+		nb = newb;
+		MPASS(allocblk < allociblk + nitems(allociblk));
+		MPASS(lbns_remfree < lbns + nitems(lbns));
+		*allocblk++ = nb;
+		*lbns_remfree++ = indirs[i].in_lbn;
+		nbp = getblk(vp, indirs[i].in_lbn, fs->fs_bsize, 0, 0, 0);
+		nbp->b_blkno = fsbtodb(fs, nb);
+		vfs_bio_clrbuf(nbp);
+		if (DOINGSOFTDEP(vp)) {
+			softdep_setup_allocindir_meta(nbp, ip, bp,
+			    indirs[i - 1].in_off, nb);
+			bdwrite(nbp);
+		} else if ((flags & IO_SYNC) == 0 && DOINGASYNC(vp)) {
+			if (nbp->b_bufsize == fs->fs_bsize)
+				nbp->b_flags |= B_CLUSTEROK;
+			bdwrite(nbp);
+		} else {
+			if ((error = bwrite(nbp)) != 0) {
+				brelse(bp);
+				goto fail;
+			}
+		}
+		bap[indirs[i - 1].in_off] = nb;
+		if (allocib == NULL && unwindidx < 0)
+			unwindidx = i - 1;
+		/*
+		 * If required, write synchronously, otherwise use
+		 * delayed write.
+		 */
+		if (flags & IO_SYNC) {
+			bwrite(bp);
+		} else {
+			if (bp->b_bufsize == fs->fs_bsize)
+				bp->b_flags |= B_CLUSTEROK;
+			bdwrite(bp);
+		}
 	}
-
+	/*
+	 * If asked only for the indirect block, then return it.
+	 */
+	if (flags & BA_METAONLY) {
+		curthread_pflags_restore(saved_inbdflush);
+		*bpp = bp;
+		error = 0;
+		goto done;
+	}
 	/*
 	 * Get the data block, allocating if necessary.
 	 */
 	if (nb == 0) {
-		int64_t prev = offs[level] > 0 ? rd64(um, ind, offs[level] - 1) : 0;
-
-		pref = ffs2_blkpref(ip, lbn, offs[level], prev);
-
-		error = ffs_alloc(ip, lbn, pref, (int)fs->fs_bsize, &newb);
-		if (error)
+		UFS_LOCK(ump);
+		/*
+		 * If allocating metadata at the front of the cylinder
+		 * group and parent indirect block has just been allocated,
+		 * then cluster next to it if it is the first indirect in
+		 * the file. Otherwise it has been allocated in the metadata
+		 * area, so we want to find our own place out in the data area.
+		 */
+		if (pref == 0 || (lbn > UFS_NDADDR && fs->fs_metaspace != 0))
+			pref = ffs_blkpref_ufs1(ip, lbn, indirs[i].in_off,
+			    &bap[0]);
+		error = ffs_alloc(ip, lbn, pref, (int)fs->fs_bsize,
+		    flags | IO_BUFLOCKED, cred, &newb);
+		if (error) {
+			brelse(bp);
+			UFS_LOCK(ump);
+			if (DOINGSOFTDEP(vp) && ++reclaimed == 1) {
+				softdep_request_cleanup(fs, vp, cred,
+				    FLUSH_BLOCKS_WAIT);
+				UFS_UNLOCK(ump);
+				goto retry;
+			}
+			if (!ffs_fsfail_cleanup_locked(ump, error) &&
+			    ppsratecheck(&ump->um_last_fullmsg,
+			    &ump->um_secs_fullmsg, 1)) {
+				UFS_UNLOCK(ump);
+				ffs_fserr(fs, ip->i_number, "filesystem full");
+				uprintf("\n%s: write failed, filesystem "
+				    "is full\n", fs->fs_fsmnt);
+			} else {
+				UFS_UNLOCK(ump);
+			}
 			goto fail;
-
+		}
 		nb = newb;
-		alloc[nalloc].blk = nb;
-		alloc[nalloc].ind = ind;
-		alloc[nalloc++].idx = offs[level];
-		ffs_rw(um, nb, 0, NULL, (size_t)fs->fs_bsize, true, false);
-		wr64(um, ind, offs[level], nb);
-	}
-	*bnp = nb;
-	return 0;
-
-fail:
-	/*
-	 * If we have failed part way through block allocation, we have to
-	 * deallocate the blocks that we have allocated, last first, and
-	 * the pointers to them.
-	 */
-	while (nalloc > 0) {
-		nalloc--;
-		if (alloc[nalloc].ind == 0)
-			din->di_ib[alloc[nalloc].idx] = 0;
-		else
-			wr64(um, alloc[nalloc].ind, alloc[nalloc].idx, 0);
-		ffs_blkfree(ip, alloc[nalloc].blk, fs->fs_bsize);
-		ip->blocks -= btodb(fs->fs_bsize);
-		ip->dirty = true;
-	}
-	return error;
-}
-
-/*
- * Release blocks associated with the inode ip and stored in the indirect
- * block bn.  Blocks are free'd in LIFO order up to (but not including)
- * lastbn.  If level is greater than SINGLE, the block is an indirect block
- * and recursive calls to indirtrunc must be used to cleanse other indirect
- * blocks.
- *
- * (Adapted from OpenBSD's ffs_indirtrunc(), FFS2 only.)
- */
-static int
-ffs_indirtrunc(struct inode *ip, daddr_t bn, daddr_t lastbn, int level,
-    long *countp)
-{
-	struct ffsmount *um = ITOUM(ip);
-	struct fs *fs = um->um_fs;
-	int i;
-	int64_t *bap, *copy = NULL;
-	daddr_t nb, last;
-	long blkcount, factor;
-	int nblocks, blocksreleased = 0;
-	int allerror = 0, error;
-
-	*countp = 0;
-	if (!okblk(fs, bn))
-		return 0;
-	/*
-	 * Calculate index in current block of last
-	 * block to be kept.  -1 indicates the entire
-	 * block so we need not calculate the index.
-	 */
-	factor = 1;
-	for (i = SINGLE; i < level; i++)
-		factor *= NINDIR(fs);
-	last = lastbn;
-	if (lastbn > 0)
-		last /= factor;
-	nblocks = btodb(fs->fs_bsize);
-
-	/*
-	 * Get the block of block pointers, zero those entries corresponding
-	 * to blocks to be free'd, and update on disk copy first.
-	 */
-	bap = kmalloc((size_t)fs->fs_bsize);
-	if (bap == NULL)
-		return -ENOMEM;
-	ffs_rw(um, bn, 0, bap, (size_t)fs->fs_bsize, false, false);
-
-	if (lastbn != -1) {
-		copy = kmalloc((size_t)fs->fs_bsize);
-		if (copy == NULL) {
-			kfree(bap);
-			return -ENOMEM;
+		MPASS(allocblk < allociblk + nitems(allociblk));
+		MPASS(lbns_remfree < lbns + nitems(lbns));
+		*allocblk++ = nb;
+		*lbns_remfree++ = lbn;
+		nbp = getblk(vp, lbn, fs->fs_bsize, 0, 0, gbflags);
+		nbp->b_blkno = fsbtodb(fs, nb);
+		if (flags & BA_CLRBUF)
+			vfs_bio_clrbuf(nbp);
+		if (DOINGSOFTDEP(vp))
+			softdep_setup_allocindir_page(ip, lbn, bp,
+			    indirs[i].in_off, nb, 0, nbp);
+		bap[indirs[i].in_off] = nb;
+		/*
+		 * If required, write synchronously, otherwise use
+		 * delayed write.
+		 */
+		if (flags & IO_SYNC) {
+			bwrite(bp);
+		} else {
+			if (bp->b_bufsize == fs->fs_bsize)
+				bp->b_flags |= B_CLUSTEROK;
+			bdwrite(bp);
 		}
-		memcpy(copy, bap, (size_t)fs->fs_bsize);
-
-		for (i = (int)last + 1; i < NINDIR(fs); i++)
-			bap[i] = 0;
-		ffs_rw(um, bn, 0, bap, (size_t)fs->fs_bsize, true, true);
-		kfree(bap);
-		bap = copy;
+		curthread_pflags_restore(saved_inbdflush);
+		*bpp = nbp;
+		error = 0;
+		goto done;
 	}
-
-	/*
-	 * Recursively free totally unused blocks.
-	 */
-	for (i = NINDIR(fs) - 1; i > last; i--) {
-		nb = bap[i];
-		if (nb == 0)
-			continue;
-		if (level > SINGLE) {
-			error = ffs_indirtrunc(ip, nb, -1, level - 1, &blkcount);
-			if (error)
-				allerror = error;
-			blocksreleased += blkcount;
+	brelse(bp);
+	if (flags & BA_CLRBUF) {
+		int seqcount = (flags & BA_SEQMASK) >> BA_SEQSHIFT;
+		if (seqcount != 0 &&
+		    (vp->v_mount->mnt_flag & MNT_NOCLUSTERR) == 0 &&
+		    !(vm_page_count_severe() || buf_dirty_count_severe())) {
+			error = cluster_read(vp, ip->i_size, lbn,
+			    (int)fs->fs_bsize, NOCRED,
+			    MAXBSIZE, seqcount, gbflags, &nbp);
+		} else {
+			error = bread_gb(vp, lbn, (int)fs->fs_bsize, NOCRED,
+			    gbflags, &nbp);
 		}
-		if (okblk(fs, nb)) {
-			ffs_blkfree(ip, nb, fs->fs_bsize);
-			blocksreleased += nblocks;
+		if (error) {
+			brelse(nbp);
+			goto fail;
 		}
-	}
-
-	/*
-	 * Recursively free last partial block.
-	 */
-	if (level > SINGLE && lastbn >= 0) {
-		last = lastbn % factor;
-		nb = bap[i];
-		if (nb != 0) {
-			error = ffs_indirtrunc(ip, nb, last, level - 1, &blkcount);
-			if (error)
-				allerror = error;
-			blocksreleased += blkcount;
-		}
-	}
-	kfree(bap);
-
-	*countp = blocksreleased;
-	return allerror;
-}
-
-/*
- * Truncate the file to length: lengthen it (the last byte is allocated),
- * or shorten it and free the blocks that are no longer wanted.
- *
- * (Adapted from OpenBSD's ffs_truncate(), FFS2 only.)
- */
-int
-ffs_truncate(struct inode *ip, uint64_t length)
-{
-	struct ffsmount *um = ITOUM(ip);
-	struct fs *fs = um->um_fs;
-	struct ufs2_dinode *din = DINO(ip);
-	daddr_t lastblock;
-	daddr_t bn, lbn, lastiblock[NIADDR], indir_lbn_unused;
-	daddr_t oldblks[NDADDR + NIADDR];
-	uint64_t osize;
-	int offset, size, level, nblocks, i;
-	long blocksreleased = 0, count;
-	int error, allerror = 0;
-
-	(void)indir_lbn_unused;
-	if (ip->sb->rdonly)
-		return -EROFS;
-	if (S_ISLNK(ip->mode) && ip->size < (uint64_t)fs->fs_maxsymlinklen) {
-		memset(din->di_shortlink, 0, (size_t)ip->size);
-		ip->size = 0;
-		ip->dirty = true;
-		return ffs_update(ip, true);
-	}
-
-	if (length > um->um_maxfilesize)
-		return -EFBIG;
-
-	osize = ip->size;
-	/*
-	 * Lengthen the size of the file. We must ensure that the
-	 * last byte of the file is allocated. Since the smallest
-	 * value of osize is 0, length will be at least 1.
-	 */
-	if (osize < length) {
-		error = ffs_balloc(ip, length - 1, 1, &bn);
-		if (error)
-			return error;
-		ip->size = length;
-		pcache_resize(ip);
-		ip->dirty = true;
-		return ffs_update(ip, true);
-	}
-
-	/*
-	 * Shorten the size of the file. If the file is not being
-	 * truncated to a block boundary, the contents of the
-	 * partial block following the end of the file must be
-	 * zero'ed in case it ever becomes accessible again because
-	 * of subsequent file growth. Directories however are not
-	 * zero'ed as they should grow back initialized to empty.
-	 */
-	offset = (int)blkoff(fs, length);
-	if (offset == 0) {
-		ip->size = length;
 	} else {
-		lbn = lblkno(fs, length);
-		error = ffs_balloc(ip, length - 1, 1, &bn);
-		if (error)
-			return error;
-		ip->size = length;
-		size = (int)ffs_blksize(fs, ip->size, lbn);
-		if (!S_ISDIR(ip->mode))
-			ffs_rw(um, bn, (uint64_t)offset, NULL,
-			    (size_t)(size - offset), true, false);
+		nbp = getblk(vp, lbn, fs->fs_bsize, 0, 0, gbflags);
+		nbp->b_blkno = fsbtodb(fs, nb);
 	}
-	pcache_resize(ip);
-
+	curthread_pflags_restore(saved_inbdflush);
+	*bpp = nbp;
+	error = 0;
+	goto done;
+fail:
+	curthread_pflags_restore(saved_inbdflush);
 	/*
-	 * Calculate index into inode's block list of
-	 * last direct and indirect blocks (if any)
-	 * which we want to keep.  Lastblock is -1 when
-	 * the file is truncated to 0.
+	 * If we have failed to allocate any blocks, simply return the error.
+	 * This is the usual case and avoids the need to fsync the file.
 	 */
-	lastblock = lblkno(fs, length + fs->fs_bsize - 1) - 1;
-	lastiblock[SINGLE] = lastblock - NDADDR;
-	lastiblock[DOUBLE] = lastiblock[SINGLE] - NINDIR(fs);
-	lastiblock[TRIPLE] = lastiblock[DOUBLE] - (daddr_t)NINDIR(fs) * NINDIR(fs);
-	nblocks = btodb(fs->fs_bsize);
-
+	if (allocblk == allociblk && allocib == NULL && unwindidx == -1)
+		goto done;
 	/*
-	 * Update file and block pointers on disk before we start freeing
-	 * blocks.  If we crash before free'ing blocks below, the blocks
-	 * will be returned to the free list.  lastiblock values are also
-	 * normalized to -1 for calls to ffs_indirtrunc below.
+	 * If we have failed part way through block allocation, we
+	 * have to deallocate any indirect blocks that we have allocated.
+	 * We have to fsync the file before we start to get rid of all
+	 * of its dependencies so that we do not leave them dangling.
+	 * We have to sync it at the end so that the soft updates code
+	 * does not find any untracked changes. Although this is really
+	 * slow, running out of disk space is not expected to be a common
+	 * occurrence. The error return from fsync is ignored as we already
+	 * have an error to return to the user.
+	 *
+	 * XXX Still have to journal the free below
 	 */
-	for (level = TRIPLE; level >= SINGLE; level--) {
-		oldblks[NDADDR + level] = din->di_ib[level];
-		if (lastiblock[level] < 0) {
-			din->di_ib[level] = 0;
-			lastiblock[level] = -1;
+	(void) ffs_syncvnode(vp, MNT_WAIT, 0);
+	for (deallocated = 0, blkp = allociblk, lbns_remfree = lbns;
+	     blkp < allocblk; blkp++, lbns_remfree++) {
+		/*
+		 * We shall not leave the freed blocks on the vnode
+		 * buffer object lists.
+		 */
+		bp = getblk(vp, *lbns_remfree, fs->fs_bsize, 0, 0,
+		    GB_NOCREAT | GB_UNMAPPED);
+		if (bp != NULL) {
+			KASSERT(bp->b_blkno == fsbtodb(fs, *blkp),
+			    ("mismatch1 l %jd %jd b %ju %ju",
+			    (intmax_t)bp->b_lblkno, (uintmax_t)*lbns_remfree,
+			    (uintmax_t)bp->b_blkno,
+			    (uintmax_t)fsbtodb(fs, *blkp)));
+			bp->b_flags |= B_INVAL | B_RELBUF | B_NOCACHE;
+			bp->b_flags &= ~(B_ASYNC | B_CACHE);
+			brelse(bp);
 		}
+		deallocated += fs->fs_bsize;
 	}
+	if (allocib != NULL) {
+		*allocib = 0;
+	} else if (unwindidx >= 0) {
+		int r;
 
-	for (i = 0; i < NDADDR; i++) {
-		oldblks[i] = din->di_db[i];
-		if (i > lastblock)
-			din->di_db[i] = 0;
-	}
-
-	ip->dirty = true;
-	if ((error = ffs_update(ip, true)) != 0)
-		allerror = error;
-
-	/*
-	 * Indirect blocks first.
-	 */
-	for (level = TRIPLE; level >= SINGLE; level--) {
-		bn = oldblks[NDADDR + level];
-		if (bn != 0) {
-			error = ffs_indirtrunc(ip, bn, lastiblock[level], level,
-			    &count);
-			if (error)
-				allerror = error;
-			blocksreleased += count;
-			if (lastiblock[level] < 0) {
-				if (okblk(fs, bn)) {
-					ffs_blkfree(ip, bn, fs->fs_bsize);
-					blocksreleased += nblocks;
-				}
+		r = bread(vp, indirs[unwindidx].in_lbn, 
+		    (int)fs->fs_bsize, NOCRED, &bp);
+		if (r) {
+			panic("Could not unwind indirect block, error %d", r);
+			brelse(bp);
+		} else {
+			bap = (ufs1_daddr_t *)bp->b_data;
+			bap[indirs[unwindidx].in_off] = 0;
+			if (flags & IO_SYNC) {
+				bwrite(bp);
+			} else {
+				if (bp->b_bufsize == fs->fs_bsize)
+					bp->b_flags |= B_CLUSTEROK;
+				bdwrite(bp);
 			}
 		}
-		if (lastiblock[level] >= 0)
-			goto done;
 	}
-
-	/*
-	 * All whole direct blocks or frags.
-	 */
-	for (i = NDADDR - 1; i > lastblock; i--) {
-		long bsize;
-
-		bn = oldblks[i];
-		if (bn == 0)
-			continue;
-		bsize = (long)ffs_blksize(fs, osize, i);
-		if (okblk(fs, bn)) {
-			ffs_blkfree(ip, bn, bsize);
-			blocksreleased += btodb(bsize);
-		}
-	}
-	if (lastblock < 0)
-		goto done;
-
-	/*
-	 * Finally, look for a change in size of the
-	 * last direct block; release any frags.
-	 */
-	bn = oldblks[lastblock];
-	if (bn != 0 && okblk(fs, bn)) {
-		long oldspace, newspace;
-
+	if (deallocated) {
+#ifdef QUOTA
 		/*
-		 * Calculate amount of space we're giving
-		 * back as old block size minus new block size.
+		 * Restore user's disk quota because allocation failed.
 		 */
-		oldspace = (long)ffs_blksize(fs, osize, lastblock);
-		newspace = (long)ffs_blksize(fs, length, lastblock);
-		if (newspace == 0)
-			return -EIO;
-		if (oldspace - newspace > 0) {
-			/*
-			 * Block number of space to be free'd is
-			 * the old block # plus the number of frags
-			 * required for the storage we're keeping.
-			 */
-			bn += numfrags(fs, newspace);
-			ffs_blkfree(ip, bn, oldspace - newspace);
-			blocksreleased += btodb(oldspace - newspace);
+		(void) chkdq(ip, -btodb(deallocated), cred, FORCE);
+#endif
+		dp->di_blocks -= btodb(deallocated);
+		UFS_INODE_SET_FLAG(ip, IN_CHANGE | IN_UPDATE);
+	}
+	(void) ffs_syncvnode(vp, MNT_WAIT, 0);
+	/*
+	 * After the buffers are invalidated and on-disk pointers are
+	 * cleared, free the blocks.
+	 */
+	for (blkp = allociblk; blkp < allocblk; blkp++) {
+#ifdef INVARIANTS
+		if (blkp == allociblk)
+			lbns_remfree = lbns;
+		bp = getblk(vp, *lbns_remfree, fs->fs_bsize, 0, 0,
+		    GB_NOCREAT | GB_UNMAPPED);
+		if (bp != NULL) {
+			panic("zombie1 %jd %ju %ju",
+			    (intmax_t)bp->b_lblkno, (uintmax_t)bp->b_blkno,
+			    (uintmax_t)fsbtodb(fs, *blkp));
 		}
+		lbns_remfree++;
+#endif
+		ffs_blkfree(ump, fs, ump->um_devvp, *blkp, fs->fs_bsize,
+		    ip->i_number, vp->v_type, NULL, SINGLETON_KEY);
 	}
 done:
-	if (ip->blocks >= (uint64_t)blocksreleased)
-		ip->blocks -= (uint64_t)blocksreleased;
-	else	/* sanity */
-		ip->blocks = 0;
-	ip->dirty = true;
-	return allerror;
+	vn_seqc_write_end(vp);
+	return (error);
+}
+
+/*
+ * Balloc defines the structure of file system storage
+ * by allocating the physical blocks on a device given
+ * the inode and the logical block number in a file.
+ * This is the allocation strategy for UFS2. Above is
+ * the allocation strategy for UFS1.
+ */
+int
+ffs_balloc_ufs2(struct vnode *vp, off_t startoffset, int size,
+    struct ucred *cred, int flags, struct buf **bpp)
+{
+	struct inode *ip;
+	struct ufs2_dinode *dp;
+	ufs_lbn_t lbn, lastlbn;
+	struct fs *fs;
+	struct buf *bp, *nbp;
+	struct mount *mp;
+	struct ufsmount *ump;
+	struct indir indirs[UFS_NIADDR + 2];
+	ufs2_daddr_t nb, newb, *bap, pref;
+	ufs2_daddr_t *allocib, *blkp, *allocblk, allociblk[UFS_NIADDR + 1];
+	ufs2_daddr_t *lbns_remfree, lbns[UFS_NIADDR + 1];
+	int deallocated, osize, nsize, num, i, error;
+	int unwindidx = -1;
+	int saved_inbdflush;
+	int gbflags, gbwflag, reclaimed;
+
+	ip = VTOI(vp);
+	dp = ip->i_din2;
+	fs = ITOFS(ip);
+	mp = ITOVFS(ip);
+	ump = ITOUMP(ip);
+	lbn = lblkno(fs, startoffset);
+	size = blkoff(fs, startoffset) + size;
+	reclaimed = 0;
+	if (size > fs->fs_bsize)
+		panic("ffs_balloc_ufs2: blk too big");
+	*bpp = NULL;
+	if (lbn < 0)
+		return (EFBIG);
+	gbflags = (flags & BA_UNMAPPED) != 0 ? GB_UNMAPPED : 0;
+#ifdef WITNESS
+	gbwflag = IS_SNAPSHOT(ip) ? GB_NOWITNESS : 0;
+	gbflags |= gbwflag;
+#else
+	gbwflag = 0;
+#endif
+
+	vn_seqc_write_begin(vp);
+
+	/*
+	 * Check for allocating external data.
+	 */
+	if (flags & IO_EXT) {
+		if (lbn >= UFS_NXADDR) {
+			error = EFBIG;
+			goto done;
+		}
+
+		/*
+		 * If the next write will extend the data into a new block,
+		 * and the data is currently composed of a fragment
+		 * this fragment has to be extended to be a full block.
+		 */
+		lastlbn = lblkno(fs, dp->di_extsize);
+		if (lastlbn < lbn) {
+			nb = lastlbn;
+			osize = sblksize(fs, dp->di_extsize, nb);
+			if (osize < fs->fs_bsize && osize > 0) {
+				UFS_LOCK(ump);
+				error = ffs_realloccg(ip, -1 - nb,
+				    dp->di_extb[nb],
+				    ffs_blkpref_ufs2(ip, lastlbn, (int)nb,
+				    &dp->di_extb[0]), osize,
+				    (int)fs->fs_bsize, flags, cred, &bp);
+				if (error)
+					goto done;
+				if (DOINGSOFTDEP(vp))
+					softdep_setup_allocext(ip, nb,
+					    dbtofsb(fs, bp->b_blkno),
+					    dp->di_extb[nb],
+					    fs->fs_bsize, osize, bp);
+				dp->di_extsize = smalllblktosize(fs, nb + 1);
+				dp->di_extb[nb] = dbtofsb(fs, bp->b_blkno);
+				bp->b_xflags |= BX_ALTDATA;
+				UFS_INODE_SET_FLAG(ip,
+				    IN_SIZEMOD | IN_CHANGE | IN_IBLKDATA);
+				if (flags & IO_SYNC)
+					bwrite(bp);
+				else
+					bawrite(bp);
+			}
+		}
+		/*
+		 * All blocks are direct blocks
+		 */
+		if (flags & BA_METAONLY)
+			panic("ffs_balloc_ufs2: BA_METAONLY for ext block");
+		nb = dp->di_extb[lbn];
+		if (nb != 0 && dp->di_extsize >= smalllblktosize(fs, lbn + 1)) {
+			error = bread_gb(vp, -1 - lbn, fs->fs_bsize, NOCRED,
+			    gbflags, &bp);
+			if (error)
+				goto done;
+			bp->b_blkno = fsbtodb(fs, nb);
+			bp->b_xflags |= BX_ALTDATA;
+			*bpp = bp;
+			goto done;
+		}
+		if (nb != 0) {
+			/*
+			 * Consider need to reallocate a fragment.
+			 */
+			osize = fragroundup(fs, blkoff(fs, dp->di_extsize));
+			nsize = fragroundup(fs, size);
+			if (nsize <= osize) {
+				error = bread_gb(vp, -1 - lbn, osize, NOCRED,
+				    gbflags, &bp);
+				if (error)
+					goto done;
+				bp->b_blkno = fsbtodb(fs, nb);
+				bp->b_xflags |= BX_ALTDATA;
+			} else {
+				UFS_LOCK(ump);
+				error = ffs_realloccg(ip, -1 - lbn,
+				    dp->di_extb[lbn],
+				    ffs_blkpref_ufs2(ip, lbn, (int)lbn,
+				    &dp->di_extb[0]), osize, nsize, flags,
+				    cred, &bp);
+				if (error)
+					goto done;
+				bp->b_xflags |= BX_ALTDATA;
+				if (DOINGSOFTDEP(vp))
+					softdep_setup_allocext(ip, lbn,
+					    dbtofsb(fs, bp->b_blkno), nb,
+					    nsize, osize, bp);
+			}
+		} else {
+			if (dp->di_extsize < smalllblktosize(fs, lbn + 1))
+				nsize = fragroundup(fs, size);
+			else
+				nsize = fs->fs_bsize;
+			UFS_LOCK(ump);
+			error = ffs_alloc(ip, lbn,
+			   ffs_blkpref_ufs2(ip, lbn, (int)lbn, &dp->di_extb[0]),
+			   nsize, flags, cred, &newb);
+			if (error)
+				goto done;
+			bp = getblk(vp, -1 - lbn, nsize, 0, 0, gbflags);
+			bp->b_blkno = fsbtodb(fs, newb);
+			bp->b_xflags |= BX_ALTDATA;
+			if (flags & BA_CLRBUF)
+				vfs_bio_clrbuf(bp);
+			if (DOINGSOFTDEP(vp))
+				softdep_setup_allocext(ip, lbn, newb, 0,
+				    nsize, 0, bp);
+		}
+		dp->di_extb[lbn] = dbtofsb(fs, bp->b_blkno);
+		UFS_INODE_SET_FLAG(ip, IN_CHANGE | IN_IBLKDATA);
+		*bpp = bp;
+		error = 0;
+		goto done;
+	}
+	/*
+	 * If the next write will extend the file into a new block,
+	 * and the file is currently composed of a fragment
+	 * this fragment has to be extended to be a full block.
+	 */
+	lastlbn = lblkno(fs, ip->i_size);
+	if (lastlbn < UFS_NDADDR && lastlbn < lbn) {
+		nb = lastlbn;
+		osize = blksize(fs, ip, nb);
+		if (osize < fs->fs_bsize && osize > 0) {
+			UFS_LOCK(ump);
+			error = ffs_realloccg(ip, nb, dp->di_db[nb],
+			    ffs_blkpref_ufs2(ip, lastlbn, (int)nb,
+			    &dp->di_db[0]), osize, (int)fs->fs_bsize,
+			    flags, cred, &bp);
+			if (error)
+				goto done;
+			if (DOINGSOFTDEP(vp))
+				softdep_setup_allocdirect(ip, nb,
+				    dbtofsb(fs, bp->b_blkno),
+				    dp->di_db[nb],
+				    fs->fs_bsize, osize, bp);
+			ip->i_size = smalllblktosize(fs, nb + 1);
+			dp->di_size = ip->i_size;
+			dp->di_db[nb] = dbtofsb(fs, bp->b_blkno);
+			UFS_INODE_SET_FLAG(ip,
+			    IN_SIZEMOD |IN_CHANGE | IN_UPDATE | IN_IBLKDATA);
+			if (flags & IO_SYNC)
+				bwrite(bp);
+			else
+				bawrite(bp);
+		}
+	}
+	/*
+	 * The first UFS_NDADDR blocks are direct blocks
+	 */
+	if (lbn < UFS_NDADDR) {
+		if (flags & BA_METAONLY)
+			panic("ffs_balloc_ufs2: BA_METAONLY for direct block");
+		nb = dp->di_db[lbn];
+		if (nb != 0 && ip->i_size >= smalllblktosize(fs, lbn + 1)) {
+			if ((flags & BA_CLRBUF) != 0) {
+				error = bread_gb(vp, lbn, fs->fs_bsize, NOCRED,
+				    gbflags, &bp);
+				if (error != 0)
+					goto done;
+			} else {
+				bp = getblk(vp, lbn, fs->fs_bsize, 0, 0,
+				    gbflags);
+				if (bp == NULL) {
+					error = EIO;
+					goto done;
+				}
+				vfs_bio_clrbuf(bp);
+			}
+			bp->b_blkno = fsbtodb(fs, nb);
+			*bpp = bp;
+			error = 0;
+			goto done;
+		}
+		if (nb != 0) {
+			/*
+			 * Consider need to reallocate a fragment.
+			 */
+			osize = fragroundup(fs, blkoff(fs, ip->i_size));
+			nsize = fragroundup(fs, size);
+			if (nsize <= osize) {
+				error = bread_gb(vp, lbn, osize, NOCRED,
+				    gbflags, &bp);
+				if (error)
+					goto done;
+				bp->b_blkno = fsbtodb(fs, nb);
+			} else {
+				UFS_LOCK(ump);
+				error = ffs_realloccg(ip, lbn, dp->di_db[lbn],
+				    ffs_blkpref_ufs2(ip, lbn, (int)lbn,
+				    &dp->di_db[0]), osize, nsize, flags,
+				    cred, &bp);
+				if (error)
+					goto done;
+				if (DOINGSOFTDEP(vp))
+					softdep_setup_allocdirect(ip, lbn,
+					    dbtofsb(fs, bp->b_blkno), nb,
+					    nsize, osize, bp);
+			}
+		} else {
+			if (ip->i_size < smalllblktosize(fs, lbn + 1))
+				nsize = fragroundup(fs, size);
+			else
+				nsize = fs->fs_bsize;
+			UFS_LOCK(ump);
+			error = ffs_alloc(ip, lbn,
+			    ffs_blkpref_ufs2(ip, lbn, (int)lbn,
+				&dp->di_db[0]), nsize, flags, cred, &newb);
+			if (error)
+				goto done;
+			bp = getblk(vp, lbn, nsize, 0, 0, gbflags);
+			bp->b_blkno = fsbtodb(fs, newb);
+			if (flags & BA_CLRBUF)
+				vfs_bio_clrbuf(bp);
+			if (DOINGSOFTDEP(vp))
+				softdep_setup_allocdirect(ip, lbn, newb, 0,
+				    nsize, 0, bp);
+		}
+		dp->di_db[lbn] = dbtofsb(fs, bp->b_blkno);
+		UFS_INODE_SET_FLAG(ip, IN_CHANGE | IN_UPDATE | IN_IBLKDATA);
+		*bpp = bp;
+		error = 0;
+		goto done;
+	}
+	/*
+	 * Determine the number of levels of indirection.
+	 */
+	pref = 0;
+	if ((error = ufs_getlbns(vp, lbn, indirs, &num)) != 0)
+		goto done;
+#ifdef INVARIANTS
+	if (num < 1)
+		panic ("ffs_balloc_ufs2: ufs_getlbns returned indirect block");
+#endif
+	saved_inbdflush = curthread_pflags_set(TDP_INBDFLUSH);
+	/*
+	 * Fetch the first indirect block allocating if necessary.
+	 */
+	--num;
+	nb = dp->di_ib[indirs[0].in_off];
+	allocib = NULL;
+	allocblk = allociblk;
+	lbns_remfree = lbns;
+	if (nb == 0) {
+		UFS_LOCK(ump);
+		pref = ffs_blkpref_ufs2(ip, lbn, -indirs[0].in_off - 1,
+		    (ufs2_daddr_t *)0);
+		if ((error = ffs_alloc(ip, lbn, pref, (int)fs->fs_bsize,
+		    flags, cred, &newb)) != 0) {
+			curthread_pflags_restore(saved_inbdflush);
+			goto done;
+		}
+		pref = newb + fs->fs_frag;
+		nb = newb;
+		MPASS(allocblk < allociblk + nitems(allociblk));
+		MPASS(lbns_remfree < lbns + nitems(lbns));
+		*allocblk++ = nb;
+		*lbns_remfree++ = indirs[1].in_lbn;
+		bp = getblk(vp, indirs[1].in_lbn, fs->fs_bsize, 0, 0,
+		    GB_UNMAPPED | gbwflag);
+		bp->b_blkno = fsbtodb(fs, nb);
+		vfs_bio_clrbuf(bp);
+		if (DOINGSOFTDEP(vp)) {
+			softdep_setup_allocdirect(ip,
+			    UFS_NDADDR + indirs[0].in_off, newb, 0,
+			    fs->fs_bsize, 0, bp);
+			bdwrite(bp);
+		} else if ((flags & IO_SYNC) == 0 && DOINGASYNC(vp)) {
+			if (bp->b_bufsize == fs->fs_bsize)
+				bp->b_flags |= B_CLUSTEROK;
+			bdwrite(bp);
+		} else {
+			if ((error = bwrite(bp)) != 0)
+				goto fail;
+		}
+		allocib = &dp->di_ib[indirs[0].in_off];
+		*allocib = nb;
+		UFS_INODE_SET_FLAG(ip, IN_CHANGE | IN_UPDATE | IN_IBLKDATA);
+	}
+	/*
+	 * Fetch through the indirect blocks, allocating as necessary.
+	 */
+retry:
+	for (i = 1;;) {
+		error = bread_gb(vp, indirs[i].in_lbn, (int)fs->fs_bsize,
+		    NOCRED, gbwflag, &bp);
+		if (error) {
+			goto fail;
+		}
+		bap = (ufs2_daddr_t *)bp->b_data;
+		nb = bap[indirs[i].in_off];
+		if ((error = UFS_CHECK_BLKNO(mp, ip->i_number, nb,
+		    fs->fs_bsize)) != 0) {
+			brelse(bp);
+			goto fail;
+		}
+		if (i == num)
+			break;
+		i += 1;
+		if (nb != 0) {
+			bqrelse(bp);
+			continue;
+		}
+		UFS_LOCK(ump);
+		/*
+		 * If parent indirect has just been allocated, try to cluster
+		 * immediately following it.
+		 */
+		if (pref == 0)
+			pref = ffs_blkpref_ufs2(ip, lbn, i - num - 1,
+			    (ufs2_daddr_t *)0);
+		if ((error = ffs_alloc(ip, lbn, pref, (int)fs->fs_bsize,
+		    flags | IO_BUFLOCKED, cred, &newb)) != 0) {
+			brelse(bp);
+			UFS_LOCK(ump);
+			if (DOINGSOFTDEP(vp) && ++reclaimed == 1) {
+				softdep_request_cleanup(fs, vp, cred,
+				    FLUSH_BLOCKS_WAIT);
+				UFS_UNLOCK(ump);
+				goto retry;
+			}
+			if (!ffs_fsfail_cleanup_locked(ump, error) &&
+			    ppsratecheck(&ump->um_last_fullmsg,
+			    &ump->um_secs_fullmsg, 1)) {
+				UFS_UNLOCK(ump);
+				ffs_fserr(fs, ip->i_number, "filesystem full");
+				uprintf("\n%s: write failed, filesystem "
+				    "is full\n", fs->fs_fsmnt);
+			} else {
+				UFS_UNLOCK(ump);
+			}
+			goto fail;
+		}
+		pref = newb + fs->fs_frag;
+		nb = newb;
+		MPASS(allocblk < allociblk + nitems(allociblk));
+		MPASS(lbns_remfree < lbns + nitems(lbns));
+		*allocblk++ = nb;
+		*lbns_remfree++ = indirs[i].in_lbn;
+		nbp = getblk(vp, indirs[i].in_lbn, fs->fs_bsize, 0, 0,
+		    GB_UNMAPPED);
+		nbp->b_blkno = fsbtodb(fs, nb);
+		vfs_bio_clrbuf(nbp);
+		if (DOINGSOFTDEP(vp)) {
+			softdep_setup_allocindir_meta(nbp, ip, bp,
+			    indirs[i - 1].in_off, nb);
+			bdwrite(nbp);
+		} else if ((flags & IO_SYNC) == 0 && DOINGASYNC(vp)) {
+			if (nbp->b_bufsize == fs->fs_bsize)
+				nbp->b_flags |= B_CLUSTEROK;
+			bdwrite(nbp);
+		} else {
+			if ((error = bwrite(nbp)) != 0) {
+				brelse(bp);
+				goto fail;
+			}
+		}
+		bap[indirs[i - 1].in_off] = nb;
+		if (allocib == NULL && unwindidx < 0)
+			unwindidx = i - 1;
+		/*
+		 * If required, write synchronously, otherwise use
+		 * delayed write.
+		 */
+		if (flags & IO_SYNC) {
+			bwrite(bp);
+		} else {
+			if (bp->b_bufsize == fs->fs_bsize)
+				bp->b_flags |= B_CLUSTEROK;
+			bdwrite(bp);
+		}
+	}
+	/*
+	 * If asked only for the indirect block, then return it.
+	 */
+	if (flags & BA_METAONLY) {
+		curthread_pflags_restore(saved_inbdflush);
+		*bpp = bp;
+		error = 0;
+		goto done;
+	}
+	/*
+	 * Get the data block, allocating if necessary.
+	 */
+	if (nb == 0) {
+		UFS_LOCK(ump);
+		/*
+		 * If allocating metadata at the front of the cylinder
+		 * group and parent indirect block has just been allocated,
+		 * then cluster next to it if it is the first indirect in
+		 * the file. Otherwise it has been allocated in the metadata
+		 * area, so we want to find our own place out in the data area.
+		 */
+		if (pref == 0 || (lbn > UFS_NDADDR && fs->fs_metaspace != 0))
+			pref = ffs_blkpref_ufs2(ip, lbn, indirs[i].in_off,
+			    &bap[0]);
+		error = ffs_alloc(ip, lbn, pref, (int)fs->fs_bsize,
+		    flags | IO_BUFLOCKED, cred, &newb);
+		if (error) {
+			brelse(bp);
+			UFS_LOCK(ump);
+			if (DOINGSOFTDEP(vp) && ++reclaimed == 1) {
+				softdep_request_cleanup(fs, vp, cred,
+				    FLUSH_BLOCKS_WAIT);
+				UFS_UNLOCK(ump);
+				goto retry;
+			}
+			if (!ffs_fsfail_cleanup_locked(ump, error) &&
+			    ppsratecheck(&ump->um_last_fullmsg,
+			    &ump->um_secs_fullmsg, 1)) {
+				UFS_UNLOCK(ump);
+				ffs_fserr(fs, ip->i_number, "filesystem full");
+				uprintf("\n%s: write failed, filesystem "
+				    "is full\n", fs->fs_fsmnt);
+			} else {
+				UFS_UNLOCK(ump);
+			}
+			goto fail;
+		}
+		nb = newb;
+		MPASS(allocblk < allociblk + nitems(allociblk));
+		MPASS(lbns_remfree < lbns + nitems(lbns));
+		*allocblk++ = nb;
+		*lbns_remfree++ = lbn;
+		nbp = getblk(vp, lbn, fs->fs_bsize, 0, 0, gbflags);
+		nbp->b_blkno = fsbtodb(fs, nb);
+		if (flags & BA_CLRBUF)
+			vfs_bio_clrbuf(nbp);
+		if (DOINGSOFTDEP(vp))
+			softdep_setup_allocindir_page(ip, lbn, bp,
+			    indirs[i].in_off, nb, 0, nbp);
+		bap[indirs[i].in_off] = nb;
+		/*
+		 * If required, write synchronously, otherwise use
+		 * delayed write.
+		 */
+		if (flags & IO_SYNC) {
+			bwrite(bp);
+		} else {
+			if (bp->b_bufsize == fs->fs_bsize)
+				bp->b_flags |= B_CLUSTEROK;
+			bdwrite(bp);
+		}
+		curthread_pflags_restore(saved_inbdflush);
+		*bpp = nbp;
+		error = 0;
+		goto done;
+	}
+	brelse(bp);
+	/*
+	 * If requested clear invalid portions of the buffer.  If we
+	 * have to do a read-before-write (typical if BA_CLRBUF is set),
+	 * try to do some read-ahead in the sequential case to reduce
+	 * the number of I/O transactions.
+	 */
+	if (flags & BA_CLRBUF) {
+		int seqcount = (flags & BA_SEQMASK) >> BA_SEQSHIFT;
+		if (seqcount != 0 &&
+		    (vp->v_mount->mnt_flag & MNT_NOCLUSTERR) == 0 &&
+		    !(vm_page_count_severe() || buf_dirty_count_severe())) {
+			error = cluster_read(vp, ip->i_size, lbn,
+			    (int)fs->fs_bsize, NOCRED,
+			    MAXBSIZE, seqcount, gbflags, &nbp);
+		} else {
+			error = bread_gb(vp, lbn, (int)fs->fs_bsize,
+			    NOCRED, gbflags, &nbp);
+		}
+		if (error) {
+			brelse(nbp);
+			goto fail;
+		}
+	} else {
+		nbp = getblk(vp, lbn, fs->fs_bsize, 0, 0, gbflags);
+		nbp->b_blkno = fsbtodb(fs, nb);
+	}
+	curthread_pflags_restore(saved_inbdflush);
+	*bpp = nbp;
+	error = 0;
+	goto done;
+fail:
+	curthread_pflags_restore(saved_inbdflush);
+	/*
+	 * If we have failed to allocate any blocks, simply return the error.
+	 * This is the usual case and avoids the need to fsync the file.
+	 */
+	if (allocblk == allociblk && allocib == NULL && unwindidx == -1)
+		goto done;
+	/*
+	 * If we have failed part way through block allocation, we
+	 * have to deallocate any indirect blocks that we have allocated.
+	 * We have to fsync the file before we start to get rid of all
+	 * of its dependencies so that we do not leave them dangling.
+	 * We have to sync it at the end so that the soft updates code
+	 * does not find any untracked changes. Although this is really
+	 * slow, running out of disk space is not expected to be a common
+	 * occurrence. The error return from fsync is ignored as we already
+	 * have an error to return to the user.
+	 *
+	 * XXX Still have to journal the free below
+	 */
+	(void) ffs_syncvnode(vp, MNT_WAIT, 0);
+	for (deallocated = 0, blkp = allociblk, lbns_remfree = lbns;
+	     blkp < allocblk; blkp++, lbns_remfree++) {
+		/*
+		 * We shall not leave the freed blocks on the vnode
+		 * buffer object lists.
+		 */
+		bp = getblk(vp, *lbns_remfree, fs->fs_bsize, 0, 0,
+		    GB_NOCREAT | GB_UNMAPPED | gbwflag);
+		if (bp != NULL) {
+			KASSERT(bp->b_blkno == fsbtodb(fs, *blkp),
+			    ("mismatch2 l %jd %jd b %ju %ju",
+			    (intmax_t)bp->b_lblkno, (uintmax_t)*lbns_remfree,
+			    (uintmax_t)bp->b_blkno,
+			    (uintmax_t)fsbtodb(fs, *blkp)));
+			bp->b_flags |= B_INVAL | B_RELBUF | B_NOCACHE;
+			bp->b_flags &= ~(B_ASYNC | B_CACHE);
+			brelse(bp);
+		}
+		deallocated += fs->fs_bsize;
+	}
+	if (allocib != NULL) {
+		*allocib = 0;
+	} else if (unwindidx >= 0) {
+		int r;
+
+		r = bread_gb(vp, indirs[unwindidx].in_lbn,
+		    (int)fs->fs_bsize, NOCRED, gbwflag, &bp);
+		if (r) {
+			panic("Could not unwind indirect block, error %d", r);
+			brelse(bp);
+		} else {
+			bap = (ufs2_daddr_t *)bp->b_data;
+			bap[indirs[unwindidx].in_off] = 0;
+			if (flags & IO_SYNC) {
+				bwrite(bp);
+			} else {
+				if (bp->b_bufsize == fs->fs_bsize)
+					bp->b_flags |= B_CLUSTEROK;
+				bdwrite(bp);
+			}
+		}
+	}
+	if (deallocated) {
+#ifdef QUOTA
+		/*
+		 * Restore user's disk quota because allocation failed.
+		 */
+		(void) chkdq(ip, -btodb(deallocated), cred, FORCE);
+#endif
+		dp->di_blocks -= btodb(deallocated);
+		UFS_INODE_SET_FLAG(ip, IN_CHANGE | IN_UPDATE);
+	}
+	(void) ffs_syncvnode(vp, MNT_WAIT, 0);
+	/*
+	 * After the buffers are invalidated and on-disk pointers are
+	 * cleared, free the blocks.
+	 */
+	for (blkp = allociblk; blkp < allocblk; blkp++) {
+#ifdef INVARIANTS
+		if (blkp == allociblk)
+			lbns_remfree = lbns;
+		bp = getblk(vp, *lbns_remfree, fs->fs_bsize, 0, 0,
+		    GB_NOCREAT | GB_UNMAPPED | gbwflag);
+		if (bp != NULL) {
+			panic("zombie2 %jd %ju %ju",
+			    (intmax_t)bp->b_lblkno, (uintmax_t)bp->b_blkno,
+			    (uintmax_t)fsbtodb(fs, *blkp));
+		}
+		lbns_remfree++;
+#endif
+		ffs_blkfree(ump, fs, ump->um_devvp, *blkp, fs->fs_bsize,
+		    ip->i_number, vp->v_type, NULL, SINGLETON_KEY);
+	}
+done:
+	vn_seqc_write_end(vp);
+	return (error);
 }
