@@ -228,11 +228,11 @@ firmware under `sys/contrib/dev`.
 
 ## Not adapted from the BSDs
 
-`sys/dev/wsfont/yee8x16.h` is the 8x16 ISO Latin-1 font by Ka-Ping Yee
+`distrib/fonts/iso_font_8x16.h` is the 8x16 ISO Latin-1 font by Ka-Ping Yee
 (2000, "may be freely used for any purpose"), the glyph table of
 `osfmk/console/iso_font.c` in Apple's XNU (the Apple licence header of that
-file is not carried: only the table is). The names of `dev/wsfont/` and
-`dev/rasops/` follow OpenBSD's; the code is V86BSD's own.
+file is not carried: only the table is). `distrib/mkvtfont.c`, V86BSD's own,
+turns it into the font file of vt(4) that the loader hands to the kernel.
 
 ## Test suites in the tree
 

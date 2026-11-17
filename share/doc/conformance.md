@@ -31,6 +31,27 @@ A test that fails is not always a fault in the system it tests. For each suite, 
 
 Every header test and every namespace test of os-test passes on V86BSD. glibc passes 3471 of the 3758 header tests and 130 of the 159 namespace tests.
 
+## On the FreeBSD kernel (17 November 2026)
+
+The numbers above are those of V86BSD's own kernel. V86BSD now runs on FreeBSD's kernel (releng/15.2, `sys/amd64/conf/V86`) with this libc built for its ABI, and os-test and the Open POSIX Test Suite were run again in QEMU with KVM: `sh lib/libc/tools/gate.sh ost|pts WORKDIR` builds the tests on the host with clang and runs them one by one in the VM (a time limit each); `ONLY=file` runs only the tests named in the file.
+
+| suite | V86BSD on FreeBSD's kernel | on V86BSD's kernel |
+|---|---|---|
+| os-test | 5620 / 5816 | 5666 / 5816 |
+| Open POSIX Test Suite | about 1807 / 1875 that compile | 1812 / 1848 |
+
+os-test, by suite: basic 1162/1187, fnmatch 61/67, include 3758/3758, io 23/55, limits 124/126, malloc 3/3, namespace 159/159, paths 48/48, process 21/24, pty 26/29, regex 93/96, signal 26/32, stdio 25/25, udp 91/207. The ones that differ from the table above, with their cause:
+
+* **io, 32:** the `F_OFD_*` open file description locks; FreeBSD 15.2's kernel has none (`grep` finds nothing in `sys/`). A kernel patch is planned.
+* **process, 3:** `waitpid(-pgid)` sleeps on the parent and only a child's exit or stop wakes it (`sys/kern/kern_exit.c`, `kern_wait6`); no `setpgid` or `setsid` wakes it, so a wait on a group that has just become empty never returns `ECHILD`.
+* **pty, 3:** a controller that was closed makes the terminal read `POLLIN|POLLHUP` without `POLLERR` and `write` fail with `ENXIO` (`ttydev_poll`, `ttydev_enter` in `sys/kern/tty.c`), where POSIX wants `POLLERR` and `EIO`; a new process group is not marked orphaned (`enterpgrp` in `sys/kern/kern_proc.c` starts with `pg_flags = 0`), so `tcsetpgrp` from it sends `SIGTTOU`.
+* **signal, 6:** `ppoll` and `pselect` restore the signal mask before a signal that was pending could be delivered when a descriptor is ready already (`kern_poll_kfds`, `sys/kern/sys_generic.c`, on purpose); a signal action keeps `SA_ONSTACK` over `exec` (`execsigs`, `sys/kern/kern_sig.c`).
+* **udp, 116 are not good** (a first run had 134): connecting to the broadcast address needs `net.inet.ip.connect_inaddr_wild` (`sys/netinet/in_pcb.c`), and sending after `shutdown(SHUT_WR)` raises `SIGPIPE` before the error is reported, in an order os-test has no expectation for. Not analysed further.
+
+The libc fixes the gates found: `connect(AF_UNSPEC)` on a datagram socket (the kernel dissolves the association and then refuses the family), `accept()` on a datagram socket (`EOPNOTSUPP`), `shm_open()` and `shm_unlink()` take names without a slash (the kernel wants one) and refuse components over `NAME_MAX`, `munmap()` refuses an unaligned address (the kernel rounds it down), `clock_nanosleep()` and `posix_fadvise()` return the error number the kernel puts in the result (`kern_posix_error`), `MQ_PRIO_MAX` is 64 and `SIGQUEUE_MAX` 128 as the kernel has them, `_POSIX_SPORADIC_SERVER` is -1, and `statfs()`, `fstatfs()` and `getfsstat()` exist.
+
+Open POSIX tests that do not pass for a reason in the kernel or in the test: no `SCHED_SPORADIC` (7), `sched_setaffinity` helpers that exist for Linux only (`affinity.h`, 2), `seteuid()` leaves the real user ID, which the scheduler checks first (`p_cansched`, 4), the priority of `SCHED_OTHER` is the scheduler's own (`ksched_getparam`, 3), `sem_wait()` is not restarted after a signal with `SA_RESTART` (`_umtx_op` wait maps `ERESTART` to `EINTR`, 1), `SA_NOCLDSTOP` is kept for `SIGCHLD` only (1), negative clock IDs are CPU-time clocks (`kern_clock_getres`, 1), and an unlock by a thread that is not the owner (`pthread_cond_timedwait/2-3`, undefined). About 40 more (aio, timers, `mlockall`, `mmap`, the thread guard page) have no proven cause yet; `mmap/24-1` maps until the VM stops.
+
 ## How the suites were run
 
 **On V86BSD:**
