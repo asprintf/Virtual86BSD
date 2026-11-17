@@ -759,6 +759,7 @@ doenterpgrp(struct proc *p, struct pgrp *pgrp)
 {
 	struct pgrp *savepgrp;
 	struct proc *pp;
+	bool fresh;
 
 	sx_assert(&proctree_lock, SX_XLOCKED);
 	PROC_LOCK_ASSERT(p, MA_NOTOWNED);
@@ -771,6 +772,7 @@ doenterpgrp(struct proc *p, struct pgrp *pgrp)
 
 	PGRP_LOCK(pgrp);
 	PGRP_LOCK(savepgrp);
+	fresh = LIST_EMPTY(&pgrp->pg_members);
 	if (isjobproc(pp, savepgrp) && pgrp_calc_jobc(savepgrp) == 1)
 		orphanpg(savepgrp);
 	PROC_LOCK(p);
@@ -780,8 +782,13 @@ doenterpgrp(struct proc *p, struct pgrp *pgrp)
 	LIST_INSERT_HEAD(&pgrp->pg_members, p, p_pglist);
 	if (isjobproc(pp, pgrp))
 		pgrp->pg_flags &= ~PGRP_ORPHANED;
+	else if (fresh)
+		pgrp->pg_flags |= PGRP_ORPHANED;	/* no member has a parent to rely on */
 	PGRP_UNLOCK(savepgrp);
 	PGRP_UNLOCK(pgrp);
+	/* a parent in wait(2) for the group p has left must look again */
+	if (p->p_pptr != NULL)
+		wakeup(p->p_pptr);
 	if (LIST_EMPTY(&savepgrp->pg_members))
 		pgdelete(savepgrp);
 }
