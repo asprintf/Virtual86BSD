@@ -22,4 +22,4 @@ static unsigned long long rng(void)
 { rng_s ^= rng_s << 13; rng_s ^= rng_s >> 7; rng_s ^= rng_s << 17; return rng_s; }
 
 static int failures;
-#define CHECK(c) do { if (!(c)) { failures++; os("FAIL " __FILE__ ":"); oi(__LINE__); os(": " #c "\n"); } } while (0)
+#define CHECK(c) do { if (!(c)) { failures++; os("FAIL " __FILE__ ":"); oi(__LINE__); os(": " #c "\n"); oflush(); } } while (0)

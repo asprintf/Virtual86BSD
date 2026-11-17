@@ -1,6 +1,6 @@
 /* s_ipc.c - XSI message queues, semaphore sets and shared memory,
  * ftok; POSIX message queues (with notification by signal and by
- * thread); syslog, read back from a /dev/log socket of the test's own
+ * thread); syslog, read back from a /var/run/log socket of the test's own
  * (when there is none, and it may make one). */
 #define _XOPEN_SOURCE 800
 #include <errno.h>
@@ -126,7 +126,8 @@ static void xsi(void)
 	}
 	waitpid(pid, &st, 0);
 	CHECK(WIFEXITED(st) && WEXITSTATUS(st) == 0 && !strcmp(p, "child"));
-	CHECK(shmctl(h, IPC_STAT, &shd) == 0 && shd.shm_segsz == 10000 && shd.shm_nattch == 1 &&
+	/* FreeBSD reports the size rounded up to pages (sysv_shm.c: round_page before shm_segsz) */
+	CHECK(shmctl(h, IPC_STAT, &shd) == 0 && shd.shm_segsz >= 10000 && shd.shm_segsz < 10000 + 4096 && shd.shm_nattch == 1 &&
 	      shd.shm_cpid == getpid());
 	{
 		char *ro = shmat(h, 0, SHM_RDONLY);
@@ -211,17 +212,17 @@ static void posix_mq(void)
 
 static void logging(const char *prog)
 {
-	struct sockaddr_un sa = {AF_UNIX, "/dev/log"};
+	struct sockaddr_un sa = {0, AF_UNIX, "/var/run/log"};
 	char buf[512];
 	int fd, n, pri;
 	struct stat st;
-	if (stat("/dev/log", &st) == 0) {
-		printf("syslog: /dev/log exists: not tested\n");
+	if (stat("/var/run/log", &st) == 0) {
+		printf("syslog: /var/run/log exists: not tested\n");
 		return;
 	}
 	fd = socket(AF_UNIX, SOCK_DGRAM, 0);
 	if (bind(fd, (struct sockaddr *)&sa, sizeof sa) < 0) {
-		printf("syslog: cannot make /dev/log: not tested\n");
+		printf("syslog: cannot make /var/run/log: not tested\n");
 		close(fd);
 		return;
 	}
@@ -255,7 +256,7 @@ static void logging(const char *prog)
 	}
 	closelog();
 	close(fd);
-	unlink("/dev/log");
+	unlink("/var/run/log");
 }
 
 int main(int argc, char **argv)

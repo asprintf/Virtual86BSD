@@ -1018,7 +1018,9 @@ static void scheduling(void)
 	int pol, i;
 	CHECK(sched_yield() == 0);
 	CHECK(sched_get_priority_max(SCHED_FIFO) >= 1 && sched_get_priority_min(SCHED_OTHER) == 0);
-	CHECK(sched_getscheduler(0) == SCHED_OTHER && sched_getparam(0, &sp) == 0 && sp.sched_priority == 0);
+	/* SCHED_OTHER's range is the system's (FreeBSD: 0 to 167, not only 0) */
+	CHECK(sched_getscheduler(0) == SCHED_OTHER && sched_getparam(0, &sp) == 0 &&
+	      sp.sched_priority >= sched_get_priority_min(SCHED_OTHER) && sp.sched_priority <= sched_get_priority_max(SCHED_OTHER));
 	CHECK(sched_rr_get_interval(0, &ts) == 0);
 	CHECK(pthread_getschedparam(pthread_self(), &pol, &sp) == 0 && pol == SCHED_OTHER);
 	pthread_attr_init(&a);
@@ -1032,14 +1034,18 @@ static void scheduling(void)
 		CHECK(r == (void *)1001);
 	} else
 		CHECK(i == EPERM);      /* not allowed here */
-	sp.sched_priority = 5;      /* invalid for SCHED_OTHER */
+	sp.sched_priority = sched_get_priority_max(SCHED_OTHER) + 1;
 	pthread_attr_setschedpolicy(&a, SCHED_OTHER);
 	CHECK(pthread_attr_setschedparam(&a, &sp) == EINVAL);
 	sp.sched_priority = sched_get_priority_max(SCHED_FIFO) + 1000;
 	pthread_attr_setschedpolicy(&a, SCHED_FIFO);
 	CHECK(pthread_attr_setschedparam(&a, &sp) == EINVAL);
-	pthread_attr_setschedpolicy(&a, SCHED_OTHER);
-	CHECK(pthread_create(&t, &a, sched_thread, 0) == EINVAL);
+	/* a SCHED_FIFO priority that SCHED_OTHER does not have (none on FreeBSD) */
+	sp.sched_priority = sched_get_priority_max(SCHED_FIFO);
+	if (sp.sched_priority > sched_get_priority_max(SCHED_OTHER) && pthread_attr_setschedparam(&a, &sp) == 0) {
+		pthread_attr_setschedpolicy(&a, SCHED_OTHER);
+		CHECK(pthread_create(&t, &a, sched_thread, 0) == EINVAL);
+	}
 	CHECK(pthread_attr_setscope(&a, PTHREAD_SCOPE_PROCESS) == ENOTSUP);
 	pthread_attr_destroy(&a);
 	CHECK(pthread_getcpuclockid(pthread_self(), &c) == 0 && clock_gettime(c, &ts) == 0);

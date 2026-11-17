@@ -2,8 +2,8 @@
 # Header checks: every public header must compile on its own in each
 # language mode, twice in a row (include guards), and in strict ISO C
 # mode must not declare POSIX-only names.
-# usage: headers.sh CC   (CC is a libc-cc invocation, e.g. "tools/libc-cc gcc")
-cc="$(dirname "$0")/../../../lib/libc/tools/libc-cc ${1:-gcc}"
+# usage: headers.sh CC   (CC is a libc-cc invocation, e.g. "tools/libc-cc clang")
+cc="$(dirname "$0")/../../../lib/libc/tools/libc-cc ${1:-clang}"
 inc=$(cd "$(dirname "$0")/../../../include" && pwd)
 tmp=${TMPDIR:-/tmp}/headers.$$; mkdir -m 700 "$tmp" || exit 1; trap 'rm -rf "$tmp"' EXIT
 fail=0
@@ -15,7 +15,7 @@ case $cc in
 	wflags="-Wall -Wextra -pedantic -Werror"; strict=1;;
 esac
 case $cc in *c17*) IFS0=" ";; *) IFS0="|";; esac
-for h in $(cd "$inc" && find -L . -name '*.h' ! -path './bits/*' | sed 's|^\./||' | sort); do
+for h in $(cd "$inc" && find -L . -name '*.h' ! -path './bits/*' ! -path './ufs/*' | sed 's|^\./||' | sort); do
 	oldifs=$IFS; IFS=$IFS0; set -f
 	for mode in $modes; do
 		IFS=$oldifs

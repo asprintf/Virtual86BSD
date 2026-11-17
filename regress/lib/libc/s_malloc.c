@@ -55,8 +55,11 @@ int main(void)
 		for (k = 0; k < n; k++) if (c[k]) { CHECK(!"calloc not zero"); break; }
 		memset(c, 0xAA, n); free(c);
 	}
-	errno = 0; CHECK(calloc(SIZE_MAX / 2, 3) == 0 && errno == ENOMEM);
-	errno = 0; CHECK(malloc(SIZE_MAX) == 0 && errno == ENOMEM);
+	{       /* volatile: clang folds an unused malloc(SIZE_MAX) == 0 to false, without the call */
+		void *volatile q;
+		errno = 0; q = calloc(SIZE_MAX / 2, 3); CHECK(q == 0 && errno == ENOMEM);
+		errno = 0; q = malloc(SIZE_MAX); CHECK(q == 0 && errno == ENOMEM);
+	}
 	CHECK(reallocarray(0, SIZE_MAX / 2, 3) == 0);
 
 	/* alignment */

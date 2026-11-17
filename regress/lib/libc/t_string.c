@@ -63,11 +63,11 @@ int main(void)
 		if (it % 10 == 9) onl();
 	}
 	oi(ffs(0)); oi(ffs(1)); oi(ffs(0x80000000)); oi(ffsl(1L << 40)); oi(ffsll(-1LL)); onl();
-	/* the messages: as glibc's (strsignal of the real-time signals differs: SIGRTMIN) */
-	/* (0-133: this library's errnos; newer glibc has messages beyond) */
-	for (it = 0; it < 134; it++) { os(strerror(it)); onl(); }
-	for (it = 0; it < 32; it++) { os(strsignal(it)); onl(); }
-	os(strsignal(65)); onl(); os(strsignal(-3)); onl();
+	/* the messages are the system's own (errno and signal numbers and texts differ
+	 * between systems): that there is one for each number */
+	for (it = 0; it < 98; it++) { os(strerror(it) && *strerror(it) ? "msg\n" : "none\n"); }
+	for (it = 1; it < 32; it++) { os(strsignal(it) && *strsignal(it) ? "msg\n" : "none\n"); }
+	os(strsignal(-3) ? "msg\n" : "none\n");
 	oflush();
 	return 0;
 }

@@ -143,7 +143,8 @@ int main(void)
 	its.it_interval.tv_sec = 0; its.it_interval.tv_nsec = 5000000;
 	CHECK(timer_settime(tid, 0, &its, 0) == 0);
 	while (fired < 3) pause();
-	CHECK(timer_gettime(tid, &its) == 0 && its.it_interval.tv_nsec == 5000000);
+	/* rounded up to the timer's resolution: FreeBSD raises one below a tick (hz 100 in a VM) to a tick */
+	CHECK(timer_gettime(tid, &its) == 0 && its.it_interval.tv_sec == 0 && its.it_interval.tv_nsec >= 5000000);
 	CHECK(timer_getoverrun(tid) >= 0 && timer_delete(tid) == 0);
 	memset(&sev, 0, sizeof sev);
 	sev.sigev_notify = SIGEV_NONE;

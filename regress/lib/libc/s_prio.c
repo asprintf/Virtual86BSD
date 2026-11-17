@@ -3,7 +3,7 @@
  * locks under SCHED_FIFO (a reader does not pass a waiting writer of
  * higher or equal priority).  The effective
  * priority of a thread is read from /proc/thread-self/stat (field 18,
- * -1 - rt_priority for real-time threads); the checks that need real-time
+ * -1 - rt_priority for real-time threads; FreeBSD: kern.proc); the checks that need real-time
  * threads are skipped where they may not be created. */
 #define _XOPEN_SOURCE 800
 #include <pthread.h>
@@ -16,6 +16,25 @@
 #include "out.h"
 
 /* the calling thread's effective priority, or 1000 */
+#ifdef __FreeBSD__
+#include <sys/sysctl.h>
+/* FreeBSD: ki_pri.pri_user of the thread's struct kinfo_proc (amd64: 1088 bytes, ki_tid at
+ * 600, ki_pri at 604) from kern.proc.pid.N with threads; real-time ones are 39 - prio */
+static int eff_prio(void)
+{
+	char b[16 * 1088];
+	int mib[4] = {1, 14, 1 | 16, (int)getpid()};    /* CTL_KERN, KERN_PROC, KERN_PROC_PID | KERN_PROC_INC_THREAD */
+	size_t n = sizeof b, i;
+	long tid = 0, nr = 432;                          /* thr_self */
+	__asm__ __volatile__ ("syscall" : "+a"(nr) : "D"(&tid) : "rcx", "rdx", "r8", "r9", "r10", "r11", "memory", "cc");
+	if (sysctl(mib, 4, b, &n, 0, 0) < 0)
+		return 1000;
+	for (i = 0; i + 1088 <= n; i += 1088)
+		if (*(int *)(b + i) == 1088 && *(int *)(b + i + 600) == (int)tid)
+			return (unsigned char)b[i + 604 + 3] - 40;
+	return 1000;
+}
+#else
 static int eff_prio(void)
 {
 	char b[512], *p;
@@ -37,6 +56,7 @@ static int eff_prio(void)
 		return neg ? -n : n;
 	}
 }
+#endif
 
 static void ms(long n)
 {
@@ -157,16 +177,16 @@ static void *pi_low(void *a)
 }
 
 /* PTHREAD_PRIO_PROTECT at prio 10: ceilings raise it while held */
-static pthread_mutex_t c20, c40;
+static pthread_mutex_t c20, c30;     /* SCHED_FIFO priorities that both Linux (1-99) and FreeBSD (0-31) have */
 static void *pp_thread(void *a)
 {
 	int r = 0;
 	(void)a;
 	r |= (pthread_mutex_lock(&c20) != 0) << 0;
 	r |= (eff_prio() != -21) << 1;
-	r |= (pthread_mutex_lock(&c40) != 0) << 2;
-	r |= (eff_prio() != -41) << 3;
-	r |= (pthread_mutex_unlock(&c40) != 0) << 4;
+	r |= (pthread_mutex_lock(&c30) != 0) << 2;
+	r |= (eff_prio() != -31) << 3;
+	r |= (pthread_mutex_unlock(&c30) != 0) << 4;
 	r |= (eff_prio() != -21) << 5;
 	r |= (pthread_mutex_unlock(&c20) != 0) << 6;
 	r |= (eff_prio() != -11) << 7;
@@ -176,7 +196,7 @@ static void *pp_thread(void *a)
 static void *pp_high(void *a)
 {
 	(void)a;
-	return (void *)(long)pthread_mutex_lock(&c20);   /* own 50 > ceiling 20 */
+	return (void *)(long)pthread_mutex_lock(&c20);   /* own 25 > ceiling 20 */
 }
 
 static void init(int proto, int type, int robust)
@@ -208,7 +228,8 @@ int main(void)
 	CHECK(pthread_mutexattr_setprotocol(&ma, PTHREAD_PRIO_INHERIT) == 0);
 	CHECK(pthread_mutexattr_getprotocol(&ma, &v) == 0 && v == PTHREAD_PRIO_INHERIT);
 	CHECK(pthread_mutexattr_getprioceiling(&ma, &v) == 0 && v == sched_get_priority_min(SCHED_FIFO));
-	CHECK(pthread_mutexattr_setprioceiling(&ma, 0) == EINVAL && pthread_mutexattr_setprioceiling(&ma, 100) == EINVAL);
+	CHECK(pthread_mutexattr_setprioceiling(&ma, sched_get_priority_min(SCHED_FIFO) - 1) == EINVAL &&
+	      pthread_mutexattr_setprioceiling(&ma, sched_get_priority_max(SCHED_FIFO) + 1) == EINVAL);
 	CHECK(pthread_mutexattr_setprioceiling(&ma, 20) == 0);
 	CHECK(pthread_mutexattr_getprioceiling(&ma, &v) == 0 && v == 20);
 	pthread_mutexattr_destroy(&ma);
@@ -291,14 +312,14 @@ int main(void)
 	pthread_mutexattr_setprotocol(&ma, PTHREAD_PRIO_PROTECT);
 	pthread_mutexattr_setprioceiling(&ma, 20);
 	pthread_mutex_init(&c20, &ma);
-	pthread_mutexattr_setprioceiling(&ma, 40);
-	pthread_mutex_init(&c40, &ma);
+	pthread_mutexattr_setprioceiling(&ma, 30);
+	pthread_mutex_init(&c30, &ma);
 	pthread_mutexattr_destroy(&ma);
 	CHECK(pthread_mutex_getprioceiling(&c20, &v) == 0 && v == 20);
 	CHECK(pthread_mutex_lock(&c20) == 0 && pthread_mutex_unlock(&c20) == 0);
 	CHECK(pthread_mutex_setprioceiling(&c20, 25, &v) == 0 && v == 20);
 	CHECK(pthread_mutex_getprioceiling(&c20, &v) == 0 && v == 25);
-	CHECK(pthread_mutex_setprioceiling(&c20, 20, 0) == 0 && pthread_mutex_setprioceiling(&c20, 0, 0) == EINVAL);
+	CHECK(pthread_mutex_setprioceiling(&c20, 20, 0) == 0 && pthread_mutex_setprioceiling(&c20, sched_get_priority_min(SCHED_FIFO) - 1, 0) == EINVAL);
 	CHECK(pthread_mutex_setprioceiling(&m, 20, 0) == EINVAL);   /* not PROTECT */
 
 	/* with real-time threads, if allowed */
@@ -306,7 +327,7 @@ int main(void)
 	if (rt) {
 		pthread_join(t[0], &res);
 		CHECK((long)res == 0);
-		CHECK(rt_thread(&t[0], 50, pp_high, 0) == 0 && pthread_join(t[0], &res) == 0 && (long)res == EINVAL);
+		CHECK(rt_thread(&t[0], 25, pp_high, 0) == 0 && pthread_join(t[0], &res) == 0 && (long)res == EINVAL);
 		init(PTHREAD_PRIO_INHERIT, PTHREAD_MUTEX_NORMAL, 0);
 		stage = 0; seen = 0;
 		CHECK(rt_thread(&t[0], 10, pi_low, 0) == 0);

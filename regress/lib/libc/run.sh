@@ -8,12 +8,12 @@
 # LIBC_LIB, as for tools/libc-cc, selects another build of the library.
 # TESTS="t_crypt s_malloc" runs only those.
 cd "$(dirname "$0")" || exit 1
-ccname=${1:-gcc}
-refcc=${REFCC:-gcc}
+ccname=${1:-clang}
+refcc=${REFCC:-clang}
 out=out/$ccname${LIBC_LINK:+-$LIBC_LINK}
 mkdir -p "$out"
 cc="../../../lib/libc/tools/libc-cc $ccname"
-# The language is C17 (gcc 15's default is C23, whose strtol() takes "0b101", and
+# The language is C17 (in C23, gcc 15's default, glibc's strtol() takes "0b101", and
 # whose headers redirect strtol, scanf ... to other functions): the reference
 # is built as gnu17; with c17 as the compiler under test there is no choice.
 case $ccname in c17*) std= ;; *) std=-std=gnu17 ;; esac

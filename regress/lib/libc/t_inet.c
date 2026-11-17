@@ -25,7 +25,7 @@ static void pton(int af, const char *s)
 	unsigned char a[16];
 	char out[64];
 	int r = inet_pton(af, s, a);
-	printf("pton(%d, \"%s\") = %d", af, s, r);
+	printf("pton(%s, \"%s\") = %d", af == AF_INET ? "AF_INET" : "AF_INET6", s, r);
 	if (r == 1)
 		printf(" -> %s", inet_ntop(af, a, out, sizeof out));
 	printf("\n");
@@ -80,7 +80,27 @@ static void conversions(void)
 
 static int lcmp(const void *a, const void *b) { return strcmp((const char *)a, (const char *)b); }
 
-static void gai(const char *n, const char *s, int fam, int st, int pr, int fl)
+/* the numbers of the families and the names of the interfaces are the system's */
+static const char *fam(int f)
+{
+	return f == AF_UNSPEC ? "unspec" : f == AF_INET ? "inet" : f == AF_INET6 ? "inet6" : "other";
+}
+
+/* s with "%IF" for the scope that names interface 1 (lo, lo0) */
+static const char *scrub(const char *s, char *out, size_t size)
+{
+	char lo[IF_NAMESIZE], *pct;
+	size_t n;
+	snprintf(out, size, "%s", s);
+	if (!if_indextoname(1, lo) || !(pct = strchr(out, '%')) || strncmp(pct + 1, lo, (n = strlen(lo))) ||
+	    isalnum((unsigned char)pct[1 + n]))
+		return out;
+	memmove(pct + 3, pct + 1 + n, strlen(pct + 1 + n) + 1);
+	memcpy(pct + 1, "IF", 2);
+	return out;
+}
+
+static void gai(const char *n, const char *s, int f, int st, int pr, int fl)
 {
 	struct addrinfo h, *r, *p;
 	int e;
@@ -89,16 +109,20 @@ static void gai(const char *n, const char *s, int fam, int st, int pr, int fl)
 	static char lines[64][400];
 	size_t nl = 0, li;
 	memset(&h, 0, sizeof h);
-	h.ai_family = fam;
+	h.ai_family = f;
 	h.ai_socktype = st;
 	h.ai_protocol = pr;
 	h.ai_flags = fl;
 	e = getaddrinfo(n, s, &h, &r);
-	printf("gai(%s, %s, %d, %d, %d, %#x) = %d %s\n", n ? n : "NULL", s ? s : "NULL", fam, st, pr, fl, e, e ? gai_strerror(e) : "");
+	{
+		char nb[100];
+		printf("gai(%s, %s, %s, %d, %d, %#x) = %d %s\n", n ? scrub(n, nb, sizeof nb) : "NULL", s ? s : "NULL", fam(f),
+		       st, pr, fl, e, e ? gai_strerror(e) : "");
+	}
 	if (e)
 		return;
 	for (p = r; p; p = p->ai_next) {
-		char b[64], hb[100], sb[32];
+		char b[64], hb[100], sb[32], sh[100], cs[256];
 		/* glibc 2.4x also returns SCTP (132) entries for a service; V86BSD has no SCTP */
 		if (p->ai_protocol == 132)
 			continue;
@@ -114,11 +138,11 @@ static void gai(const char *n, const char *s, int fam, int st, int pr, int fl)
 				cn[q] = (char)tolower((unsigned char)p->ai_canonname[q]), cn[q + 1] = 0;
 		}
 		if (nl < 64)
-			snprintf(lines[nl++], sizeof lines[0], "  %d %d %d len=%u %s port=%d canon=%s gni=%d %s %s\n",
-			         p->ai_family, p->ai_socktype, p->ai_protocol,
+			snprintf(lines[nl++], sizeof lines[0], "  %s %d %d len=%u %s port=%d canon=%s gni=%d %s %s\n",
+			         fam(p->ai_family), p->ai_socktype, p->ai_protocol,
 			         (unsigned)p->ai_addrlen, inet_ntop(p->ai_family, a, b, sizeof b),
-			         ntohs(((struct sockaddr_in *)p->ai_addr)->sin_port), cn,
-			         e, hb, sb);
+			         ntohs(((struct sockaddr_in *)p->ai_addr)->sin_port), scrub(cn, cs, sizeof cs),
+			         e, scrub(hb, sh, sizeof sh), sb);
 	}
 	qsort(lines, nl, sizeof lines[0], lcmp);
 	for (li = 0; li < nl; li++)
@@ -144,9 +168,12 @@ static void lookups(void)
 {
 	static const char *serv[] = {0, "80", "http", "domain", "ssh", "nosuch", "0", "65535", "65536", "-1", "0x10", "smtp"};
 	static const int st[] = {0, SOCK_STREAM, SOCK_DGRAM, SOCK_RAW};
-	static const char *nodes[] = {"localhost", "LocalHost", "127.0.0.1", "127.1", "::1", "::ffff:127.0.0.1", "0", "vm",
-		"1.2.3.4", "fe80::1%lo", "fe80::1%1", "fe80::1%nosuch", "::", "0.0.0.0", "2001:db8::1"};
+	static char lo[8 + IF_NAMESIZE] = "fe80::1%";       /* fe80::1%lo, %lo0 ... */
+	const char *nodes[] = {"localhost", "LocalHost", "127.0.0.1", "127.1", "::1", "::ffff:127.0.0.1", "0",
+		"1.2.3.4", lo, "fe80::1%1", "fe80::1%nosuch", "::", "0.0.0.0", "2001:db8::1"};
 	size_t i, j, k;
+	if (!if_indextoname(1, lo + 8))
+		strcpy(lo + 8, "lo");
 	for (i = 0; i < sizeof serv / sizeof *serv; i++)
 		for (j = 0; j < 4; j++)
 			gai("localhost", serv[i], AF_UNSPEC, st[j], 0, 0);
@@ -156,7 +183,8 @@ static void lookups(void)
 			gai(nodes[i], "22", fam[k], SOCK_STREAM, 0, AI_CANONNAME);
 			gai(nodes[i], 0, fam[k], SOCK_DGRAM, 0, AI_V4MAPPED);
 			gai(nodes[i], 0, fam[k], SOCK_STREAM, 0, AI_V4MAPPED | AI_ALL);
-			gai(nodes[i], 0, fam[k], SOCK_STREAM, 0, AI_NUMERICHOST | AI_ADDRCONFIG);
+			/* (not with AI_ADDRCONFIG: its answer is the interfaces', and the VM has only a loopback) */
+			gai(nodes[i], 0, fam[k], SOCK_STREAM, 0, AI_NUMERICHOST);
 		}
 	gai(0, "80", AF_UNSPEC, 0, 0, 0);
 	gai(0, "80", AF_UNSPEC, 0, 0, AI_PASSIVE);
@@ -183,14 +211,14 @@ static void lookups(void)
 	gni4(0x7f000001, 80, 0x1000, 64, 32);
 	{
 		struct sockaddr_in6 s6;
-		char h[100], s[32];
+		char h[100], s[32], nb[100];
 		memset(&s6, 0, sizeof s6);
 		s6.sin6_family = AF_INET6;
 		s6.sin6_port = htons(22);
 		inet_pton(AF_INET6, "fe80::1", &s6.sin6_addr);
 		s6.sin6_scope_id = 1;
 		printf("gni6 %d", getnameinfo((struct sockaddr *)&s6, sizeof s6, h, sizeof h, s, sizeof s, NI_NUMERICHOST));
-		printf(" %s %s\n", h, s);
+		printf(" %s %s\n", scrub(h, nb, sizeof nb), s);
 		printf("gni6 bad len %d\n", getnameinfo((struct sockaddr *)&s6, 8, h, sizeof h, s, sizeof s, NI_NUMERICHOST));
 		s6.sin6_family = 12345;
 		printf("gni bad family %d\n", getnameinfo((struct sockaddr *)&s6, sizeof s6, h, sizeof h, s, sizeof s, 0));
@@ -278,13 +306,15 @@ static void databases(void)
 
 static void interfaces(void)
 {
+	/* the interfaces are the system's (lo, lo0 ...): each entry must map both ways */
 	struct if_nameindex *l = if_nameindex(), *p;
 	char name[IF_NAMESIZE];
-	unsigned lo = if_nametoindex("lo");
-	printf("lo %u %s\n", lo, if_indextoname(lo, name) ? name : "-");
+	int n = 0, bad = 0;
+	for (p = l; p && p->if_name; p++, n++)
+		if (if_nametoindex(p->if_name) != p->if_index || !if_indextoname(p->if_index, name) || strcmp(name, p->if_name))
+			bad++;
+	printf("interfaces %s, %d not mapping back\n", n ? "listed" : "none", bad);
 	printf("nosuch %u %p\n", if_nametoindex("nosuch"), (void *)if_indextoname(99999, name));
-	for (p = l; p && p->if_name; p++)
-		printf("if %u %s\n", p->if_index, p->if_name);
 	if (l)
 		if_freenameindex(l);
 }

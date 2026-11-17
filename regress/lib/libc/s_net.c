@@ -154,7 +154,7 @@ static void inet_sockets(void)
 	CHECK(getsockname(l, (struct sockaddr *)&sa, &sl) == 0 && sa.sin_port != 0);
 	CHECK(listen(l, 5) == 0);
 	sl = sizeof v;
-	CHECK(getsockopt(l, SOL_SOCKET, SO_ACCEPTCONN, &v, &sl) == 0 && v == 1);
+	CHECK(getsockopt(l, SOL_SOCKET, SO_ACCEPTCONN, &v, &sl) == 0 && v != 0);
 	CHECK(getsockopt(l, SOL_SOCKET, SO_TYPE, &v, &sl) == 0 && v == SOCK_STREAM);
 	CHECK(getsockopt(l, SOL_SOCKET, SO_DOMAIN, &v, &sl) == 0 && v == AF_INET);
 	CHECK(getsockopt(l, SOL_SOCKET, SO_PROTOCOL, &v, &sl) == 0 && v == IPPROTO_TCP);

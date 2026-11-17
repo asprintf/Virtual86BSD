@@ -4,9 +4,9 @@
 # 500-700, X6 = 500-600, X67 = 600-700, X5 = 500, P:lo:hi = _POSIX_C_SOURCE in [lo, hi),
 # A+B = either.  No macro, _GNU_SOURCE, _DEFAULT_SOURCE: all; strict ISO C:
 # none.
-# usage: legacy.sh CC   (CC is a libc-cc invocation, e.g. "tools/libc-cc gcc"; LEGACY_CC=c17
+# usage: legacy.sh CC   (CC is a libc-cc invocation, e.g. "tools/libc-cc clang"; LEGACY_CC=c17
 # uses that compiler as it is, inside V86BSD)
-cc=${LEGACY_CC:-"$(dirname "$0")/../../../lib/libc/tools/libc-cc ${1:-gcc}"}
+cc=${LEGACY_CC:-"$(dirname "$0")/../../../lib/libc/tools/libc-cc ${1:-clang}"}
 tmp=${TMPDIR:-/tmp}/legacy.$$; mkdir -m 700 "$tmp" || exit 1; trap 'rm -rf "$tmp"' EXIT
 case $cc in *c17*) werr= ;; *) werr=-Werror=implicit-function-declaration ;; esac
 

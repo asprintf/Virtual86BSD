@@ -116,7 +116,7 @@ int main(void)
 	sigfillset(&set);
 	CHECK(sigismember(&set, 1) == 1 && sigismember(&set, 31) == 1 && sigismember(&set, 32) == 0 &&
 	      sigismember(&set, 34) == 0 && sigismember(&set, 35) == 1 && sigismember(&set, 64) == 1);
-	CHECK(sigaddset(&set, 33) == -1 && errno == EINVAL && sigaddset(&set, 65) == -1 && sigismember(&set, 0) == -1);
+	CHECK(sigaddset(&set, 33) == -1 && errno == EINVAL && sigaddset(&set, _NSIG) == -1 && sigismember(&set, 0) == -1);
 
 	/* sig2str / str2sig */
 	CHECK(sig2str(SIGINT, buf) == 0 && !strcmp(buf, "INT"));
@@ -125,9 +125,9 @@ int main(void)
 	CHECK(sig2str(SIGRTMAX, buf) == 0 && !strcmp(buf, "RTMAX"));
 	CHECK(sig2str(SIGRTMAX - 2, buf) == 0 && !strcmp(buf, "RTMAX-2"));
 	CHECK(sig2str(33, buf) == -1);
-	for (sig = 1; sig < 65; sig++) {
+	for (sig = 1; sig <= SIGRTMAX; sig++) {
 		int back;
-		if (sig >= 32 && sig < 35) continue;
+		if (sig >= 32 && sig < SIGRTMIN) continue;     /* 32, 33 the libraries', none to 64 */
 		if (sig2str(sig, buf) || str2sig(buf, &back) || back != sig) { CHECK(!"sig2str round trip"); break; }
 	}
 	CHECK(str2sig("15", &sig) == 0 && sig == 15 && str2sig("HUP", &sig) == 0 && sig == 1);
@@ -151,7 +151,7 @@ int main(void)
 	CHECK(getppid() > 0 && getpgrp() == getpgid(0) && getsid(0) > 0);
 	CHECK(sysconf(_SC_VERSION) == 202405L && sysconf(_SC_PAGESIZE) == 4096 &&
 	      sysconf(_SC_OPEN_MAX) > 0 && sysconf(_SC_NPROCESSORS_ONLN) >= 1 &&
-	      sysconf(_SC_ARG_MAX) >= _POSIX_ARG_MAX && sysconf(_SC_CLK_TCK) == 100);
+	      sysconf(_SC_ARG_MAX) >= _POSIX_ARG_MAX && sysconf(_SC_CLK_TCK) > 0);   /* 100 on Linux, 128 on FreeBSD */
 	CHECK(sysconf(-5) == -1 && errno == EINVAL);
 	CHECK(confstr(_CS_PATH, buf, sizeof buf) == 14 && !strcmp(buf, "/bin:/usr/bin"));
 	CHECK(confstr(_CS_PATH, buf, 4) == 14 && !strcmp(buf, "/bi"));

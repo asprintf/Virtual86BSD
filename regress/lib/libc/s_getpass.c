@@ -8,9 +8,11 @@
 #define _DEFAULT_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
@@ -42,6 +44,7 @@ static pid_t start(int passes, const char *prompt, int *result)
 		fd = open(slave_name, O_RDWR); /* the controlling terminal */
 		if (fd < 0)
 			_exit(90);
+		ioctl(fd, TIOCSCTTY, 0);       /* BSD: open alone does not make it the controlling terminal */
 		for (i = 0; i < passes; i++) {
 			char *s = getpass(prompt);
 			write(p[1], s, strlen(s));
@@ -56,12 +59,50 @@ static pid_t start(int passes, const char *prompt, int *result)
 	return pid;
 }
 
+/* the terminal's output, read from the master as it comes: a terminal whose
+ * output nobody reads makes tcsetattr(TCSAFLUSH) wait (FreeBSD drains a pty) */
+static char tout[4096];
+static size_t tn;
+
+static void pump(void)
+{
+	ssize_t r;
+	int fl = fcntl(master, F_GETFL);
+	fcntl(master, F_SETFL, fl | O_NONBLOCK);
+	while (tn < sizeof tout - 1 && (r = read(master, tout + tn, sizeof tout - 1 - tn)) > 0)
+		tn += (size_t)r;
+	fcntl(master, F_SETFL, fl);
+}
+
+/* waitpid, reading the terminal's output meanwhile (getpass restores the
+ * terminal with TCSAFLUSH after writing its newline) */
+static pid_t reap(pid_t pid, int *st)
+{
+	pid_t r;
+	while ((r = waitpid(pid, st, WNOHANG)) == 0) {
+		pump();
+		usleep(10000);
+	}
+	return r;
+}
+
+/* what the child sent through the pipe, until it closes it */
 static size_t slurp(int fd, char *buf, size_t size)
 {
 	size_t n = 0;
 	ssize_t r;
-	while (n < size - 1 && (r = read(fd, buf + n, size - 1 - n)) > 0)
-		n += (size_t)r;
+	for (;;) {
+		struct pollfd pf[2] = {{fd, POLLIN, 0}, {master, POLLIN, 0}};
+		if (poll(pf, 2, 1000) < 0)
+			continue;
+		if (pf[1].revents & POLLIN)
+			pump();
+		if (pf[0].revents & (POLLIN | POLLHUP)) {
+			if (n >= size - 1 || (r = read(fd, buf + n, size - 1 - n)) <= 0)
+				break;
+			n += (size_t)r;
+		}
+	}
 	buf[n] = 0;
 	return n;
 }
@@ -69,14 +110,12 @@ static size_t slurp(int fd, char *buf, size_t size)
 /* what the master end read back from the slave: the terminal's output */
 static void drain(char *buf, size_t size)
 {
-	size_t n = 0;
-	ssize_t r;
-	int fl = fcntl(master, F_GETFL);
-	fcntl(master, F_SETFL, fl | O_NONBLOCK);
-	while (n < size - 1 && (r = read(master, buf + n, size - 1 - n)) > 0)
-		n += (size_t)r;
-	buf[n] = 0;
-	fcntl(master, F_SETFL, fl);
+	pump();
+	if (tn > size - 1)
+		tn = size - 1;
+	memcpy(buf, tout, tn);
+	buf[tn] = 0;
+	tn = 0;
 }
 
 int main(void)
@@ -179,7 +218,7 @@ int main(void)
 		CHECK(tcgetattr(master, &t) == 0 && !(t.c_lflag & ECHO)); /* echo is off while it reads */
 	}
 	kill(pid, SIGINT);
-	CHECK(waitpid(pid, &st, 0) == pid && WIFSIGNALED(st) && WTERMSIG(st) == SIGINT);
+	CHECK(reap(pid, &st) == pid && WIFSIGNALED(st) && WTERMSIG(st) == SIGINT);
 	{
 		struct termios t;
 		CHECK(tcgetattr(master, &t) == 0 && (t.c_lflag & ECHO)); /* and it is on again */

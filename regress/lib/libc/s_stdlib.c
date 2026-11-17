@@ -90,13 +90,13 @@ int main(void)
 		s = open(t, O_RDWR | O_NOCTTY); CHECK(s >= 0);
 		CHECK(isatty(s));
 		{
-			/* tcgetattr fills the whole structure (the kernel only 19 c_cc) */
+			/* tcgetattr fills the whole structure (Linux only 19 c_cc; FreeBSD all 20, the spare _POSIX_VDISABLE) */
 			struct termios a, b;
 			int k, z = 1;
 			memset(&a, 0x55, sizeof a);
 			memset(&b, 0xaa, sizeof b);
 			CHECK(tcgetattr(s, &a) == 0 && tcgetattr(s, &b) == 0 && !memcmp(&a, &b, sizeof a));
-			for (k = 19; k < NCCS; k++) if (a.c_cc[k]) z = 0;
+			for (k = 19; k < NCCS; k++) if (a.c_cc[k] && a.c_cc[k] != _POSIX_VDISABLE) z = 0;
 			CHECK(z && cfgetospeed(&a) == cfgetospeed(&b));
 			b.c_iflag |= BRKINT;
 			CHECK(tcsetattr(s, TCSANOW, &b) == 0 && tcgetattr(s, &a) == 0 && !memcmp(&a, &b, sizeof a));

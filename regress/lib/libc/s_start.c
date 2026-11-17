@@ -1,5 +1,6 @@
 /* Start-up, TLS, exit and error-string behaviour. */
 #include <stdlib.h>
+#include <signal.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -47,11 +48,11 @@ int main(int argc, char **argv, char **envp)
 	CHECK(strerror_r(9999, buf, sizeof buf) == EINVAL && !strcmp(buf, "Unknown error 9999"));
 	for (i = 1; i < 134; i++) CHECK(strerror(i) != 0 && strlen(strerror(i)) > 3);
 	CHECK(!strcmp(strsignal(11), "Segmentation fault"));
-	CHECK(!strcmp(strsignal(40), "Real-time signal 5"));
+	CHECK(!strcmp(strsignal(SIGRTMIN + 5), "Real-time signal 5"));
 	CHECK(!strcmp(strsignal(0), "Unknown signal 0"));
 	CHECK(getenv("PATH") != 0 || 1);
 	CHECK(getenv("") == 0 && getenv("A=B") == 0);
-	CHECK(EXIT_SUCCESS == 0 && PATH_MAX == 4096);
+	CHECK(EXIT_SUCCESS == 0 && PATH_MAX == 1024);
 	assert(1 + 1 == 2);
 	{ char *e; errno = 0; CHECK(strtol("12", &e, 1) == 0 && errno == EINVAL);
 	  errno = 0; CHECK(strtoul("12", &e, 37) == 0 && errno == EINVAL); }

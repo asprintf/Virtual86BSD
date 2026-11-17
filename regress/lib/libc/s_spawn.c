@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -44,7 +45,7 @@ static int stop(const char *p, const struct stat *st, int type, struct FTW *f)
 
 int main(int argc, char **argv)
 {
-	char dir[64] = "/tmp/libc-sspawn.XXXXXX", cwd[1024], buf[256];
+	char dir[64] = "/tmp/libc-sspawn.XXXXXX", cwd[1024], buf[256], self[1100];
 	volatile int v = 1;
 	int r, st, p[2];
 	pid_t pid;
@@ -54,7 +55,9 @@ int main(int argc, char **argv)
 	if (argc > 1 && !strcmp(argv[1], "sched")) {
 		struct sched_param sp;
 		sched_getparam(0, &sp);
-		return sched_getscheduler(0) * 100 + sp.sched_priority;
+		/* SCHED_OTHER's priority is the system's (FreeBSD reports a dynamic one) */
+		r = sched_getscheduler(0);
+		return r == SCHED_OTHER ? 0 : r == SCHED_FIFO ? 100 + sp.sched_priority : 200 + sp.sched_priority;
 	}
 
 	/* setjmp / longjmp */
@@ -79,11 +82,13 @@ int main(int argc, char **argv)
 	sigprocmask(SIG_SETMASK, &set, 0);
 
 	CHECK(mkdtemp(dir) != 0 && getcwd(cwd, sizeof cwd) != 0 && chdir(dir) == 0);
+	/* this program, for the scheduling test (no /proc/self/exe on every system) */
+	snprintf(self, sizeof self, "%s%s%s", argv[0][0] == '/' ? "" : cwd, argv[0][0] == '/' ? "" : "/", argv[0]);
 
 	/* posix_spawn */
 	{
 		char *argv[] = { "sh", "-c", "echo out; echo err >&2; exit 3", 0 };
-		char *argv2[] = { "sh", "-c", "pwd; kill -0 $$; echo $(($$ == $(ps -o pgid= -p $$)))", 0 };
+		char *argv2[] = { "sh", "-c", "pwd; kill -0 $$; sleep 1", 0 };
 		char *argv3[] = { "true", 0 };
 		posix_spawn_file_actions_t fa;
 		posix_spawnattr_t at;
@@ -116,10 +121,10 @@ int main(int argc, char **argv)
 		sigemptyset(&set); sigaddset(&set, SIGUSR2);
 		posix_spawnattr_setsigmask(&at, &set);
 		CHECK(posix_spawn(&pid, "/bin/sh", &fa, &at, argv2, environ) == 0);
+		CHECK(getpgid(pid) == pid);           /* its own process group (it sleeps a second) */
 		CHECK(waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == 0);
 		r = open("out2", O_RDONLY); buf[read(r, buf, sizeof buf - 1)] = 0; close(r);
 		CHECK(strstr(buf, "/sub\n") != 0);
-		CHECK(strstr(buf, "\n1\n") != 0);     /* its own process group */
 		posix_spawnattr_destroy(&at);
 		posix_spawn_file_actions_destroy(&fa);
 
@@ -140,25 +145,25 @@ int main(int argc, char **argv)
 			waitpid(pid, &st, 0);
 			fifo_ok = WIFEXITED(st) && WEXITSTATUS(st) == 0;
 			CHECK(posix_spawnattr_setflags(&at, POSIX_SPAWN_SETSCHEDULER) == 0);
-			r = posix_spawn(&pid, "/proc/self/exe", 0, &at, argv5, environ);
+			r = posix_spawn(&pid, self, 0, &at, argv5, environ);
 			if (fifo_ok) {
-				CHECK(r == 0 && waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == SCHED_FIFO * 100 + 5);
+				CHECK(r == 0 && waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == 100 + 5);
 			} else
 				CHECK(r == EPERM);
 			/* the policy alone: SCHED_OTHER with priority 0 */
 			sp.sched_priority = 0;
 			posix_spawnattr_setschedpolicy(&at, SCHED_OTHER);
 			posix_spawnattr_setschedparam(&at, &sp);
-			CHECK(posix_spawn(&pid, "/proc/self/exe", 0, &at, argv5, environ) == 0);
+			CHECK(posix_spawn(&pid, self, 0, &at, argv5, environ) == 0);
 			CHECK(waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == 0);
-			/* parameters only, keeping our SCHED_OTHER: priority 50 is invalid there */
-			sp.sched_priority = 50;
+			/* parameters only, keeping our SCHED_OTHER: one above its maximum */
+			sp.sched_priority = sched_get_priority_max(SCHED_OTHER) + 1;
 			posix_spawnattr_setschedparam(&at, &sp);
 			posix_spawnattr_setflags(&at, POSIX_SPAWN_SETSCHEDPARAM);
-			CHECK(posix_spawn(&pid, "/proc/self/exe", 0, &at, argv5, environ) == EINVAL);
+			CHECK(posix_spawn(&pid, self, 0, &at, argv5, environ) == EINVAL);
 			sp.sched_priority = 0;
 			posix_spawnattr_setschedparam(&at, &sp);
-			CHECK(posix_spawn(&pid, "/proc/self/exe", 0, &at, argv5, environ) == 0);
+			CHECK(posix_spawn(&pid, self, 0, &at, argv5, environ) == 0);
 			CHECK(waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) == 0);
 			posix_spawnattr_destroy(&at);
 		}

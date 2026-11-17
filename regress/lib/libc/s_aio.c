@@ -14,6 +14,7 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -391,12 +392,13 @@ static void devctl(int fd)
 	int p[2], n = -1, info = -1;
 	CHECK(pipe(p) == 0);
 	CHECK(write(p[1], "12345", 5) == 5);
-	CHECK(posix_devctl(p[0], 0x541B /* FIONREAD */, &n, sizeof n, &info) == 0);
+	/* the requests are the system's (<sys/ioctl.h>) */
+	CHECK(posix_devctl(p[0], (int)FIONREAD, &n, sizeof n, &info) == 0);
 	CHECK(n == 5 && info == 0);
-	CHECK(posix_devctl(-1, 0x541B, &n, sizeof n, 0) == EBADF);
-	CHECK(posix_devctl(fd, 0x5413 /* TIOCGWINSZ */, &n, 8, 0) == ENOTTY);
+	CHECK(posix_devctl(-1, (int)FIONREAD, &n, sizeof n, 0) == EBADF);
+	CHECK(posix_devctl(fd, (int)TIOCGWINSZ, &n, 8, 0) == ENOTTY);
 	/* _IOR('T', 0x30, unsigned) needs 4 bytes */
-	CHECK(posix_devctl(p[0], (int)0x80045430, &n, 2, 0) == EINVAL);
+	CHECK(posix_devctl(p[0], (int)_IOR('T', 0x30, unsigned), &n, 2, 0) == EINVAL);
 	close(p[0]); close(p[1]);
 }
 

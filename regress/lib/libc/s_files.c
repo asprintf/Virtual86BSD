@@ -36,8 +36,14 @@ int main(void)
 	fd = open("ap", O_RDWR | O_CREAT | O_TRUNC | O_APPEND, 0644);
 	CHECK(fd >= 0 && write(fd, "abcdef", 6) == 6 && pwrite(fd, "XY", 2, 1) == 2);
 	memset(buf, 0, 8);
-	CHECK(pread(fd, buf, 7, 0) == 6 && !strcmp(buf, "aXYdef") && lseek(fd, 0, SEEK_CUR) == 6);
-	CHECK(write(fd, "!", 1) == 1 && pread(fd, buf, 7, 0) == 7 && buf[6] == 0x21);
+	if (pread(fd, buf, 8, 0) == 8) {
+		/* FreeBSD's kernel appends a pwrite() on an O_APPEND descriptor (POSIX: at the offset) */
+		CHECK(!memcmp(buf, "abcdefXY", 8));
+		CHECK(write(fd, "!", 1) == 1);
+	} else {
+		CHECK(pread(fd, buf, 7, 0) == 6 && !strcmp(buf, "aXYdef") && lseek(fd, 0, SEEK_CUR) == 6);
+		CHECK(write(fd, "!", 1) == 1 && pread(fd, buf, 7, 0) == 7 && buf[6] == 0x21);
+	}
 	close(fd);
 	CHECK(unlink("ap") == 0);
 	/* O_EXEC: execute permission (even for root, some x bit) */
@@ -123,7 +129,8 @@ int main(void)
 	CHECK(fstatat(AT_FDCWD, "s", &sa, 12345) == -1 && errno == EINVAL);
 	CHECK(chmod("f", 0600) == 0 && stat("f", &sa) == 0 && (sa.st_mode & 07777) == 0600);
 	CHECK(fchmodat(AT_FDCWD, "f", 0640, 0) == 0 && stat("f", &sa) == 0 && (sa.st_mode & 07777) == 0640);
-	CHECK(fchmodat(AT_FDCWD, "s", 0600, AT_SYMLINK_NOFOLLOW) == -1 && errno == EOPNOTSUPP);
+	/* (symbolic links have a mode of their own in FreeBSD: lchmod) */
+	CHECK(fchmodat(AT_FDCWD, "s", 0600, AT_SYMLINK_NOFOLLOW) == 0 || errno == EOPNOTSUPP);
 	CHECK(access("f", R_OK | W_OK) == 0 && access("nonexistent", F_OK) == -1 && errno == ENOENT);
 	CHECK(faccessat(AT_FDCWD, "f", R_OK, AT_EACCESS) == 0);
 	ts[0].tv_sec = 1000000000; ts[0].tv_nsec = 5;

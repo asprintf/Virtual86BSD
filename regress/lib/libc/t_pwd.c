@@ -35,7 +35,17 @@ int main(void)
 	char buf[4096], small[8];
 	int i, n, r;
 	unsigned long cnt = 0;
-	static const char *dirs[] = { "/etc", "/usr/include", "/usr/bin", "/nonexistent", "/etc/passwd" };
+	/* directories of the test's own (TEST_ROOT: a copy is in the system that runs the
+	 * program, the same tree), so that the lists agree between systems */
+	const char *root = getenv("TEST_ROOT");
+	char dirbuf[5][300];
+	const char *dirs[5];
+	static const char *const sub[5] = { "/d1", "/d2", "/d3", "/nonexistent", "/d1/f01" };
+	for (i = 0; i < 5; i++) {
+		strcpy(dirbuf[i], i == 3 || !root ? "" : root);
+		strcat(dirbuf[i], sub[i]);
+		dirs[i] = dirbuf[i];
+	}
 
 	while ((p = getpwent())) ppw(p);
 	setpwent();
@@ -61,7 +71,7 @@ int main(void)
 	for (i = 0; i < 5; i++) {
 		errno = 0;
 		n = scandir(dirs[i], &v, i & 1 ? nodot : 0, alphasort);
-		os(dirs[i]); oc(' '); oi(n); oc(' '); oi(n < 0 ? errno : 0); onl();
+		os(sub[i]); oc(' '); oi(n); oc(' '); oi(n < 0 ? errno : 0); onl();
 		for (r = 0; r < n; r++) {
 			if (i != 2 || r < 50) { os(v[r]->d_name); onl(); }
 			free(v[r]);
@@ -69,11 +79,11 @@ int main(void)
 		if (n >= 0) free(v);
 	}
 	{
-		DIR *d = opendir("/usr/include");
+		DIR *d = opendir(dirs[1]);
 		struct dirent *de;
-		while ((de = readdir(d))) cnt += strlen(de->d_name);
+		while (d && (de = readdir(d))) cnt += strlen(de->d_name);
 		ou(cnt); onl();
-		closedir(d);
+		if (d) closedir(d);
 	}
 	oflush();
 	return 0;

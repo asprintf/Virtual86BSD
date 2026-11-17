@@ -13,3 +13,4 @@
 /sys/arch/*/stand/boot/boot.elf
 /sys/arch/*/stand/mbr/mbr
 /sys/arch/*/stand/mbr/mbr.elf
+/regress/lib/libc/out/
