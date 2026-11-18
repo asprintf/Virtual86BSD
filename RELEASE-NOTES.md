@@ -19,7 +19,10 @@ is gone; read them as history.
   reporting `POLLERR`/`EIO`; `ppoll`/`pselect` delivering pending signals).
   The old kernel, its Linux system call compatibility, its loader and its FFS
   and ext2 code are removed; so are the OpenBSD-style `config`
-  and boot-message conventions of the kernel (`usr.sbin/config` is left, unused).
+  and boot-message conventions of the kernel.  `bootstrap.sh`, `chroot.sh`,
+  `mkdisk.sh`, `boot.sh`, `distrib/build.sh` (the host-run stages), `usr.sbin/config`
+  and `regress/sys` (the old kernel's tests) are removed; the `Makefile` has
+  `kernel`, `image`, `boot`, `regress` for the new way.
 * The C library talks FreeBSD's system call interface (`TARGET_ABI=freebsd`
   is the only one): carry-flag errors, FreeBSD's constants and structures,
   `thr_new` and `_umtx_op` for threads, its signal trampoline and auxiliary
@@ -52,9 +55,8 @@ image.
   on the image.
 * A DHCP client; the network is configured statically for QEMU's user
   networking.
-* `bootstrap.sh`, `chroot.sh`, `mkdisk.sh`, `boot.sh` and the `Makefile`'s
-  release targets still describe the old kernel and do not build this one; a
-  chroot on a Linux host is not possible.
+* A chroot on a Linux host is not possible (the C library speaks FreeBSD's
+  system calls).
 * The ports have not been rebuilt on the new kernel.
 * `fuser` and `ipcs` read Linux's `/proc`; some tests of `sysctl`, `mount`,
   `umount` and `fsck` have expectations from the old kernel.

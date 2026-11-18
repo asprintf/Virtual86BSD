@@ -59,30 +59,26 @@ Tests, the test suites of the ports).
     usr.bin/        the other utilities, one directory each (README.md: the
                     list, with tests); tl/ is the test language of their
                     tests (not POSIX, but installed too: /usr/bin/tl)
-    usr.sbin/       syslogd, rcctl, makefs; config belongs to the old
-                    kernel (see its README.md)
+    usr.sbin/       syslogd, rcctl, makefs
     sbin/init/      init, the first process
     etc/            the configuration files of a V86BSD system
     share/doc/      conformance.md: the external test suites and their
                     results; credits.md: the code adapted from the BSDs and
                     imported from FreeBSD, with its licences; hier.md: the
                     file system; legacy.md: interfaces of older editions
+    Makefile        make kernel, image, boot, regress ... (its head lists them)
     distrib/        the scripts behind all of that (below)
     regress/        the tests: regress/{bin,sbin,libexec,usr.bin,usr.sbin}/
                     <utility>, lib/libc (the C library), os-test (Sortix's
-                    suites, with V86BSD's legacy suites), run_tests.sh;
-                    regress/sys holds the old kernel's tests
+                    suites, with V86BSD's legacy suites), run_tests.sh
     ports/          third-party software for it: ncurses, Rogue, Lua, SQLite,
                     sqllogictest, Mbed TLS, curl (README.md; a HOWTO.md and a
                     build.sh for each)
 
-`bootstrap.sh`, `chroot.sh`, `mkdisk.sh`, `boot.sh`, the `Makefile` and
-`distrib/build.sh`, `distrib/mkdisk*.sh` and `distrib/boot.sh` are the
-previous kernel's way of building (stages run on the host, a `root/` to
-`chroot` into, an image made of that).  They have not been moved to the
-FreeBSD kernel yet and do not build it: use the scripts below.  A
-chroot on the Linux host is not possible any more, since the C library
-speaks FreeBSD's system calls: the system runs in QEMU.
+The previous kernel's way of building (`bootstrap.sh`, `chroot.sh`,
+`mkdisk.sh`, the stages of `distrib/build.sh`) is gone.  A chroot on the
+Linux host is not possible any more, since the C library speaks FreeBSD's
+system calls: the system runs in QEMU.
 
 ## Building and booting it
 
@@ -91,6 +87,10 @@ kernel, the loader, the C library and every program; no gcc is used),
 Python 3 (FreeBSD's `make.py` bootstraps bmake with it), `rsync`,
 `/usr/bin/time`, and QEMU (`qemu-system-x86_64`) with KVM (the scripts
 pass `-accel kvm`).  Nothing is installed outside the tree and needs root.
+
+`make kernel image boot` does all of this (`make release` builds, `make boot`
+boots the image in QEMU; the head of the `Makefile` lists the targets).
+The steps are:
 
 **1. The kernel and the boot loader** (`distrib/build-freebsd.sh`, which
 makes a hard-link copy of `sys/`, `stand/` and `freebsd/` in `obj/freebsd`
@@ -165,8 +165,12 @@ log in as `root` (the password is `root` until `passwd` changes it).
   after the disks are written.  `Ctrl-A x` leaves QEMU at once; the next
   boot finds the disk not clean and `fsck -p` repairs it.
 
-`distrib/boot-freebsd.sh` is also how the C library's and the utilities'
-tests get their programs: they run in the same kind of image (below).
+`make boot` (`distrib/qemu-freebsd.sh [-g] [-e] [-i] [-n] [-m MiB] [-s CPUS]
+[-p HOSTPORT:PORT] [IMAGE]`) boots an image that is already made: `-g` adds a
+window with the VGA screen and the keyboard, `-e` runs without KVM, `-i` makes
+the disk an AHCI disk (`ada0`), `-n` leaves out the network, `-p 8080:80`
+forwards port 8080 of the host to port 80 of the system.  The C library's and
+the utilities' tests run in the same kind of image (below).
 
 ## Testing
 
@@ -210,8 +214,9 @@ built for it, see "Where things stand").
 
 `share/doc/conformance.md` has the suites side by side, with the
 comparisons, the kernel patches the tests asked for, and what each result
-that is not a pass comes from.  `regress/sys` (the old kernel's `k_*` tests)
-and `regress/etc` have not been brought over to the new kernel.
+that is not a pass comes from.  `make regress` runs the C library's tests,
+`regress/etc` and the utilities'; `make gate-ost` and `make gate-pts` the two
+big suites.
 
 ## Where things stand
 
@@ -232,13 +237,9 @@ network of QEMU's user networking.  What the switch has not finished:
   for FreeBSD's ABI yet (it runs on the host's Linux only), so the system
   cannot compile anything itself, rebuild itself (`/usr/src` is not in the
   image) or run the tests that compile code.
-* **The old way of building is still in the tree** (see "Layout"): the
-  stages, the self-compilation check of c17, `make release`, the chroot.
 * **The ports** (`ports/`) were built and tested on the old kernel and
   have not been tried on the FreeBSD one.
 * **No DHCP client**; `/etc/netstart` says so for a `dhcp` line.
-* `usr.sbin/config` makes the compile directory of the old kernel; FreeBSD's
-  own `config` builds the new one.
 
 The to-do items are kept in the author's notes, not in the tree.
 

@@ -12,8 +12,8 @@ were built and tested on V86BSD's previous kernel, in the chroot and in QEMU,
 by the system's own `c17`.  They have not been built or run on the FreeBSD
 kernel yet: the image `distrib/boot-freebsd.sh` makes has no compiler, no
 `/usr/src` and no `/usr/include`, and the way described below (`get.sh` into
-`root/`, `chroot.sh`, `mkdisk.sh`, `boot.sh`) is the old pipeline, which does not
-build the FreeBSD-kernel system (see the top-level `README.md`).  The
+`root/`, `chroot.sh`, `mkdisk.sh`, `boot.sh`) used scripts that are gone with
+the old pipeline (see the top-level `README.md`).  The
 measurements and the DHCP network mentioned here are those of the old
 system.  The ports will be rebuilt when the image has a compiler.
 
