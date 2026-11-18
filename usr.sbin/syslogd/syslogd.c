@@ -34,7 +34,7 @@
  *
  * Messages come from two places: the programs that call syslog(3) or
  * logger(1), which send RFC 3164 lines ("<PRI>Mmm dd hh:mm:ss TAG[PID]:
- * text") to the datagram socket /dev/log, and the kernel, whose messages
+ * text") to the datagram socket /var/run/log, and the kernel, whose messages
  * are read from /dev/klog (each one is "/bsd: text", with the priority
  * LOG_KERN|LOG_CRIT unless the line starts with "<N>").  The time stamp is
  * always the daemon's own: a program cannot back-date a line.
@@ -93,7 +93,7 @@
 #include <unistd.h>
 #include <utmpx.h>
 
-#define PATH_LOGSOCK "/dev/log"
+#define PATH_LOGSOCK "/var/run/log"
 #define PATH_KLOG    "/dev/klog"
 #define PATH_CONF    "/etc/syslog.conf"
 #define PATH_PID     "/var/run/syslog.pid"
@@ -432,7 +432,7 @@ static int takepri(const char **sp, size_t *np, int def)
 	return pri;
 }
 
-/* a datagram of /dev/log */
+/* a datagram of /var/run/log */
 static void printline(const char *s, size_t n)
 {
 	char text[MAXLINE + 1];

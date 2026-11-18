@@ -1,7 +1,7 @@
 # syslogd — the system log daemon (V86BSD)
 
 The `syslogd` of the BSDs, reduced to what a single machine needs. Programs log with `syslog(3)`
-(or `logger(1)`): RFC 3164 datagrams to `/dev/log`. The kernel's messages are read from
+(or `logger(1)`): RFC 3164 datagrams to `/var/run/log`. The kernel's messages are read from
 `/dev/klog`. Each message goes where `/etc/syslog.conf` says.
 
     syslogd [-d] [-f config_file] [-k klog_device] [-m mark_interval]
