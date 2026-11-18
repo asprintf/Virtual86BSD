@@ -1,2 +1,1 @@
-Virtual/86 BSD 1.0: the POSIX.1-2024 utilities, C library and kernel, compiled by themselves.
-The sources are in /usr/src; c17 compiles, make builds.
+Virtual/86 BSD: the POSIX.1-2024 utilities and C library, on the FreeBSD kernel.

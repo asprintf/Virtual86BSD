@@ -51,6 +51,13 @@ fi
 if [ -x /sbin/mount ]; then
 	mount -uw / || echo 'warning: / is still read-only'
 fi
+
+# Entropy for the next boot: the loader hands /boot/entropy to the kernel
+# (loader.conf entropy_cache_load).  /dev/random blocks until the kernel has
+# been seeded, which takes seconds on a first boot: do not wait for it.
+if [ -c /dev/random ] && [ -d /boot ]; then
+	(umask 077; dd if=/dev/random of=/boot/entropy bs=4096 count=1) > /dev/null 2>&1 &
+fi
 if [ -x /sbin/mount ]; then
 	mount -a || echo 'warning: some file systems in /etc/fstab did not mount'
 fi
