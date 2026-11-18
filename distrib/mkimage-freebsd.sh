@@ -86,7 +86,7 @@ cp "$top/stand/defaults/loader.conf" "$root/boot/defaults/loader.conf"
 cp "$top/sys/amd64/conf/GENERIC.hints" "$root/boot/device.hints"
 [ -z "$init" ] || cp "$init" "$root/sbin/init"
 printf '%s\n' '# Device	Mountpoint	FStype	Options	Dump	Pass#' \
-    '/dev/gpt/rootfs	/	ufs	rw	1	1' > "$root/etc/fstab"
+    '/dev/gpt/rootfs	/	ufs	ro	1	1' > "$root/etc/fstab"
 cat > "$root/boot/loader.conf" <<'EOF'
 console="comconsole,vidconsole"
 boot_serial="YES"

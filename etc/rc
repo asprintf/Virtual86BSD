@@ -24,7 +24,7 @@ fi
 [ -f /etc/rc.conf ] && . /etc/rc.conf
 [ -f /etc/rc.conf.local ] && . /etc/rc.conf.local
 
-# The kernel mounted / (as it was told: read-only or not), /dev and /proc.
+# The kernel mounted / read-only (fstab says ro), /dev and /proc.
 # Check the file systems of /etc/fstab first, / among them (it is still
 # read-only if it is an FFS: fsck_ffs asks for a reboot when it had to change
 # it).  A failed check leaves rc, and init starts the single-user shell: fix
@@ -47,7 +47,10 @@ if [ -x /sbin/fsck ] && [ -x /sbin/fsck_ffs ]; then
 	esac
 fi
 
-# / is writable (init made it so); mount what /etc/fstab lists.
+# / is still read-only: make it writable, then mount what /etc/fstab lists.
+if [ -x /sbin/mount ]; then
+	mount -uw / || echo 'warning: / is still read-only'
+fi
 if [ -x /sbin/mount ]; then
 	mount -a || echo 'warning: some file systems in /etc/fstab did not mount'
 fi

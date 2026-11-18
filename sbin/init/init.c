@@ -674,33 +674,15 @@ static enum state death_single(void) {
   return SINGLE_USER;
 }
 
-/* the FreeBSD kernel starts init with no descriptors and / read-only */
+/* the FreeBSD kernel starts init with no descriptors; / is as fstab said (rc makes it writable after fsck) */
 static void kernel_start(void) {
-  static char fstype[] = "ufs", fspath[] = "/";
   int fd = open(console_path, O_RDWR | O_NOCTTY);
-  struct iovec iov[10];
-  struct statfs sf;
-  int n = 0;
   if (fd < 0)
     fd = open("/dev/null", O_RDWR);
   while (fd >= 0 && fd < 3)
     fd = dup(fd);
   if (fd > 2)
     close(fd);
-  if (statfs("/", &sf) < 0)
-    return;
-#define NV(name, val, len) do { iov[n].iov_base = (void *)(name); iov[n++].iov_len = strlen(name) + 1; \
-    iov[n].iov_base = (void *)(val); iov[n++].iov_len = (len); } while (0)
-  NV("fstype", fstype, sizeof fstype);
-  NV("fspath", fspath, sizeof fspath);
-  NV("from", sf.f_mntfromname, strlen(sf.f_mntfromname) + 1);
-  NV("update", NULL, 0);
-  NV("noro", NULL, 0);
-#undef NV
-  if (!(sf.f_flags & MNT_RDONLY))
-    return;
-  if (nmount(iov, n, MNT_UPDATE) < 0)
-    say("cannot make / writable");
 }
 
 int main(int argc, char **argv) {
