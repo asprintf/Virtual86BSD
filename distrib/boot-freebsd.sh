@@ -41,7 +41,7 @@ for t in dumpfs fsck_ffs growfs newfs tunefs; do cp "$out/ufstools/bin/$t" "$roo
 ln -sf fsck_ffs "$root/sbin/fsck_ufs"
 mkdir -p "$root/lib" "$root/etc" "$root/root" "$root/tmp" "$root/var/run" "$root/var/log" "$root/dev" "$root/mnt" "$root/usr/share"
 cp "$B/lib/libc.so" "$root/lib/libc.so"
-cp etc/* "$root/etc/" 2>/dev/null
+cp -R etc/. "$root/etc/"
 chmod 600 "$root/etc/master.passwd"
 [ -n "$nobuild" ] && exit 0
 sh distrib/mkimage-freebsd.sh -o "$out/v86bsd.img" -s 256 -d "$root" || exit 1
