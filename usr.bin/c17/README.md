@@ -52,7 +52,7 @@ in `libc/` (installed in `$(PREFIX)/lib/c17/libc`):
 `libc/glibc` and `libc/musl` are for Debian, Ubuntu and their
 derivatives (musl from the package musl-dev); on other distributions
 the directories may differ. `libc/v86bsd` is V86BSD's own C library
-installed in /usr (a V86BSD system: see ../../bootstrap.sh). `make
+installed in /usr (a V86BSD system). `make
 LIBC=musl` makes musl the default (`LIBC=glibc` is). When c17 runs, `C17_LIBC` chooses another: the name of
 a profile, the pathname of one, or a directory with `include/` and `lib/`
 (a C library linked statically). `C17_LIBDIR` replaces

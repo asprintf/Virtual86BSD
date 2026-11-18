@@ -30,5 +30,4 @@
 
 `test_sysctl.sh` reads every kind of value (string, int, quad, the three structures), lists
 nodes and `-a`, sets the host and domain name (as root, and puts them back), reads a file with comments,
-and checks every error message. It is skipped where there is no `sysctl(2)`. The kernel side is
-`regress/sys/kern/k_sysctl.c`.
+and checks every error message. It is skipped where there is no `sysctl(2)`.

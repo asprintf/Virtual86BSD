@@ -37,15 +37,15 @@
 #
 # Macros given on the command line (CC=, CFLAGS=, PREFIX=, BINDIR=, DESTDIR=)
 # reach every directory.  BINDIR is $(PREFIX)/sbin (/usr/sbin on the system);
-# the programs of usr.sbin/ are linked dynamically (see ../distrib/build.sh).
-# One program: cd config && make.
+# the programs of usr.sbin/ are linked dynamically (distrib/boot-freebsd.sh builds them).
+# One program: cd syslogd && make.
 
 .POSIX:
 
 PREFIX = /usr/local
 BINDIR = $(PREFIX)/sbin
 
-SUBDIR = config makefs rcctl syslogd
+SUBDIR = makefs rcctl syslogd
 
 all:
 	@for u in $(SUBDIR); do \

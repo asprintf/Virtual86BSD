@@ -37,7 +37,7 @@
 #
 # Macros given on the command line (CC=, CFLAGS=, PREFIX=, BINDIR=, DESTDIR=)
 # reach every directory.  BINDIR is /sbin (hier(7)), whatever PREFIX is; the
-# programs of sbin/ are linked statically (see ../distrib/build.sh).
+# programs of sbin/ are built by distrib/boot-freebsd.sh (clang, against lib/libc).
 # One utility: cd sed && make.
 
 .POSIX:
