@@ -1,11 +1,76 @@
+# Virtual/86 BSD — release notes
+
+## After 1.0: the FreeBSD kernel (17–18 November 2026)
+
+V86BSD no longer has a kernel of its own.  It runs on **FreeBSD's kernel**
+(`releng/15.2`, configuration `sys/amd64/conf/V86`: virtio disk, network and
+console, AHCI, `vt` on the VGA and EFI framebuffers, UFS2 with soft updates,
+IPv4 and IPv6, SMP, SysV and POSIX IPC), **FreeBSD's boot loader** (`stand/`:
+BIOS `gptboot` and UEFI `loader.efi`) and **UFS2** made by FreeBSD's
+`newfs` and checked by its `fsck_ffs`.  Everything else is still V86BSD's own.
+The sections below this one describe version 1.0 and its own kernel, which
+is gone; read them as history.
+
+**What changed**
+* `sys/` and `stand/` are FreeBSD's (imported by `distrib/import-freebsd.sh`;
+  `freebsd/` has the build support), with six small patches
+  (`distrib/freebsd/patches-sys/`: the `kern.ostype` name; `F_OFD_*` locks;
+  `setpgid` waking `wait`; `exec` clearing `SA_ONSTACK`; a hung-up pty
+  reporting `POLLERR`/`EIO`; `ppoll`/`pselect` delivering pending signals).
+  The old kernel, its Linux system call compatibility, its loader and its FFS
+  and ext2 code are removed; so are the OpenBSD-style `config`
+  and boot-message conventions of the kernel (`usr.sbin/config` is left, unused).
+* The C library talks FreeBSD's system call interface (`TARGET_ABI=freebsd`
+  is the only one): carry-flag errors, FreeBSD's constants and structures,
+  `thr_new` and `_umtx_op` for threads, its signal trampoline and auxiliary
+  vector.  Its dynamic linker is still `/lib/libc.so`.  New: `statfs`,
+  `fstatfs`, `getfsstat`, `getmntinfo`.
+* Compiled by **clang and lld** only: kernel, loader, C library, programs, ports.
+  There is no gcc and no self-compilation check any more.
+* Ported to the kernel: `init` (opens `/dev/console` itself, leaves `/`
+  read-only for `rc`), `sysctl` (FreeBSD's name-based MIB), `mount` and
+  `umount` (`nmount`), `route` (a routing socket), `ifconfig`, `ps`, `df`,
+  `dmesg`, `halt`, `fsck`.  Disks are `vtbd0`, `ada0`; the network card is
+  `vtnet0` (`/etc/hostname.vtnet0`).
+* `newfs`, `fsck_ffs`, `tunefs`, `dumpfs` and `growfs` are FreeBSD's
+  (`distrib/ufstools-freebsd.sh` builds them against V86BSD's C library).
+* `distrib/boot-freebsd.sh` builds the system and a bootable GPT image that
+  boots by BIOS and by UEFI, on the serial console and on a framebuffer
+  console with a font of the XNU console.  `distrib/build-freebsd.sh` builds
+  kernel and loader, `distrib/utilsuite-freebsd.sh` runs the utilities'
+  tests in the VM.  See `README.md`.
+
+**Tested** (`share/doc/conformance.md`): `regress/lib/libc` 47 of 47 (static,
+dynamic, four processors); os-test 5670 of 5816, every non-pass explained;
+Open POSIX Test Suite 1805 of 1876.  The utilities' tests: 6484 pass, 556
+fail on the first full run, about 300 of them for want of a compiler in the
+image.
+
+**Not yet**
+* A compiler in the image (`c17` is not built for FreeBSD's ABI), hence no
+  rebuilding inside the system; `/usr/src`, `/usr/include` and `libc.a` are not
+  on the image.
+* A DHCP client; the network is configured statically for QEMU's user
+  networking.
+* `bootstrap.sh`, `chroot.sh`, `mkdisk.sh`, `boot.sh` and the `Makefile`'s
+  release targets still describe the old kernel and do not build this one; a
+  chroot on a Linux host is not possible.
+* The ports have not been rebuilt on the new kernel.
+* `fuser` and `ipcs` read Linux's `/proc`; some tests of `sysctl`, `mount`,
+  `umount` and `fsck` have expectations from the old kernel.
+
+---
+
 # Virtual/86 BSD 1.0 — release notes
+
+(Written for the kernel V86BSD had then; see above for what replaced it.)
 
 Virtual/86 BSD (V86BSD) 1.0, November 2026.  It is a fork of Shall 0.9.1
 (31 October – 6 November 2026), shaped after OpenBSD and made for virtual
 machines: QEMU with KVM is the platform it is built and tested on.  This page
 says what changed since Shall 0.9.1 and what is still missing.  The commit
-log has the detail; the manuals are `README.md`, `sys/README.md` and
-`share/doc/`.
+log has the detail; the manuals are `README.md` and `share/doc/`
+(`sys/README.md` is now FreeBSD's own).
 
 ## What it is
 

@@ -1,23 +1,19 @@
-# Virtual/86 BSD — the POSIX.1-2024 utilities, C library and kernel, compiled by themselves
+# Virtual/86 BSD — the POSIX.1-2024 utilities and C library, on the FreeBSD kernel
 
-Virtual/86 BSD (V86BSD) is a fork of Shall 0.9.1, shaped after OpenBSD and
-meant for virtual machines.  It is a system written from the standard: every utility of
-POSIX.1-2024 (XCU, with the XSI option), a C17 compiler among them, a
-C library for x86-64 with all the interfaces of ISO C17 and POSIX.1-2024
-(XSH), and a kernel that runs it (and Linux programs: it speaks Linux's
-system call interface).  It needs nothing else to build itself: c17
-compiles, assembles and links -- the kernel too; make, ar, yacc, lex and
-sh do the rest.  On a Linux host it makes a small system you can chroot
-into, or boot in QEMU with its own kernel.
+Virtual/86 BSD (V86BSD) is a fork of Shall 0.9.1 for virtual machines.  It is
+a system written from the standard: every utility of POSIX.1-2024 (XCU, with
+the XSI option), a C library for x86-64 with all the interfaces of ISO C17
+and POSIX.1-2024 (XSH), a C17 compiler, and the BSD-style system around
+them (`init`, `getty`, `login`, `/etc/rc`, `rcctl`, `syslogd`, `ifconfig`, ...).
+Its kernel and boot loader are FreeBSD's.
 
-This is version 1.0 (November 2026; `osrelease` in `sys/conf/newvers.sh`): complete in
-what POSIX asks of the interfaces and utilities, and with the BSD file system
-for a root, but still young as a kernel (see "Where things stand").  The root
-is FFS2 now (`newfs`, `fsck`, `tunefs`, `makefs`, and a reload of a root that
-`fsck` changed; ext2 stays for reading other disks); the FFS driver is new,
-written for this system from the BSD code, and has had power-cut testing but
-not the years of use the BSDs' has.  Shall 0.9.1, which this system forked from, fixed
-what the external test suites showed after 0.9 (`share/doc/conformance.md`).
+Version 1.0 (November 2026) ran on a kernel written for it.  Since
+17 November 2026 it runs on **FreeBSD's kernel** (`releng/15.2`), FreeBSD's
+boot loader and UFS2, configured for QEMU: the C library, the programs and
+`/etc` were ported to FreeBSD's system call interface, and everything
+(the kernel and loader too) is built from this tree by clang and lld.  The
+old kernel, its loader and its FFS code are gone (commit `e791ee77` is
+the last that has them).  `RELEASE-NOTES.md` says what that changed.
 
 Shall, the system this one comes from, was made by Joost Orchidee Winter with Claude, Anthropic's AI model,
 which wrote most of the code from the text of the standard (POSIX.1-2024,
@@ -27,260 +23,238 @@ below, by differential testing against other implementations, and by
 external suites (the Open POSIX Test Suite, os-test, the POSIX Shell
 Tests, the test suites of the ports).
 
+## What is whose
+
+* **FreeBSD's**: the kernel (`sys/`), the boot loader (`stand/`: BIOS and
+  UEFI), the build support they need (`freebsd/`: `tools/build/make.py`,
+  `share/mk`, bmake, `config`, `makefs`, `mkimg`) and the UFS tools
+  (`newfs`, `fsck_ffs`, `tunefs`, `dumpfs`, `growfs`, in `freebsd/sbin`).
+  Imported unchanged from `releng/15.2` by `distrib/import-freebsd.sh`
+  (`freebsd/IMPORTED` has the commit), except for the six kernel patches in
+  `distrib/freebsd/patches-sys/` and the configuration `sys/amd64/conf/V86`
+  (CDDL parts, ZFS and DTrace are left out).  `share/doc/credits.md` has the
+  licences.
+* **V86BSD's own**: the C library (`lib/libc`, built for FreeBSD's ABI), all
+  utilities, `init`, `/etc`, the compiler `c17`, and the scripts that build
+  and test it all (`distrib/`).  The userland keeps source compatibility with
+  the BSDs, not binary compatibility: a FreeBSD program does not run on
+  V86BSD's C library (its dynamic linker is `/lib/libc.so`), and V86BSD's
+  programs are not meant for a FreeBSD userland.
+
 ## Layout
 
     README.md       this file
     LICENSE         BSD 3-clause
-    Makefile        buildworld, buildkernel, installworld, installkernel,
-                    release (a disk image), boot, regress (read its header)
-    bootstrap.sh    builds a Virtual/86 BSD system into a directory (calls make)
-    chroot.sh       enters it (with or without root privileges)
-    mkdisk.sh       makes a bootable disk image of it (v86bsd.img; calls make)
-    boot.sh         boots that image with V86BSD's kernel in QEMU
-    include/        the C library's public headers
+    sys/            FreeBSD's kernel; sys/amd64/conf/V86 is the configuration
+    stand/          FreeBSD's boot loader (gptboot, loader, loader.efi)
+    freebsd/        the rest of FreeBSD that those need to build (IMPORTED
+                    names the commit)
+    include/        the C library's public headers (FreeBSD's constants and
+                    structures where they meet the kernel)
     lib/libc/       the C library (README.md, STATUS.md; tools/)
     lib/libxcu/     code shared by the utilities (not installed)
-    bin/ sbin/      the essential utilities, one directory each (as in OpenBSD)
+    lib/libcurses/  X/Open Curses, with NetBSD's libterminfo
+    bin/ sbin/      the essential utilities, one directory each
+    libexec/        getty
     usr.bin/        the other utilities, one directory each (README.md: the
                     list, with tests); tl/ is the test language of their
                     tests (not POSIX, but installed too: /usr/bin/tl)
-    usr.sbin/       config (README.md), which makes the kernel's compile directory
-    sys/            the kernel (README.md); sys/arch/amd64/conf/GENERIC is
-                    its configuration
+    usr.sbin/       syslogd, rcctl, makefs; config belongs to the old
+                    kernel (see its README.md)
     sbin/init/      init, the first process
-    etc/            the configuration files of a Virtual/86 BSD system
-    share/doc/      conformance.md: the external test suites and their results;
-                    credits.md: the code adapted from OpenBSD and NetBSD, with its licences
-    distrib/        the scripts behind all of that: build.sh (the stages),
-                    mkdisk.sh, boot.sh, chroot.sh
-    regress/        the tests: regress/{bin,sbin,usr.bin,usr.sbin}/<utility>, lib/libc
-                    (the C library), sys (the kernel), os-test (Sortix's
-                    suites, with V86BSD's legacy suites), run_tests.sh
+    etc/            the configuration files of a V86BSD system
+    share/doc/      conformance.md: the external test suites and their
+                    results; credits.md: the code adapted from the BSDs and
+                    imported from FreeBSD, with its licences; hier.md: the
+                    file system; legacy.md: interfaces of older editions
+    distrib/        the scripts behind all of that (below)
+    regress/        the tests: regress/{bin,sbin,libexec,usr.bin,usr.sbin}/
+                    <utility>, lib/libc (the C library), os-test (Sortix's
+                    suites, with V86BSD's legacy suites), run_tests.sh;
+                    regress/sys holds the old kernel's tests
     ports/          third-party software for it: ncurses, Rogue, Lua, SQLite,
-                    sqllogictest, Mbed TLS, curl
-                    (README.md; a HOWTO.md and a build.sh for each)
+                    sqllogictest, Mbed TLS, curl (README.md; a HOWTO.md and a
+                    build.sh for each)
 
-## Building a system
+`bootstrap.sh`, `chroot.sh`, `mkdisk.sh`, `boot.sh`, the `Makefile` and
+`distrib/build.sh`, `distrib/mkdisk*.sh` and `distrib/boot.sh` are the
+previous kernel's way of building (stages run on the host, a `root/` to
+`chroot` into, an image made of that).  They have not been moved to the
+FreeBSD kernel yet and do not build it: use the scripts below.  A
+chroot on the Linux host is not possible any more, since the C library
+speaks FreeBSD's system calls: the system runs in QEMU.
 
-You need x86-64 Linux with a C compiler, make and ar (on Ubuntu:
-`build-essential`).  Then:
+## Building and booting it
 
-    sh bootstrap.sh            # builds root/ (a few minutes), as yourself
-    sh chroot.sh               # enters root/: V86BSD's sh, in /bin
+You need an x86-64 Linux host with **clang and lld** (they build the
+kernel, the loader, the C library and every program; no gcc is used),
+Python 3 (FreeBSD's `make.py` bootstraps bmake with it), `rsync`,
+`/usr/bin/time`, and QEMU (`qemu-system-x86_64`) with KVM (the scripts
+pass `-accel kvm`).  Nothing is installed outside the tree and needs root.
 
-or, to run it on its own kernel instead of the host's (see "Booting it"):
+**1. The kernel and the boot loader** (`distrib/build-freebsd.sh`, which
+makes a hard-link copy of `sys/`, `stand/` and `freebsd/` in `obj/freebsd`
+that looks like a FreeBSD source root, and runs `make.py` there; about 5
+minutes at `-j12`):
 
-    sh mkdisk.sh               # root/ as a disk image, v86bsd.img
-    sh boot.sh                 # boots it in QEMU; the shell comes up here
+    W="WITHOUT_CDDL=yes WITHOUT_ZFS=yes WITHOUT_TESTS=yes"
+    sh distrib/build-freebsd.sh -- -j12 $W WITH_DISK_IMAGE_TOOLS_BOOTSTRAP=yes KERNCONF=V86 kernel-toolchain
+    sh distrib/build-freebsd.sh -- -j12 $W KERNCONF=V86 buildkernel
+    sh distrib/build-freebsd.sh -- loader $W
 
-`chroot.sh` needs no privileges: as an ordinary user it enters through a
-user namespace (`unshare -r`, in which you are root and have your own
-`/proc`), or through bubblewrap or PRoot when those are installed;
-with sudo it uses chroot itself.  Ubuntu 23.10 and later may refuse
-user namespaces to ordinary users (see the head of `chroot.sh`).
+(The `crtbegin.o` error at the end of the loader build is expected: it comes
+from `stand/userboot/test`, which is not wanted.)  This gives the kernel
+(`obj/freebsd/obj/.../amd64.amd64/sys/V86/kernel`), `pmbr`, `gptboot`,
+`loader`, `loader.efi`, and the host tools `makefs` and `mkimg`.
 
-`bootstrap.sh` is a wrapper: it runs `make newroot buildworld buildkernel
-installworld distribution installkernel DESTDIR=root`, which one can run
-step by step (`make buildworld`, `make buildkernel`, and so on: the head of
-the `Makefile` lists them, and `share/doc/hier.md` says where things go).
-`make release` does all of it into `obj/root` and makes the disk image
-`obj/v86bsd.img`; `make boot` then boots it, and `make regress` runs every
-test (inside V86BSD).  The stages, each from a fresh copy of the sources
-(`distrib/build.sh`):
+**2. The system and a bootable image** (`distrib/boot-freebsd.sh`):
 
-1. **stage 0** — the host's compiler builds just five tools of this
-   package: c17, make, ar, yacc and lex.
-2. **stage 1** — those tools build the C library (`libc.a`, and
-   `libc.so`, which is also its own dynamic linker) and then every
-   utility against it (c17, make and ar too).  No program of the host
-   compiles anything from here on.
-3. **stage 2** — the utilities of stage 1, running on V86BSD's own C
-   library, build everything again.
-4. **check** — stage 1 and stage 2 are compared file by file: the c17
-   that the host's compiler made and the c17 that c17 made must produce
-   identical programs.
-5. **stage 3** — the utilities of stage 2 build the utilities for the
-   system, stripped and where hier(7) wants them: those of `bin/` in
-   `/bin` and of `sbin/` in `/sbin`, linked statically, as in OpenBSD
-   (they need nothing in `/usr`), the others in `/usr/bin`, dynamically
-   linked with `/usr/lib/libc.so`.  (The programs of stages 1 and 2 run on
-   the host, so they are linked statically and all in `usr/bin`; `-n`
-   links all of stage 3's statically too.)
-6. **init and kernel** — c17 of stage 2 builds `/sbin/init`, and the
-   kernel: `root/bsd`.
+    sh distrib/boot-freebsd.sh        # builds everything, makes the image, boots it
+    sh distrib/boot-freebsd.sh -n     # the same, but stops after the image
+    sh distrib/boot-freebsd.sh -o dir # elsewhere than obj/boot
 
-The grammars of awk, bc and sh are generated afresh by V86BSD's yacc and
-lex in every stage.
+It builds the C library (`lib/libc`, static and `libc.so`) and every program
+of `bin`, `sbin`, `libexec`, `usr.bin` and `usr.sbin` with clang, installs
+them into `obj/boot/root` as hier(7) wants them, builds FreeBSD's UFS tools
+against the same C library (`distrib/ufstools-freebsd.sh`), adds `etc/`, and
+makes `obj/boot/v86bsd.img` with `distrib/mkimage-freebsd.sh`.  The image
+is a GPT disk with an EFI system partition (`loader.efi` as
+`EFI/BOOT/BOOTX64.EFI`), a `freebsd-boot` partition (`gptboot`; `pmbr` in the
+protective MBR) and a UFS2 root with soft updates labelled `rootfs`, so it
+boots by BIOS and by UEFI.  The same inputs give the same image byte for byte
+(`SOURCE_DATE_EPOCH`, default 0).  `mkimage-freebsd.sh` takes `-o image`,
+`-s MiB` (default 128), `-d dir` (a root directory copied over the default
+files) and `-i init`; without a `/sbin/init` it puts a tiny static test
+program in the image.
 
-When the host's compiler is gcc (the default when `gcc` is on the `PATH`;
-`CC=c17` builds as above), gcc builds the world: stage 0 as before, then
-stage 1 compiles the C library and every utility with `gcc -O2 -Wall -Wextra`
-against V86BSD's headers (`lib/libc/tools/libc-cc`), and the same compiler
-builds stage 3, `/sbin/init` and the kernel (`make gnu` in its compile
-directory).  There is no stage 2 and no check: stage 2 is stage 1, which
-runs on the host.  c17 stays the system's compiler and the `c17` utility of
-POSIX.1-2024; it is built and installed like the other programs.  Inside V86BSD, which has no gcc, the build is the
-one above.
+The programs are `-fPIE` and linked dynamically with `/lib/libc.so`
+(`init` statically); `lib/libc/tools/libc-cc` is the compiler
+wrapper that points clang at this tree's headers and library.
 
-`root/` then gets the directories of hier(7), `/etc` (from `etc`), empty
-`/dev` and `/proc` (the kernel and `chroot.sh` mount file systems there),
-these sources in `/usr/src`, and the host's
-time zone database in `/usr/share/zoneinfo` (if it has one; `ZONEINFO=dir`
-names another) and its terminfo database in `/usr/share/terminfo` (for
-tput, more, vi; `TERMINFO=dirs` names others), its locale sources and
-charmaps in `/usr/share/i18n` (for `localedef`, so that locales can be
-made inside: `localedef -f UTF-8 -i nl_NL nl_NL.UTF-8`; `I18N=dir` names
-another; compressed charmaps are uncompressed on the way), and its certificate
-authorities in `/etc/ssl/certs/ca-certificates.crt` (for curl, see
-`ports/`; `CABUNDLE=file` names another).  Inside, the
-system rebuilds itself the same way, with its own c17 as the host's
-compiler, and gives the same files:
+## Running it
 
-    cd /usr/src && make buildworld buildkernel
+The script boots the image in QEMU (q35, KVM, 2 CPUs, 512 MiB, a virtio disk
+and virtio network card) with the serial console on your terminal.  The
+loader (`console="comconsole,vidconsole"`) and the kernel use both the serial line
+and, in a QEMU window (`-vga std`, no `-nographic`), the framebuffer, where the
+text uses a font of the XNU console (`distrib/fonts`, converted by
+`distrib/mkvtfont.c`; `credits.md`).  `init` runs `/etc/rc` and then a `getty`
+on each line `/etc/ttys` switches on, `ttyu0` (serial) and `ttyv0` (screen);
+log in as `root` (the password is `root` until `passwd` changes it).
 
-(or `sh /usr/src/bootstrap.sh /tmp/again`), and so does the kernel
-(`cd /usr/src/sys/arch/amd64/conf; config GENERIC; cd ../compile/GENERIC; make`).  In an
-interactive shell `/etc/profile` already sets `CC=c17`; scripts that do
-not start from such a shell, such as `/etc/rc`, give `CC=c17` themselves.
-Without `DESTDIR` the `install` targets would install into the running
-system: only V86BSD itself does that.
+* The kernel mounts `/` read-only from `/dev/gpt/rootfs` (the loader
+  learns it from `/etc/fstab`) and starts `/sbin/init`, which opens
+  `/dev/console` itself and leaves `/` read-only for `/etc/rc`.  `rc` runs
+  `fsck -p` (FreeBSD's `fsck_ffs`), makes `/` writable with `mount -uw /`, then
+  `mount -a`, `/etc/sysctl.conf`, `/etc/netstart`, the host name from
+  `/etc/myname`, clears `/tmp`, writes `dmesg > /var/run/dmesg.boot`, and starts the daemons that
+  `/etc/rc.conf` turns on, each a script in `/etc/rc.d` (`syslogd`, `cron`,
+  `atd`; `rcctl enable atd`, `rcctl restart syslogd`, `rcctl ls on`).
+* Disks have FreeBSD's names: `vtbd0` (virtio), `ada0` (AHCI), partitions
+  `vtbd0p3`, labels in `/dev/gpt/`.  The network interface is `vtnet0`.  `/etc/netstart`
+  configures it and `lo0` from `/etc/hostname.*`; for QEMU's user networking it is
+  `/etc/hostname.vtnet0`, `/etc/mygate` and `/etc/resolv.conf`
+  (10.0.2.15, the gateway 10.0.2.2, the name server 10.0.2.3).  **There is no DHCP client yet.**
+* `ifconfig` shows and sets the interfaces (`ifconfig vtnet0 10.0.2.20/24`,
+  `ifconfig vtnet0 mtu 1400 down`), `route` the routing table (`route show`,
+  `route add default 10.0.2.2`), `sysctl` the kernel's variables (by name, through
+  FreeBSD's MIB), `mount` and `umount` use `nmount(2)`, `ps` reads
+  `kern.proc`, and `dmesg` the message buffer (`kern.msgbuf`).
+* `shutdown -p now` (or `halt -p`, `reboot`) stops the system: init hangs up
+  the sessions, runs `/etc/rc.shutdown`, ends every process and powers off
+  after the disks are written.  `Ctrl-A x` leaves QEMU at once; the next
+  boot finds the disk not clean and `fsck -p` repairs it.
 
-Options of `bootstrap.sh`: `-k` keeps the stages, `-w dir` puts them
-elsewhere, `-n` links everything statically.  `sh chroot.sh root
-command...` runs one command inside.
-
-Programs in `/usr/bin` are linked dynamically with `/usr/lib/libc.so`
-(the C library, which is also the dynamic linker), and so are by default
-the programs c17 makes there: `c17` finds the C library through its
-profile `/usr/lib/c17/libc/v86bsd`.  `c17 -B static` links a program
-with `/usr/lib/libc.a` instead, and `c17 -G` makes shared libraries
-(position-independent code; `dlopen` works).
-
-Third-party software builds too, see `ports/README.md`, and goes to
-`/usr/local`: ncurses 6.6 (through its own `configure`, unchanged) and
-Rogue 5.4.4 on it, Lua 5.4 (it passes its own test suite), SQLite 3.54
-(its C test programs and sqllogictest's 5.9 million queries pass), and
-Mbed TLS 3.6 with curl 8.23, with which the system reaches the Internet,
-in the chroot and on its own kernel in QEMU.  On the host, `sh
-ports/get.sh all` puts the sources in `root/usr/src`; inside, `sh
-/usr/src/ports/all.sh` builds and installs them.
-
-## Booting it
-
-`bootstrap.sh` also builds V86BSD's kernel, `root/bsd`.
-To run the system on it, the host needs QEMU (`qemu-system-x86_64`; on
-Ubuntu the package `qemu-system-x86`) (the disk image is made by `makefs`, which
-the build makes); no root privileges:
-
-    sh mkdisk.sh               # v86bsd.img: root/ as an FFS2 disk (1 GiB)
-    sh boot.sh                 # boots it; the console is this terminal
-
-The kernel starts `/sbin/init`, which runs `/etc/rc` (the host name from
-`/etc/myname`, `mount -uw /` and `mount -a` from `/etc/fstab`, `/etc/sysctl.conf`,
-`/etc/netstart` (an interface per `/etc/hostname.em1`, the gateway in `/etc/mygate`),
-clearing `/tmp`, `dmesg > /var/run/dmesg.boot`, the daemons that `/etc/rc.conf` turns on,
-each a script in `/etc/rc.d`: `syslogd`, `cron`, `atd`), then a `getty` on each
-line `/etc/ttys` switches on (the console, `tty00`), which asks for a login name
-and runs `login`.  root's password is `root` until `passwd` changes it (`make release
-ROOTPW=word` builds a root with another).
-`syslogd` writes the system's log (`/var/log/messages`, the failed logins and root logins in
-`/var/log/authlog`; `/etc/syslog.conf`), `dmesg` shows the kernel's messages, and `rcctl`
-turns daemons on and off (`rcctl enable atd`, `rcctl restart syslogd`, `rcctl ls on`).
-`ifconfig` shows and sets the interfaces (`ifconfig vio0 10.0.2.20/24`, `ifconfig em0 alias
-10.1.0.1/16`, `ifconfig em0 mtu 1400 down`) and `route` the routing table (`route show`,
-`route add default 10.0.2.2`, `route add -net 10.1.0.0/16 10.0.2.9`, `route flush`).  The kernel configures the first Ethernet interface itself (DHCP); the others,
-and that one too if you want it otherwise, come up from `/etc/hostname.INTERFACE` (one `ifconfig`
-parameter line per line, `inet 10.1.0.2/24`) when `/etc/netstart` runs at boot.
-`shutdown -p now` (or `halt -p`, `reboot`) stops the system: init hangs up the
-sessions, runs `/etc/rc.shutdown`, ends every process and powers off after the
-disks are written.  (Without an `/etc/ttys`, init keeps its old behaviour: the
-shell on the console after `rc`, and `exit` shuts down.)
-`Ctrl-A x` leaves QEMU at once (then the next boot finds the disk not clean: the
-root is mounted read-only, `/etc/rc` runs `fsck -p`, and if that had to change the
-root it reboots once).  What you change inside stays in
-`v86bsd.img` for the next boot; `sh mkdisk.sh` makes it afresh from
-`root/` (`-s size` in MiB; `-p gpt` for a GPT instead of an MBR; operands name
-another root and image; for another root, give `boot.sh` its kernel with
-`-k root/bsd`).  An image made from a root with the boot blocks also boots as
-a PC does, with no `-kernel`: `sh boot.sh -d` runs the loader on the disk
-(a `boot>` prompt that takes `boot disk0s1:/bsd -s`, `ls`, `machine diskinfo`;
-see `sys/README.md`).
-
-The disk is a virtio disk (`/dev/disk0` inside, with the root on its
-partition `/dev/disk0s1`); `-i` makes it a PC's IDE disk (also `disk0`)
-instead, which is much slower.  `boot.sh` options: `-m 2G` the memory (default 1G), `-g` a window with
-the VGA screen and the keyboard instead of this terminal, `-n` no network,
-`-v` a virtio network card (`vio0`) instead of the Intel e1000 (`em0`),
-`-p 8080:80` forwards port 8080 of the host (127.0.0.1) to port 80 of the
-system, `-k kernel` another kernel, `-e` no KVM, and after `--` more
-arguments for QEMU.  It uses KVM when `/dev/kvm` is usable (much faster;
-V86BSD has been tested under QEMU's emulation).
-
-The network is QEMU's user networking: the system gets 10.0.2.15 by DHCP
-(the host is 10.0.2.2, the name server 10.0.2.3), and connections out go
-through the host.  See `sys/README.md` for the kernel and what it
-offers.
+`distrib/boot-freebsd.sh` is also how the C library's and the utilities'
+tests get their programs: they run in the same kind of image (below).
 
 ## Testing
 
-* The utilities: `sh regress/run_tests.sh` on the host; inside the
-  system `cd /usr/src && CC=c17 sh regress/run_tests.sh`.  The
-  tests use only what POSIX specifies (no `yes`, `head -5`, `grep -o`,
-  `cat -n` and the like), so all of some 6 700 pass inside the system as
-  on the host.
-* The C library: `cd lib/libc && make check` — most of its tests are
-  differential, comparing with glibc, so they need gcc and glibc (see
-  `lib/libc/README.md`); `LIBC_LINK=dynamic` and `static-pie` run them
-  linked those ways.
-* The Open POSIX Test Suite (LTP, 1888 tests), built and run inside the
-  system on its own kernel in QEMU (with KVM): of the 1848 that compile
-  (the other 40 use non-POSIX interfaces or ones POSIX removed long
-  ago), 1812 pass; glibc on Linux passes 1693.  In the first run (QEMU's software CPU: 1741 of 1777) none of the
-  36 that did not pass was a fault of V86BSD: 26 did not pass with glibc
-  either (options not offered, indeterminate limits, "may fail" errors,
-  defects of the tests); the others test undefined or
-  implementation-defined behaviour, are defects of the tests, or (one)
-  need more time than QEMU's emulation gives them
-  (`lib/libc/STATUS.md`, stage 17).  `share/doc/conformance.md` says what
-  the second run changed.
+All tests run inside the system, on FreeBSD's kernel in QEMU with KVM, one
+test at a time with a time limit.  The tests are built on the host by clang
+against this C library; there is no compiler in the image yet (`c17` is not
+built for it, see "Where things stand").
+
+* The C library: `sh regress/lib/libc/vmrun.sh [-d] [-s smp] [-n] [TEST...]`
+  (`-d`: dynamic, `-s`: processors).  47 of 47 pass, static, dynamic and
+  with `-s 4`.  Most of its tests compare with glibc on the host
+  (differential tests).
 * os-test (Sortix's, 5816 tests in 14 suites: headers, namespace, every
-  function at a basic level, fnmatch, regex, limits, I/O, processes,
-  signals, pseudoterminals, stdio, UDP), built inside the system and run
-  on its own kernel in QEMU with `lib/libc/tools/ost/`: 5666 pass (glibc on
-  Linux 5228), all of the header and namespace tests among them.  Of the
-  other 150, 101 have no known outcome yet (UDP's open questions), and the rest are
-  last-ulp long double results, test defects,
-  os-test's "nonstandard" tests and a few readings of the standard where
-  V86BSD does as glibc (`lib/libc/STATUS.md`, stage 18).
+  function at a basic level, fnmatch, regex, limits, I/O, processes, signals,
+  pseudoterminals, stdio, UDP): `sh lib/libc/tools/gate.sh ost WORKDIR`.
+  5670 pass (glibc on Linux 5228), all of the header and namespace tests
+  among them.  Every one of the other 146 is explained in
+  `share/doc/conformance.md` (UDP's open questions and signal order, tests
+  that os-test itself marks `[nonstandard]`, last-ulp long double results,
+  readings of the standard).
+* The Open POSIX Test Suite (LTP): `sh lib/libc/tools/gate.sh pts WORKDIR`.
+  1805 of the 1876 that compile pass (glibc on Linux passes 1693 of its
+  1848; V86BSD's old kernel passed 1812 of 1848).  Most of the 71 others have a
+  cause in the kernel or the test that `conformance.md` names (no
+  `SCHED_SPORADIC`, the scheduler's own `SCHED_OTHER` priorities, timers on
+  CPU-time clocks, ...); about 27 have no proven cause yet.
+* The utilities: `sh distrib/utilsuite-freebsd.sh [UTILITY...]` runs
+  `regress/<dir>/<utility>/test_<utility>.sh` for every utility as root in
+  QEMU, on programs built by `boot-freebsd.sh -n`.  The tests use only what
+  POSIX specifies.  In the last full run 6484 tests passed and 556 failed
+  in 137 utilities; about 300 of the failures need a compiler in the image
+  (c17, yacc, lex), the others are programs that still read Linux's `/proc`
+  (`fuser`, `ipcs`), expectations that were written for the old kernel
+  (`sysctl`, `mount`, `umount`, `fsck`) and some that have not been looked
+  at.  On the old kernel all 8403 passed.
 * The POSIX Shell Tests (yash's test suite, 10,979 cases) against V86BSD's
   `sh`: 10,940 pass and 8 fail (yash 0 failures, dash 1,271, bash as `sh`
   1,634); the 8 are things POSIX.1-2024 leaves unspecified and one place
-  where the 2024 text differs from the other shells
-  (`bin/sh/README.md`).
+  where the 2024 text differs from the other shells (`bin/sh/README.md`).
+  That run was made before the switch and has not been repeated.
 
-`share/doc/conformance.md` has all three suites side by side, with the
-comparisons and what each result that is not a pass comes from.
+`share/doc/conformance.md` has the suites side by side, with the
+comparisons, the kernel patches the tests asked for, and what each result
+that is not a pass comes from.  `regress/sys` (the old kernel's `k_*` tests)
+and `regress/etc` have not been brought over to the new kernel.
 
 ## Where things stand
 
-See `lib/libc/STATUS.md` and `usr.bin/README.md`.  In short: all 155
-utilities of POSIX.1-2024 exist (16 of them as built-ins of sh), and
-1224 of the 1227 interfaces of XSH; the other three are the typed memory
-objects, an option Linux cannot support.  `kill` can also be run
-through exec (`env kill`), as POSIX requires of it alone among the
-intrinsic utilities.  Multi-character collating elements (`[.ch.]`)
-work in regular expressions and patterns.  On V86BSD's own kernel the
-utilities' tests pass but for a few (`sys/README.md`), and the
-typed memory objects exist too.
+All 155 utilities of POSIX.1-2024 exist (16 of them as built-ins of sh) and
+1224 of the 1227 interfaces of XSH are in the C library (`lib/libc/STATUS.md`,
+`usr.bin/README.md`); the other three are the typed memory objects, an
+option FreeBSD does not offer.  `kill` can also be run through exec
+(`env kill`), as POSIX requires of it alone among the intrinsic utilities.
+Multi-character collating elements (`[.ch.]`) work in regular expressions
+and patterns.
+
+The system boots (BIOS and UEFI; virtio disk and AHCI; one to four
+processors; serial and framebuffer console), has a multi-user login, the
+daemons of `rc.d`, UFS2 with FreeBSD's `newfs` and `fsck_ffs`, and the
+network of QEMU's user networking.  What the switch has not finished:
+
+* **No compiler in the image.**  `c17` is in the tree, but it is not built
+  for FreeBSD's ABI yet (it runs on the host's Linux only), so the system
+  cannot compile anything itself, rebuild itself (`/usr/src` is not in the
+  image) or run the tests that compile code.
+* **The old way of building is still in the tree** (see "Layout"): the
+  stages, the self-compilation check of c17, `make release`, the chroot.
+* **The ports** (`ports/`) were built and tested on the old kernel and
+  have not been tried on the FreeBSD one.
+* **No DHCP client**; `/etc/netstart` says so for a `dhcp` line.
+* `usr.sbin/config` makes the compile directory of the old kernel; FreeBSD's
+  own `config` builds the new one.
+
+The to-do items are kept in the author's notes, not in the tree.
 
 ## License
 
-BSD 3-clause; see `LICENSE`.  The package holds only V86BSD's own sources (those of Shall, and the changes of the fork, which
-claims no Berkeley code or copyright: there is none in the tree).
-Data a system needs is copied from the host when `bootstrap.sh` builds
-it (time zones, terminfo, locale sources and charmaps, certificate
-authorities) and keeps its own licenses; the ports are fetched by
-`ports/get.sh` and keep theirs (only V86BSD's small diffs to them are
-here); the Open POSIX Test Suite (GPL) and the POSIX Shell Tests (GPL)
-are used from outside the tree.  os-test (ISC) is in the tree, in
-`regress/os-test`, under its own licence (`regress/os-test/LICENSE`).
+BSD 3-clause; see `LICENSE`.  The tree holds V86BSD's own sources (those of
+Shall, and the changes of the fork) and FreeBSD's `sys/`, `stand/` and
+`freebsd/`, which keep their own copyright and licence notices (mostly the
+BSD licences of the Regents of the University of California and of The
+FreeBSD Project; `share/doc/credits.md`), and some code adapted from
+OpenBSD and NetBSD with its notices.  The CDDL parts of FreeBSD (ZFS,
+DTrace) are not in the tree.
+Data a system needs is copied from the host when it is built (time zones,
+terminfo, locale sources and charmaps, certificate authorities) and keeps its
+own licenses; the ports are fetched by `ports/get.sh` and keep theirs (only
+V86BSD's small diffs to them are here); the Open POSIX Test Suite (GPL) and
+the POSIX Shell Tests (GPL) are used from outside the tree.  os-test (ISC) is
+in the tree, in `regress/os-test`, under its own licence
+(`regress/os-test/LICENSE`).
