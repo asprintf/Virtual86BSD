@@ -24,7 +24,7 @@ fi
 [ -f /etc/rc.conf ] && . /etc/rc.conf
 [ -f /etc/rc.conf.local ] && . /etc/rc.conf.local
 
-# The kernel mounted / read-only (fstab says ro), /dev and /proc.
+# The kernel mounted / read-only (fstab says ro) and /dev (devfs).
 # Check the file systems of /etc/fstab first, / among them (it is still
 # read-only if it is an FFS: fsck_ffs asks for a reboot when it had to change
 # it).  A failed check leaves rc, and init starts the single-user shell: fix
