@@ -37,6 +37,8 @@ long double sinl(long double x)
 		return __math_invalid(x);
 	if (__ld_abs(x) < 0x1p-32L)
 		return __math_l(x);
+	if (__ld_abs(x) < 0x1p20L)
+		return __ddl_sinl(x);
 	switch (__rem_pio2l(x, &r)) {
 	case 0: return __x87_sin(r);
 	case 1: return __x87_cos(r);

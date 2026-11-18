@@ -284,6 +284,7 @@ OBJS = \
 	$(B)/obj/malloc/malloc.o \
 	$(B)/obj/malloc/posix_memalign.o \
 	$(B)/obj/malloc/reallocarray.o \
+	$(B)/obj/math/__ddl.o \
 	$(B)/obj/math/__math_err.o \
 	$(B)/obj/math/__rem_pio2l.o \
 	$(B)/obj/math/__stirling.o \
@@ -877,6 +878,10 @@ $(B)/obj/malloc/posix_memalign.o: malloc/posix_memalign.c $(HDRS)
 $(B)/obj/malloc/reallocarray.o: malloc/reallocarray.c $(HDRS)
 	mkdir -p $(B)/obj/malloc
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ malloc/reallocarray.c
+
+$(B)/obj/math/__ddl.o: math/__ddl.c $(HDRS)
+	mkdir -p $(B)/obj/math
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ math/__ddl.c
 
 $(B)/obj/math/__math_err.o: math/__math_err.c $(HDRS)
 	mkdir -p $(B)/obj/math

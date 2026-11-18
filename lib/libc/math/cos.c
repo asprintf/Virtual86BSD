@@ -35,6 +35,8 @@ long double cosl(long double x)
 	long double r;
 	if (__ld_nonfinite(x))
 		return __math_invalid(x);
+	if (__ld_abs(x) >= 0x1p-33L && __ld_abs(x) < 0x1p20L)
+		return __ddl_cosl(x);
 	switch (__rem_pio2l(x, &r)) {
 	case 0: return __x87_cos(r);
 	case 1: return -__x87_sin(r);

@@ -33,7 +33,8 @@
  * The functions compute in the x87 80-bit format (64-bit significand)
  * and round once to the result's type, so float and double results are
  * almost always correctly rounded and long double results are within a
- * few units in the last place.  The x87 instructions (fsin, fyl2x,
+ * few units in the last place (except logl, log2l, log10l, atanhl, sinl and
+ * cosl, math/__ddl.c: correctly rounded).  The x87 instructions (fsin, fyl2x,
  * f2xm1, ...) are reached through the small functions of
  * arch/x86_64/x87.s, since c17 has no inline assembly.
  *
@@ -82,6 +83,15 @@ long double __math_uflow(int neg);
 
 /* argument reduction: x = n pi/2 + r, |r| <= pi/4 (about); returns n */
 int __rem_pio2l(long double x, long double *r);
+
+/* correctly rounded cores (math/__ddl.c): ln, log2, log10 of x > 0 finite;
+ * atanh of 2^-32 <= |x| < 1; sin and cos of |x| < 2^20 */
+long double __ddl_logl(long double x);
+long double __ddl_log2l(long double x);
+long double __ddl_log10l(long double x);
+long double __ddl_atanhl(long double x);
+long double __ddl_sinl(long double x);
+long double __ddl_cosl(long double x);
 
 /* cores in long double */
 long double __expl(long double x);           /* no error handling; |x| moderate */
