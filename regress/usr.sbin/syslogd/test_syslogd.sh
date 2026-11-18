@@ -182,13 +182,13 @@ r: end" 0 fromtwice
 printf 'hello kernel\n<4>warn message\n<7>debug message\n<6>part' >&3
 printf 'ial\nesc \033[2J done\n' >&3
 sync_
-t "klog: a line is kern.crit /bsd:" "/bsd: hello kernel" 0 has "$T/kern" "/bsd: hello kernel"
-t "klog: it is in messages" "/bsd: hello kernel" 0 has "$T/messages" "/bsd: hello kernel"
-t "klog: <4> is kern.warning" "/bsd: warn message" 0 has "$T/messages" "/bsd: warn message"
-t "klog: <7> is debug: not in messages" "" 1 has "$T/messages" "/bsd: debug message"
-t "klog: <7> is in kern" "/bsd: debug message" 0 has "$T/kern" "/bsd: debug message"
-t "klog: a line in two reads is one" "/bsd: partial" 0 has "$T/kern" "/bsd: partial"
-t "klog: escapes are shown" "/bsd: esc ^[[2J done" 0 has "$T/kern" '/bsd: esc ^[[2J done'
+t "klog: a line is kern.crit kernel:" "kernel: hello kernel" 0 has "$T/kern" "kernel: hello kernel"
+t "klog: it is in messages" "kernel: hello kernel" 0 has "$T/messages" "kernel: hello kernel"
+t "klog: <4> is kern.warning" "kernel: warn message" 0 has "$T/messages" "kernel: warn message"
+t "klog: <7> is debug: not in messages" "" 1 has "$T/messages" "kernel: debug message"
+t "klog: <7> is in kern" "kernel: debug message" 0 has "$T/kern" "kernel: debug message"
+t "klog: a line in two reads is one" "kernel: partial" 0 has "$T/kern" "kernel: partial"
+t "klog: escapes are shown" "kernel: esc ^[[2J done" 0 has "$T/kern" 'kernel: esc ^[[2J done'
 
 # SIGHUP: the configuration again, the files opened again
 mv "$T/all" "$T/all.0"

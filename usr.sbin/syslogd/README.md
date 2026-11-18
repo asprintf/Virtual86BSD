@@ -31,7 +31,7 @@ The `syslogd` of the BSDs, reduced to what a single machine needs. Programs log 
   clear the screen or fake a second line; a message is cut at 1024 bytes.
 * A line that repeats the one before it in a file is not written again; "last message repeated N
   times" comes when something else does, or after 30 seconds.
-* Kernel lines are logged as `/bsd: text`, with `kern.crit` unless they start with `<N>`. The
+* Kernel lines are logged as `kernel: text`, with `kern.crit` unless they start with `<N>`. The
   first syslogd to run gets everything the kernel printed since boot (the boot messages), once;
   `dmesg` shows the whole buffer, whoever has read it.
 * `mark` in a selector gets `-- MARK --` every `-m` minutes (default 20; 0 never).
