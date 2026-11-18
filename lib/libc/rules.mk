@@ -419,6 +419,7 @@ OBJS = \
 	$(B)/obj/spawn/actions.o \
 	$(B)/obj/spawn/attr.o \
 	$(B)/obj/spawn/spawn.o \
+	$(B)/obj/stat/getmntinfo.o \
 	$(B)/obj/stat/mkdir.o \
 	$(B)/obj/stat/mode.o \
 	$(B)/obj/stat/stat.o \
@@ -1416,6 +1417,10 @@ $(B)/obj/spawn/attr.o: spawn/attr.c $(HDRS)
 $(B)/obj/spawn/spawn.o: spawn/spawn.c $(HDRS)
 	mkdir -p $(B)/obj/spawn
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ spawn/spawn.c
+
+$(B)/obj/stat/getmntinfo.o: stat/getmntinfo.c $(HDRS)
+	mkdir -p $(B)/obj/stat
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ stat/getmntinfo.c
 
 $(B)/obj/stat/mkdir.o: stat/mkdir.c $(HDRS)
 	mkdir -p $(B)/obj/stat

@@ -91,6 +91,7 @@ struct statfs {
 __BEGIN_DECLS
 int fstatfs(int, struct statfs *);
 int getfsstat(struct statfs *, long, int);
+int getmntinfo(struct statfs **, int);
 int mount(const char *, const char *, int, void *);
 int nmount(struct iovec *, unsigned int, int);
 int statfs(const char *, struct statfs *);
