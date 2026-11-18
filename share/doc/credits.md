@@ -157,30 +157,12 @@ and the Shall code the fork started from (see `LICENSE`).
 | `lib/libcurses/unctrl.h` | NetBSD `lib/libcurses/unctrl.h` | 1.5 | BSD 3-clause |
 | `lib/libcurses/underscore.c` | NetBSD `lib/libcurses/underscore.c` | 1.14 | BSD 2-clause |
 | `lib/libcurses/version.c` | NetBSD `lib/libcurses/version.c` | 1.4 | BSD 2-clause |
-| `sbin/dumpfs/dumpfs.c` | OpenBSD `sbin/dumpfs/dumpfs.c` | 1.39 | BSD 3-clause |
 | `sbin/fsck/fsck.c` | OpenBSD `sbin/fsck/fsck.c` | 1.41 | BSD 3-clause |
 | `sbin/fsck/fsutil.c` | OpenBSD `sbin/fsck/fsutil.c` | 1.25 | BSD 3-clause |
 | `sbin/fsck/fsutil.h` | OpenBSD `sbin/fsck/fsutil.h` | 1.9 | BSD 2-clause |
 | `sbin/fsck/opendev.c` | OpenBSD `lib/libutil/opendev.c` | 1.18 | BSD 2-clause |
 | `sbin/fsck/pathnames.h` | OpenBSD `sbin/fsck/pathnames.h` | 1.2 | BSD 2-clause |
 | `sbin/fsck/preen.c` | OpenBSD `sbin/fsck/preen.c` | 1.20 | BSD 3-clause |
-| `sbin/fsck_ffs/dir.c` | OpenBSD `sbin/fsck_ffs/dir.c` | 1.36 | BSD 3-clause |
-| `sbin/fsck_ffs/extern.h` | OpenBSD `sbin/fsck_ffs/extern.h` | 1.15 | BSD 2-clause |
-| `sbin/fsck_ffs/fsck.h` | OpenBSD `sbin/fsck_ffs/fsck.h` | 1.36 | BSD 3-clause |
-| `sbin/fsck_ffs/inode.c` | OpenBSD `sbin/fsck_ffs/inode.c` | 1.52 | BSD 3-clause |
-| `sbin/fsck_ffs/main.c` | OpenBSD `sbin/fsck_ffs/main.c` | 1.55 | BSD 3-clause |
-| `sbin/fsck_ffs/pass1.c` | OpenBSD `sbin/fsck_ffs/pass1.c` | 1.50 | BSD 3-clause |
-| `sbin/fsck_ffs/pass1b.c` | OpenBSD `sbin/fsck_ffs/pass1b.c` | 1.22 | BSD 3-clause |
-| `sbin/fsck_ffs/pass2.c` | OpenBSD `sbin/fsck_ffs/pass2.c` | 1.39 | BSD 3-clause |
-| `sbin/fsck_ffs/pass3.c` | OpenBSD `sbin/fsck_ffs/pass3.c` | 1.18 | BSD 3-clause |
-| `sbin/fsck_ffs/pass4.c` | OpenBSD `sbin/fsck_ffs/pass4.c` | 1.26 | BSD 3-clause |
-| `sbin/fsck_ffs/pass5.c` | OpenBSD `sbin/fsck_ffs/pass5.c` | 1.52 | BSD 3-clause |
-| `sbin/fsck_ffs/setup.c` | OpenBSD `sbin/fsck_ffs/setup.c` | 1.72 | BSD 3-clause |
-| `sbin/fsck_ffs/utilities.c` | OpenBSD `sbin/fsck_ffs/utilities.c` | 1.55 | BSD 3-clause |
-| `sbin/newfs/mkfs.c` | OpenBSD `sbin/newfs/mkfs.c` | 1.103 | BSD 3-clause |
-| `sbin/newfs/newfs.c` | OpenBSD `sbin/newfs/newfs.c` | 1.120 | BSD 3-clause |
-| `sbin/newfs/scan_scaled.c` | OpenBSD `lib/libutil/fmt_scaled.c` | 1.26 | BSD 3-clause |
-| `sbin/tunefs/tunefs.c` | OpenBSD `sbin/tunefs/tunefs.c` | 1.41 | BSD 3-clause |
 | `share/terminfo/terminfo` | NetBSD `share/terminfo/terminfo` | 1.1083 (terminfo.src) | ncurses' (MIT-style; see the file) |
 | `sys/sys/queue.h` | OpenBSD `sys/sys/queue.h` | 1.47 | BSD 3-clause |
 | `sys/ufs/ffs/ffs_alloc.c` | OpenBSD `sys/ufs/ffs/ffs_alloc.c` | 1.115 | BSD 3-clause |
@@ -215,8 +197,13 @@ and the Shall code the fork started from (see `LICENSE`).
 `sys/` and `stand/` are FreeBSD's, imported unchanged from the `releng/15.2`
 branch (commit 71ed2382e0ad, recorded in `freebsd/IMPORTED`) by
 `distrib/import-freebsd.sh`, except for the patches in
-`distrib/freebsd/patches-sys/` (the `kern.ostype` name) and the kernel
-configuration `sys/amd64/conf/V86`. `freebsd/` holds the parts of the
+`distrib/freebsd/patches-sys/` (the `kern.ostype` name and five fixes found by
+the test suites: `F_OFD_*` locks, `setpgid`, `exec` and `SA_ONSTACK`, a
+hung-up pty, `ppoll`) and the kernel configuration `sys/amd64/conf/V86`.
+FreeBSD's `newfs`, `fsck_ffs`, `tunefs`, `dumpfs`, `growfs` and `libufs`
+(`freebsd/sbin`, `freebsd/lib/libufs`) are built by
+`distrib/ufstools-freebsd.sh` against V86BSD's C library; `makefs` and `mkimg`
+(host tools that make the disk image) are built by `make.py`. `freebsd/` holds the parts of the
 FreeBSD tree needed to build them (`tools/build`, `share/mk`, bmake, the
 bootstrap tools, headers); its one local change is in
 `distrib/freebsd/patches/`. Every file keeps its own copyright and licence

@@ -1,5 +1,11 @@
 # config
 
+**This is the configuration program of V86BSD's previous kernel (OpenBSD
+style), which FreeBSD's kernel replaced.**  It is not used for the kernel
+now: `sys/amd64/conf/V86` is configured and built by FreeBSD's own `config`
+and `make.py` (`distrib/build-freebsd.sh`, see `README.md`).  The text below
+describes the old use.
+
 `config` makes the compile directory of a kernel from its configuration,
 as BSD's config(8) does (a small subset of OpenBSD's).
 

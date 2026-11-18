@@ -7,6 +7,16 @@ diff, which its `build.sh` applies.  Everything is built by V86BSD's own
 tools: c17, make, sh, sed, awk, ar.  No gcc, binutils, GNU make, bash,
 Perl or Python.
 
+**State since the switch to the FreeBSD kernel (November 2026):** the ports
+were built and tested on V86BSD's previous kernel, in the chroot and in QEMU,
+by the system's own `c17`.  They have not been built or run on the FreeBSD
+kernel yet: the image `distrib/boot-freebsd.sh` makes has no compiler, no
+`/usr/src` and no `/usr/include`, and the way described below (`get.sh` into
+`root/`, `chroot.sh`, `mkdisk.sh`, `boot.sh`) is the old pipeline, which does not
+build the FreeBSD-kernel system (see the top-level `README.md`).  The
+measurements and the DHCP network mentioned here are those of the old
+system.  The ports will be rebuilt when the image has a compiler.
+
 | Port | Version | Changes to its sources | Built with | Tests inside V86BSD |
 |---|---|---|---|---|
 | [ncurses](ncurses/HOWTO.md) | 6.6 | none | its `configure` and makefiles | tic/infocmp agree with the host's on 2899 terminals |

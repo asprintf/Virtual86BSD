@@ -267,8 +267,9 @@ library of POSIX.1-2024, by gcc or by c17.  It also has `NORETURN` and
 
 Beyond POSIX, only where it has no way to do the thing at all: major()
 and minor() of `<sys/sysmacros.h>` (ls, pax), setgroups() (atd, crond,
-newgrp, and tl for the tests), the kernel's `/proc` (ps, fuser, ipcs) and
-its table of mounted file systems (df).
+newgrp, and tl for the tests), the kernel's process table (ps, through `sysctl`; fuser and ipcs still read
+Linux's `/proc` and do not work on the FreeBSD kernel yet) and its table of
+mounted file systems (df, through `getfsstat`).
 
 Options are read with getopt() as POSIX specifies it: scanning stops at
 the first operand, so `cat f -u` reads a file named `-u` (with glibc this
