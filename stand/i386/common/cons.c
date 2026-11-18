@@ -129,11 +129,16 @@ getchar(void)
 int
 keyhit(unsigned int secs)
 {
+	return (keyhit_ticks(secs * SECOND));
+}
+
+int
+keyhit_ticks(unsigned int secs)
+{
 	uint32_t t0, t1, c;
 
 	if (OPT_CHECK(RBX_NOINTR))
 		return (0);
-	secs *= SECOND;
 	t0 = 0;
 	for (;;) {
 		/*

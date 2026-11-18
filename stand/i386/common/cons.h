@@ -28,6 +28,7 @@ int getc(int fn);
 int xgetc(int fn);
 int getchar(void);
 int keyhit(unsigned int secs);
+int keyhit_ticks(unsigned int ticks);
 void getstr(char *cmdstr, size_t cmdstrsize);
 
 #endif	/* !_CONS_H_ */

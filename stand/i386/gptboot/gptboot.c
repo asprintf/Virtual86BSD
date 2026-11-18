@@ -317,7 +317,7 @@ main(void)
 			*cmd = '\0';
 		}
 
-		if (autoboot && keyhit(3)) {
+		if (autoboot && keyhit_ticks(2)) {	/* V86BSD: about 0.1 s, not 3 */
 			if (*kname == '\0')
 				memcpy(kname, PATH_LOADER, sizeof(PATH_LOADER));
 			break;

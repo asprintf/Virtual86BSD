@@ -1,0 +1,48 @@
+diff --git a/i386/common/cons.c b/i386/common/cons.c
+index 1007d696..c377911a 100644
+--- a/i386/common/cons.c
++++ b/i386/common/cons.c
+@@ -128,12 +128,17 @@ getchar(void)
+ 
+ int
+ keyhit(unsigned int secs)
++{
++	return (keyhit_ticks(secs * SECOND));
++}
++
++int
++keyhit_ticks(unsigned int secs)
+ {
+ 	uint32_t t0, t1, c;
+ 
+ 	if (OPT_CHECK(RBX_NOINTR))
+ 		return (0);
+-	secs *= SECOND;
+ 	t0 = 0;
+ 	for (;;) {
+ 		/*
+diff --git a/i386/common/cons.h b/i386/common/cons.h
+index de1b1129..c83a0378 100644
+--- a/i386/common/cons.h
++++ b/i386/common/cons.h
+@@ -28,6 +28,7 @@ int getc(int fn);
+ int xgetc(int fn);
+ int getchar(void);
+ int keyhit(unsigned int secs);
++int keyhit_ticks(unsigned int ticks);
+ void getstr(char *cmdstr, size_t cmdstrsize);
+ 
+ #endif	/* !_CONS_H_ */
+diff --git a/i386/gptboot/gptboot.c b/i386/gptboot/gptboot.c
+index 949c00cd..83038a65 100644
+--- a/i386/gptboot/gptboot.c
++++ b/i386/gptboot/gptboot.c
+@@ -317,7 +317,7 @@ main(void)
+ 			*cmd = '\0';
+ 		}
+ 
+-		if (autoboot && keyhit(3)) {
++		if (autoboot && keyhit_ticks(2)) {	/* V86BSD: about 0.1 s, not 3 */
+ 			if (*kname == '\0')
+ 				memcpy(kname, PATH_LOADER, sizeof(PATH_LOADER));
+ 			break;

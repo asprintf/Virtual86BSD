@@ -25,6 +25,10 @@ for p in "$lists"/patches-sys/*.patch; do
 	[ -f "$p" ] && patch -s -p1 -d "$dest/sys" < "$p"
 done
 
+for p in "$lists"/patches-stand/*.patch; do
+	[ -f "$p" ] && patch -s -p1 -d "$dest/stand" < "$p"
+done
+
 {
 	echo "commit $(git -C "$src" rev-parse HEAD)"
 	echo "branch $(git -C "$src" rev-parse --abbrev-ref HEAD)"

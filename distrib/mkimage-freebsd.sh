@@ -91,7 +91,8 @@ cat > "$root/boot/loader.conf" <<'EOF'
 console="comconsole,vidconsole"
 boot_serial="YES"
 beastie_disable="YES"
-autoboot_delay="1"
+autoboot_delay="0"
+hostuuid_load="NO"
 screen.textmode="0"
 EOF
 
