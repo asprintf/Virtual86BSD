@@ -66,6 +66,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#if defined(__has_include)
+#if __has_include(<sys/ioctl.h>)
+#include <sys/ioctl.h>
+#endif
+#endif
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/time.h>
@@ -6207,6 +6212,14 @@ static Value b_term(Value *a, int n)
         set_cloexec(pp[0]);
     }
     flush_all();
+    /* the parent waits for the exec: input typed before the program has the terminal open is lost on BSD */
+    int hs[2] = { -1, -1 };
+    if (pipe(hs) < 0)
+        hs[0] = hs[1] = -1;
+    else {
+        set_cloexec(hs[0]);
+        set_cloexec(hs[1]);
+    }
     pid_t pid = fork();
     if (pid < 0)
         die("term: fork: %s", strerror(errno));
@@ -6219,6 +6232,9 @@ static Value b_term(Value *a, int n)
             fprintf(stderr, "tl: %s: %s\n", sname, strerror(errno));
             _exit(127);
         }
+#ifdef TIOCSCTTY
+        ioctl(s, TIOCSCTTY, 0);   /* BSD: opening does not make it the controlling terminal */
+#endif
         if (!nosize)
             set_winsize(s, rows, cols);
         Value tmv = opts ? map_gets(opts, "termios") : NIL;
@@ -6265,6 +6281,16 @@ static Value b_term(Value *a, int n)
         exec_argv(argv, a[0].t == T_STR);
     }
     free(sname);
+    if (hs[1] >= 0)
+        close(hs[1]);
+    if (hs[0] >= 0) {
+        char c;
+        ssize_t r;
+        do
+            r = read(hs[0], &c, 1);
+        while (r < 0 && errno == EINTR);
+        close(hs[0]);
+    }
     if (pp[1] >= 0)
         close(pp[1]);
     if (a[0].t != T_STR)
