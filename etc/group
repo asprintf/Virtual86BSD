@@ -1,3 +1,4 @@
 root:x:0:
 tty:x:4:
+operator:x:5:
 nogroup:x:65534:
