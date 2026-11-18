@@ -34,6 +34,11 @@ EOT
 for k in bin sbin libexec usr.bin usr.sbin; do for d in $k/*/; do [ -f "$d/Makefile" ] && echo "${d%/}"; done; done | grep -v '^usr.bin/c17$' |
 	xargs -P 8 -n 1 sh "$out/one.sh"
 echo "boot: failed: $(tr '\n' ' ' < "$out/failed")"
+# FreeBSD's UFS tools (distrib/ufstools-freebsd.sh) against the same libc
+sh distrib/ufstools-freebsd.sh -o "$out/ufstools" -l "$B/lib" > "$out/ufstools.log" 2>&1 || echo "ufstools failed"
+mkdir -p "$root/sbin"
+for t in dumpfs fsck_ffs growfs newfs tunefs; do cp "$out/ufstools/bin/$t" "$root/sbin/$t" || echo "no $t"; done
+ln -sf fsck_ffs "$root/sbin/fsck_ufs"
 mkdir -p "$root/lib" "$root/etc" "$root/root" "$root/tmp" "$root/var/run" "$root/var/log" "$root/dev" "$root/mnt" "$root/usr/share"
 cp "$B/lib/libc.so" "$root/lib/libc.so"
 cp etc/* "$root/etc/" 2>/dev/null
