@@ -26,9 +26,9 @@ p=\$1; k=\${p%%/*}; n=\${p#*/}
 case \$k in bin) dst=/bin ;; sbin) dst=/sbin ;; libexec) dst=/usr/libexec ;; usr.bin) dst=/usr/bin ;; usr.sbin) dst=/usr/sbin ;; esac
 cd "$src/\$p" || exit 1
 if [ "\$p" = sbin/init ]; then
-	make -s install C17="env LIBC_LINK=static $cc" CFLAGS="$CF" DESTDIR="$root" PREFIX= BINDIR=\$dst
+	make -s install C17="env LIBC_LINK=static $cc" CFLAGS="$CF" DESTDIR="$root" PREFIX= BINDIR=\$dst SBINDIR=/usr/sbin
 else
-	make -s install CC="$cc" CFLAGS="$CF" LDFLAGS="-L$src/lib/libcurses" $YL DESTDIR="$root" PREFIX= BINDIR=\$dst
+	make -s install CC="$cc" CFLAGS="$CF" LDFLAGS="-L$src/lib/libcurses" $YL DESTDIR="$root" PREFIX= BINDIR=\$dst SBINDIR=/usr/sbin
 fi > "$out/build-\$k-\$n.log" 2>&1 || echo "\$p" >> "$out/failed"
 EOT
 for k in bin sbin libexec usr.bin usr.sbin; do for d in $k/*/; do [ -f "$d/Makefile" ] && echo "${d%/}"; done; done | grep -v '^usr.bin/c17$' |
@@ -43,7 +43,7 @@ mkdir -p "$root/lib" "$root/etc" "$root/root" "$root/tmp" "$root/var/run" "$root
 cp "$B/lib/libc.so" "$root/lib/libc.so"
 cp -R etc/. "$root/etc/"
 chmod 600 "$root/etc/master.passwd"
-[ -n "$nobuild" ] && exit 0
 sh distrib/mkimage-freebsd.sh -o "$out/v86bsd.img" -s 256 -d "$root" || exit 1
+[ -n "$nobuild" ] && exit 0
 exec qemu-system-x86_64 -machine q35 -accel kvm -cpu host -m 512 -smp 2 -nographic \
 	-drive file="$out/v86bsd.img",format=raw,if=virtio -nic user,model=virtio-net-pci
