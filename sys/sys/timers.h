@@ -54,6 +54,7 @@ struct itimer {
 	int	it_overrun;		/* Overruns currently accumulating */
 	int	it_overrun_last;	/* Overruns associated w/ a delivery */
 	int	it_clockid;
+	int	it_base;		/* clock it_time is expressed in */
 	ksiginfo_t	it_ksi;
 	struct callout it_callout;
 };

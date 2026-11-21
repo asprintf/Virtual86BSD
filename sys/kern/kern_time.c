@@ -1315,6 +1315,7 @@ kern_ktimer_create(struct thread *td, clockid_t clock_id, struct sigevent *evp,
 	it->it_overrun = 0;
 	it->it_overrun_last = 0;
 	it->it_clockid = clock_id;
+	it->it_base = clock_id;
 	it->it_proc = p;
 	ksiginfo_init(&it->it_ksi);
 	it->it_ksi.ksi_flags |= KSI_INS | KSI_EXT;
@@ -1569,6 +1570,23 @@ kern_ktimer_getoverrun(struct thread *td, int timer_id)
 	return (error);
 }
 
+/* The time the timer's value is expressed in (it_base), see realtimer_settime(). */
+static int
+itimer_now(struct itimer *it, struct timespec *ts)
+{
+
+	return (kern_clock_gettime(curthread, it->it_base, ts));
+}
+
+static void
+itimer_arm(struct itimer *it, const struct timespec *rem)
+{
+	struct timeval tv;
+
+	TIMESPEC_TO_TIMEVAL(&tv, rem);
+	callout_reset(&it->it_callout, tvtohz(&tv), realtimer_expire, it);
+}
+
 static int
 realtimer_create(struct itimer *it)
 {
@@ -1601,7 +1619,7 @@ realtimer_gettime(struct itimer *it, struct itimerspec *ovalue)
 
 	mtx_assert(&it->it_mtx, MA_OWNED);
 
-	error = kern_clock_gettime(curthread, it->it_clockid, &cts);
+	error = itimer_now(it, &cts);
 	if (error != 0)
 		return (error);
 
@@ -1623,7 +1641,6 @@ realtimer_settime(struct itimer *it, int flags, struct itimerspec *value,
     struct itimerspec *ovalue)
 {
 	struct timespec cts, ts;
-	struct timeval tv;
 	struct itimerspec val;
 	int error;
 
@@ -1648,7 +1665,17 @@ realtimer_settime(struct itimer *it, int flags, struct itimerspec *value,
 
 	it->it_time = val;
 	if (timespecisset(&val.it_value)) {
-		error = kern_clock_gettime(curthread, it->it_clockid, &cts);
+		/*
+		 * A relative timer is kept on the monotonic clock, so that
+		 * setting CLOCK_REALTIME does not move it (POSIX).
+		 */
+		if ((flags & TIMER_ABSTIME) != 0 ||
+		    (it->it_clockid != CLOCK_REALTIME &&
+		    it->it_clockid != CLOCK_TAI))
+			it->it_base = it->it_clockid;
+		else
+			it->it_base = CLOCK_MONOTONIC;
+		error = itimer_now(it, &cts);
 		if (error != 0)
 			return (error);
 
@@ -1664,9 +1691,7 @@ realtimer_settime(struct itimer *it, int flags, struct itimerspec *value,
 			 * fix it.
 			 */
 		}
-		TIMESPEC_TO_TIMEVAL(&tv, &ts);
-		callout_reset(&it->it_callout, tvtohz(&tv), realtimer_expire,
-		    it);
+		itimer_arm(it, &ts);
 	} else {
 		callout_stop(&it->it_callout);
 	}
@@ -1715,12 +1740,11 @@ static void
 realtimer_expire_l(struct itimer *it, bool proc_locked)
 {
 	struct timespec cts, ts;
-	struct timeval tv;
 	struct proc *p;
 	uint64_t interval, now, overruns, value;
 	int error;
 
-	error = kern_clock_gettime(curthread, it->it_clockid, &cts);
+	error = itimer_now(it, &cts);
 
 	/* Only fire if time is reached. */
 	if (error == 0 && timespeccmp(&cts, &it->it_time.it_value, >=)) {
@@ -1761,9 +1785,7 @@ realtimer_expire_l(struct itimer *it, bool proc_locked)
 				it->it_flags |= ITF_PSTOPPED;
 			} else {
 				timespecsub(&it->it_time.it_value, &cts, &ts);
-				TIMESPEC_TO_TIMEVAL(&tv, &ts);
-				callout_reset(&it->it_callout, tvtohz(&tv),
-				    realtimer_expire, it);
+				itimer_arm(it, &ts);
 			}
 		}
 
@@ -1783,9 +1805,7 @@ realtimer_expire_l(struct itimer *it, bool proc_locked)
 		} else {
 			ts = it->it_time.it_value;
 			timespecsub(&ts, &cts, &ts);
-			TIMESPEC_TO_TIMEVAL(&tv, &ts);
-			callout_reset(&it->it_callout, tvtohz(&tv),
-			    realtimer_expire, it);
+			itimer_arm(it, &ts);
 		}
 	}
 }
