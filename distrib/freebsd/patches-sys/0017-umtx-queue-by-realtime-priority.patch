@@ -1,0 +1,27 @@
+--- a/kern/kern_umtx.c
++++ b/kern/kern_umtx.c
+@@ -499,7 +499,23 @@
+ 	}
+ 	uq->uq_spare_queue = NULL;
+ 
+-	TAILQ_INSERT_TAIL(&uh->head, uq, uq_link);
++	if (PRI_IS_REALTIME(uq->uq_thread->td_pri_class)) {
++		struct umtx_q *next;
++
++		/* Real-time waiters go first, by priority (SCHED_FIFO/RR). */
++		TAILQ_FOREACH(next, &uh->head, uq_link) {
++			if (!PRI_IS_REALTIME(next->uq_thread->td_pri_class) ||
++			    next->uq_thread->td_priority >
++			    uq->uq_thread->td_priority)
++				break;
++		}
++		if (next != NULL)
++			TAILQ_INSERT_BEFORE(next, uq, uq_link);
++		else
++			TAILQ_INSERT_TAIL(&uh->head, uq, uq_link);
++	} else {
++		TAILQ_INSERT_TAIL(&uh->head, uq, uq_link);
++	}
+ 	uh->length++;
+ 	uq->uq_flags |= UQF_UMTXQ;
+ 	uq->uq_cur_queue = uh;
