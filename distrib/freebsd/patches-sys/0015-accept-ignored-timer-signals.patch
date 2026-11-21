@@ -1,0 +1,26 @@
+--- a/kern/kern_sig.c
++++ b/kern/kern_sig.c
+@@ -3347,6 +3347,7 @@
+ issignal(struct thread *td)
+ {
+ 	struct proc *p;
++	ksiginfo_t ksi;
+ 	sigset_t sigpending;
+ 	int sig;
+ 
+@@ -3403,6 +3404,15 @@
+ 			case SIGSTATUS_HANDLED:
+ 				goto next;
+ 			case SIGSTATUS_IGNORE:
++				/* An ignored timer signal is accepted too. */
++				ksiginfo_init(&ksi);
++				if (sigqueue_get(&td->td_sigqueue, sig,
++				    &ksi) != 0 ||
++				    sigqueue_get(&p->p_sigqueue, sig, &ksi) != 0) {
++					if (ksi.ksi_code == SI_TIMER)
++						itimer_accept(p,
++						    ksi.ksi_timerid, &ksi);
++				}
+ 				sigqueue_delete(&td->td_sigqueue, sig);
+ 				sigqueue_delete(&p->p_sigqueue, sig);
+ 				break;
