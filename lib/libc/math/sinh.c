@@ -49,6 +49,8 @@ long double sinhl(long double x)
 		return x + x;
 	if (ax < 0x1p-32L)
 		return __math_l(x);
+	if (ax <= 1000)
+		return __ddl_sinhl(x);
 	if (ax < 1) {
 		t = __expm1l(ax);
 		r = (t + t / (t + 1)) / 2;
@@ -70,6 +72,8 @@ long double coshl(long double x)
 		return ax;
 	if (ax < 0x1p-33L)
 		return 1;
+	if (ax <= 1000)
+		return __ddl_coshl(x);
 	if (ax < 0.3466L) {
 		t = __expm1l(ax);
 		return 1 + t * t / (2 * (1 + t));

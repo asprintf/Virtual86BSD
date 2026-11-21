@@ -37,6 +37,8 @@ long double asinhl(long double x)
 		return x + x;
 	if (ax < 0x1p-32L)
 		return __math_l(x);
+	if (ax <= 0x1p34L)
+		return __ddl_asinhl(x);
 	if (ax > 0x1p34L)
 		r = __x87_yl2x(ax, __LN2) + __LN2;
 	else if (ax > 2)

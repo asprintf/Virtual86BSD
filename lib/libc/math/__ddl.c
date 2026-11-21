@@ -541,3 +541,23 @@ int __ddl_cpowl(long double x, long double y, long double c, long double d,
 	*im = dmul(e, s).h;
 	return 1;
 }
+
+/* sinh, cosh and asinh of finite x, rounded once */
+long double __ddl_sinhl(long double x)    /* 2^-32 <= |x| <= 1000 */
+{
+	dd sh, ch;
+	sinhcosh_dd(tsum(x, 0), &sh, &ch);
+	return sh.h;
+}
+
+long double __ddl_coshl(long double x)    /* |x| <= 1000 */
+{
+	dd sh, ch;
+	sinhcosh_dd(tsum(x, 0), &sh, &ch);
+	return ch.h;
+}
+
+long double __ddl_asinhl(long double x)    /* 2^-32 <= |x| <= 2^34 */
+{
+	return asinh_dd(tsum(x, 0)).h;
+}
