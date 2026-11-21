@@ -1661,6 +1661,43 @@ udp_close(struct socket *so)
 	INP_WUNLOCK(inp);
 }
 
+/* A connected datagram socket takes datagrams from its peer only (POSIX connect()): drop the queued ones of other senders */
+static void
+udp_drop_foreign(struct socket *so, struct in_addr faddr, u_short fport)
+{
+	struct sockbuf *sb = &so->so_rcv;
+	struct mbuf *m, *n, *next, *prev = NULL;
+	struct sockaddr_in *from;
+
+	SOCK_RECVBUF_LOCK(so);
+	for (m = sb->sb_mb; m != NULL; m = next) {
+		next = m->m_nextpkt;
+		from = mtod(m, struct sockaddr_in *);
+		if (m->m_type == MT_SONAME && m->m_len >= sizeof(*from) &&
+		    (from->sin_addr.s_addr != faddr.s_addr ||
+		    from->sin_port != fport)) {
+			if (prev != NULL)
+				prev->m_nextpkt = next;
+			else
+				sb->sb_mb = next;
+			m->m_nextpkt = NULL;
+			for (n = m; n != NULL; n = n->m_next)
+				sbfree(sb, n);
+			m_freem(m);
+			continue;
+		}
+		prev = m;
+	}
+	sb->sb_lastrecord = prev;
+	if (prev != NULL) {
+		for (n = prev; n->m_next != NULL; n = n->m_next)
+			;
+		sb->sb_mbtail = n;
+	}
+	SB_EMPTY_FIXUP(sb);
+	SOCK_RECVBUF_UNLOCK(so);
+}
+
 static int
 udp_connect(struct socket *so, struct sockaddr *nam, struct thread *td)
 {
@@ -1695,8 +1732,10 @@ udp_connect(struct socket *so, struct sockaddr *nam, struct thread *td)
 	error = in_pcbconnect(inp, sin, td->td_ucred);
 	INP_HASH_WUNLOCK(pcbinfo);
 	NET_EPOCH_EXIT(et);
-	if (error == 0)
+	if (error == 0) {
+		udp_drop_foreign(so, inp->inp_faddr, inp->inp_fport);
 		soisconnected(so);
+	}
 	INP_WUNLOCK(inp);
 	return (error);
 }
