@@ -1345,6 +1345,11 @@ udp_send(struct socket *so, int flags, struct mbuf *m, struct sockaddr *addr,
 		error = prison_remote_ip4(td->td_ucred, &sin->sin_addr);
 		if (error)
 			goto release;
+		if (in_nullhost(sin->sin_addr)) {
+			error = in_pcbanydst(&sin->sin_addr, td->td_ucred);
+			if (error)
+				goto release;
+		}
 		/*
 		 * sendto(2) on unconnected UDP socket results in implicit
 		 * binding to INADDR_ANY and anonymous port.  This has two

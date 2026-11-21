@@ -688,6 +688,7 @@ int	in_pcbconnect(struct inpcb *, struct sockaddr_in *, struct ucred *);
 void	in_pcbdisconnect(struct inpcb *);
 void	in_pcbdrop(struct inpcb *);
 void	in_pcbfree(struct inpcb *);
+int	in_pcbanydst(struct in_addr *, struct ucred *);
 int	in_pcbladdr(const struct inpcb *, struct in_addr *, struct in_addr *,
 	    struct ucred *);
 int	in_pcblbgroup_numa(struct inpcb *, int arg);

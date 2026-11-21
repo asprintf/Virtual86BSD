@@ -1185,6 +1185,21 @@ in_pcbconnect(struct inpcb *inp, struct sockaddr_in *sin, struct ucred *cred)
 }
 
 /*
+ * The destination INADDR_ANY, as connect() takes it: the primary local
+ * address with net.inet.ip.connect_inaddr_wild, else ENETUNREACH.
+ */
+int
+in_pcbanydst(struct in_addr *faddr, struct ucred *cred)
+{
+
+	NET_EPOCH_ASSERT();
+	if (!V_connect_inaddr_wild || CK_STAILQ_EMPTY(&V_in_ifaddrhead))
+		return (ENETUNREACH);
+	*faddr = IA_SIN(CK_STAILQ_FIRST(&V_in_ifaddrhead))->sin_addr;
+	return (prison_get_ip4(cred, faddr));
+}
+
+/*
  * Do proper source address selection on an unbound socket in case
  * of connect. Take jails into account as well.
  */
