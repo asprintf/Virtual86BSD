@@ -37,7 +37,9 @@
 
 /* Pattern matching notation (XCU 2.14), by characters of the locale: in
  * a UTF-8 locale a character is a multibyte sequence (a byte that does
- * not start a valid one stands for itself), else a byte.
+ * not start a valid one stands for itself: a literal, '*' and a bracket
+ * expression naming it match it, '?' and a non-matching list do not),
+ * else a byte.
  *
  * A bracket expression matches one character, or one of the locale's
  * multi-character collating elements ("ch") named by [.ch.] or of an
@@ -222,6 +224,7 @@ static const unsigned char *bracket(const struct m *m, const unsigned char *p, c
 	}
 	/* elements of several characters: only as named or of a class */
 	*ok = x->n > 1 ? hit && !neg : hit != neg;
+	if (neg && ch >= 0x110000) *ok = 0;
 	*want = multi && !neg;
 	return p;
 }
@@ -251,7 +254,7 @@ static int match(const struct m *m, const unsigned char *p, const unsigned char 
 		if (!*p) goto fail;
 		sl = get(m, s, &sc);
 		if (*p == '?') {
-			if (((flags & FNM_PATHNAME) && *s == '/') || LEADING(s)) goto fail;
+			if (sc >= 0x110000 || ((flags & FNM_PATHNAME) && *s == '/') || LEADING(s)) goto fail;
 			p++; s += sl;
 			continue;
 		}
