@@ -1,0 +1,16 @@
+--- a/kern/kern_time.c
++++ b/kern/kern_time.c
+@@ -1813,8 +1813,11 @@
+ 		return (EINVAL);
+ 	if ((UINT64_MAX - ts->tv_nsec) / NS_PER_SEC < ts->tv_sec)
+ 		return (EINVAL);
+-	if (ts->tv_sec == 0 && ts->tv_nsec != 0 && ts->tv_nsec < tick * 1000)
+-		ts->tv_nsec = tick * 1000;
++	/*
++	 * Not rounded up to a tick: the timers have the resolution of their
++	 * clock (clock_getres) and the callout limits how often they fire,
++	 * the overruns are counted from the interval.
++	 */
+ 	return (0);
+ }
+ 
