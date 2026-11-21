@@ -93,6 +93,7 @@ long double __ddl_atanhl(long double x);
 long double __ddl_sinl(long double x);
 long double __ddl_cosl(long double x);
 long double __ddl_sinhl(long double x);
+int __ddl_tgammal(long double x, long double *r);
 long double __ddl_coshl(long double x);
 long double __ddl_asinhl(long double x);
 int __ddl_cexpl(long double x, long double y, long double *re, long double *im);

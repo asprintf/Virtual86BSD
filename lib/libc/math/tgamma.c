@@ -60,6 +60,8 @@ long double tgammal(long double x)
 		return x > 0 ? x : __math_invalid(x);
 	if (x == 0)
 		return __math_divzero(__signbitl(x));
+	if (__ddl_tgammal(x, &g))
+		return __math_l(g);
 	if (x > 0) {
 		if (x > 1755.5L)
 			return __math_oflow(0);

@@ -561,3 +561,56 @@ long double __ddl_asinhl(long double x)    /* 2^-32 <= |x| <= 2^34 */
 {
 	return asinh_dd(tsum(x, 0)).h;
 }
+
+/* Gamma for finite x, 2^-64 <= |x| <= 1500, not a pole: ln Gamma(z) by
+ * Stirling's series for z >= 50, Gamma(x) = Gamma(z) / (x (x+1) ... (z-1)),
+ * and pi / (sin(pi x) Gamma(1 - x)) for x < 0; rounded once */
+static const dd HALFLN2PI = {0xeb3f8e4325f5a535p-64L, -0xd686dffd77cdbfb8p-129L};
+
+static dd lngamma_big(dd z)
+{
+	static const long double bn[15] = {1, -1, 1, -1, 5, -691, 7, -3617, 43867, -174611,
+	    854513, -236364091, 8553103, -23749461029.0L, 8615841276005.0L};
+	static const long double bd[15] = {6, 30, 42, 30, 66, 2730, 6, 510, 798, 330,
+	    138, 2730, 6, 870, 14322};
+	dd s, zi = ddiv(one_dd(), z), z2 = dmul(zi, zi), pw = zi;
+	int k;
+	s = dadd(dsub(dmul(dsub(z, dsc(one_dd(), 0.5L)), ln_dd(z)), z), HALFLN2PI);
+	for (k = 1; k <= 15; k++) {
+		s = dadd(s, dmul(ddiv(tsum(bn[k - 1], 0), tsum(bd[k - 1] * (2 * k) * (2 * k - 1), 0)), pw));
+		pw = dmul(pw, z2);
+	}
+	return s;
+}
+
+static dd gamma_pos_dd(dd x)    /* x > 0 */
+{
+	dd p = one_dd(), z = x;
+	while (z.h < 50) {
+		p = dmul(p, z);
+		z = dadd(z, one_dd());
+	}
+	return ddiv(exp_dd(lngamma_big(z)), p);
+}
+
+int __ddl_tgammal(long double x, long double *r)
+{
+	long double ax = __ld_abs(x), n, f;
+	dd g, s, pi = {2 * PIO2[0], 2 * PIO2[1]};
+	if (!(ax >= 0x1p-64L && ax <= 1500))
+		return 0;
+	if (x > 0) {
+		*r = gamma_pos_dd(tsum(x, 0)).h;
+		return 1;
+	}
+	n = __x87_rint(x);
+	if (n == x)
+		return 0;
+	f = x - n;
+	s = sincos_r(dmuld(pi, f), 1);
+	if (fmodl(n, 2) != 0)
+		s = dneg(s);
+	g = gamma_pos_dd(tsum(1, -x));
+	*r = ddiv(pi, dmul(s, g)).h;
+	return 1;
+}
