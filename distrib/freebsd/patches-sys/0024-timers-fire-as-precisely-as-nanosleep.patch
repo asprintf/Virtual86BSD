@@ -1,0 +1,77 @@
+--- a/kern/kern_time.c
++++ b/kern/kern_time.c
+@@ -1622,12 +1622,16 @@
+ 	return (error);
+ }
+ 
+-/* A CPU-time clock cannot advance faster than the CPUs allow: look again then. */
++/*
++ * Arm the callout, as precisely as nanosleep() is.  A CPU-time clock cannot
++ * advance faster than the CPUs allow: look again then.  A periodic timer is
++ * not re-armed sooner than 100 us, its overruns are counted from the interval.
++ */
+ static void
+-itimer_arm(struct itimer *it, const struct timespec *rem)
++itimer_arm(struct itimer *it, const struct timespec *rem, bool rearm)
+ {
+ 	struct timespec ts;
+-	struct timeval tv;
++	sbintime_t sbt;
+ 	uint64_t ns;
+ 
+ 	ts = *rem;
+@@ -1637,8 +1641,16 @@
+ 		ts.tv_sec = ns / NS_PER_SEC;
+ 		ts.tv_nsec = ns % NS_PER_SEC;
+ 	}
+-	TIMESPEC_TO_TIMEVAL(&tv, &ts);
+-	callout_reset(&it->it_callout, tvtohz(&tv), realtimer_expire, it);
++	if (ts.tv_sec < 0 || (ts.tv_sec == 0 && ts.tv_nsec == 0))
++		sbt = SBT_1MS;	/* already expired: not inside the syscall */
++	else if (ts.tv_sec >= (1 << 30))
++		sbt = SBT_MAX >> 1;
++	else
++		sbt = tstosbt(ts);
++	if (rearm && sbt < 100 * SBT_1US)
++		sbt = 100 * SBT_1US;
++	callout_reset_sbt(&it->it_callout, sbinuptime() + sbt, 0,
++	    realtimer_expire, it, C_ABSOLUTE);
+ }
+ 
+ static int
+@@ -1745,7 +1757,7 @@
+ 			 * fix it.
+ 			 */
+ 		}
+-		itimer_arm(it, &ts);
++		itimer_arm(it, &ts, false);
+ 	} else {
+ 		callout_stop(&it->it_callout);
+ 	}
+@@ -1779,7 +1791,7 @@
+ 			    timespecisset(&it->it_time.it_value) &&
+ 			    itimer_now(it, &cts, true, true) == 0) {
+ 				timespecsub(&it->it_time.it_value, &cts, &ts);
+-				itimer_arm(it, &ts);
++				itimer_arm(it, &ts, false);
+ 			}
+ 			ITIMER_UNLOCK(it);
+ 		}
+@@ -1886,7 +1898,7 @@
+ 				it->it_flags |= ITF_PSTOPPED;
+ 			} else {
+ 				timespecsub(&it->it_time.it_value, &cts, &ts);
+-				itimer_arm(it, &ts);
++				itimer_arm(it, &ts, true);
+ 			}
+ 		}
+ 
+@@ -1906,7 +1918,7 @@
+ 		} else {
+ 			ts = it->it_time.it_value;
+ 			timespecsub(&ts, &cts, &ts);
+-			itimer_arm(it, &ts);
++			itimer_arm(it, &ts, true);
+ 		}
+ 	}
+ }
