@@ -1324,7 +1324,9 @@ do_wait(struct thread *td, void *addr, u_long id,
 	}
 	umtxq_unlock(&uq->uq_key);
 	umtx_key_release(&uq->uq_key);
-	if (error == ERESTART)
+	/* SA_RESTART restarts a wait without a relative timeout (POSIX). */
+	if (error == ERESTART && timeout != NULL &&
+	    (timeout->_flags & UMTX_ABSTIME) == 0)
 		error = EINTR;
 	return (error);
 }

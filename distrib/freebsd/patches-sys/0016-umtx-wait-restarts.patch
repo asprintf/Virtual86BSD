@@ -1,0 +1,13 @@
+--- a/kern/kern_umtx.c
++++ b/kern/kern_umtx.c
+@@ -1324,7 +1324,9 @@
+ 	}
+ 	umtxq_unlock(&uq->uq_key);
+ 	umtx_key_release(&uq->uq_key);
+-	if (error == ERESTART)
++	/* SA_RESTART restarts a wait without a relative timeout (POSIX). */
++	if (error == ERESTART && timeout != NULL &&
++	    (timeout->_flags & UMTX_ABSTIME) == 0)
+ 		error = EINTR;
+ 	return (error);
+ }
