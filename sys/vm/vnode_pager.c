@@ -1365,6 +1365,13 @@ vnode_pager_generic_putpages(struct vnode *vp, vm_page_t *ma, int bytecount,
 			maxsize = object->un_pager.vnp.vnp_size - poffset;
 			ncount = btoc(maxsize);
 			if ((pgoff = (int)maxsize & PAGE_MASK) != 0) {
+				/*
+				 * The part of the last page past the end of
+				 * the file is zero (POSIX mmap()); the page
+				 * is busied and read-only mapped.
+				 */
+				pmap_zero_page_area(ma[ncount - 1], pgoff,
+				    PAGE_SIZE - pgoff);
 				pgoff = roundup2(pgoff, DEV_BSIZE);
 
 				/*
