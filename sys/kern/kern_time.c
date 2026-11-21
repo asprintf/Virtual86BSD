@@ -48,6 +48,7 @@
 #include <sys/sysctl.h>
 #include <sys/priv.h>
 #include <sys/proc.h>
+#include <sys/smp.h>
 #include <sys/posix4.h>
 #include <sys/time.h>
 #include <sys/timeffc.h>
@@ -1196,6 +1197,8 @@ itimer_start(void *dummy __unused)
 	register_posix_clock(CLOCK_REALTIME,  &rt_clock);
 	register_posix_clock(CLOCK_MONOTONIC, &rt_clock);
 	register_posix_clock(CLOCK_TAI, &rt_clock);
+	register_posix_clock(CLOCK_THREAD_CPUTIME_ID, &rt_clock);
+	register_posix_clock(CLOCK_PROCESS_CPUTIME_ID, &rt_clock);
 	p31b_setcfg(CTL_P1003_1B_TIMERS, 200112L);
 	p31b_setcfg(CTL_P1003_1B_DELAYTIMER_MAX, INT_MAX);
 	p31b_setcfg(CTL_P1003_1B_TIMER_MAX, TIMER_MAX);
@@ -1319,6 +1322,7 @@ kern_ktimer_create(struct thread *td, clockid_t clock_id, struct sigevent *evp,
 	it->it_overrun_last = 0;
 	it->it_clockid = clock_id;
 	it->it_base = clock_id;
+	it->it_tid = td->td_tid;
 	it->it_proc = p;
 	ksiginfo_init(&it->it_ksi);
 	it->it_ksi.ksi_flags |= KSI_INS | KSI_EXT;
@@ -1573,20 +1577,67 @@ kern_ktimer_getoverrun(struct thread *td, int timer_id)
 	return (error);
 }
 
-/* The time the timer's value is expressed in (it_base), see realtimer_settime(). */
+/*
+ * The time the timer's value is expressed in (it_base), see realtimer_settime().
+ * The CPU-time clocks are those of the timer's process or creating thread, read
+ * under the process lock: dropped and retaken around it (the timer is in use),
+ * or tried (callout context, EAGAIN).
+ */
 static int
-itimer_now(struct itimer *it, struct timespec *ts)
+itimer_now(struct itimer *it, struct timespec *ts, bool proc_locked,
+    bool nowait)
 {
+	struct proc *p = it->it_proc;
+	struct thread *td;
+	int error;
 
-	return (kern_clock_gettime(curthread, it->it_base, ts));
+	if (it->it_base != CLOCK_PROCESS_CPUTIME_ID &&
+	    it->it_base != CLOCK_THREAD_CPUTIME_ID)
+		return (kern_clock_gettime(curthread, it->it_base, ts));
+	if (!proc_locked) {
+		if (nowait) {
+			if (!PROC_TRYLOCK(p))
+				return (EAGAIN);
+		} else {
+			ITIMER_UNLOCK(it);
+			PROC_LOCK(p);
+			ITIMER_LOCK(it);
+		}
+	}
+	if (it->it_base == CLOCK_PROCESS_CPUTIME_ID) {
+		kern_process_cputime(p, ts);
+		error = 0;
+	} else {
+		error = ESRCH;
+		FOREACH_THREAD_IN_PROC(p, td) {
+			if (td->td_tid == it->it_tid) {
+				kern_thread_cputime(td, ts);
+				error = 0;
+				break;
+			}
+		}
+	}
+	if (!proc_locked)
+		PROC_UNLOCK(p);
+	return (error);
 }
 
+/* A CPU-time clock cannot advance faster than the CPUs allow: look again then. */
 static void
 itimer_arm(struct itimer *it, const struct timespec *rem)
 {
+	struct timespec ts;
 	struct timeval tv;
+	uint64_t ns;
 
-	TIMESPEC_TO_TIMEVAL(&tv, rem);
+	ts = *rem;
+	if (it->it_base == CLOCK_PROCESS_CPUTIME_ID && mp_ncpus > 1 &&
+	    ts.tv_sec >= 0) {
+		ns = ((uint64_t)ts.tv_sec * NS_PER_SEC + ts.tv_nsec) / mp_ncpus;
+		ts.tv_sec = ns / NS_PER_SEC;
+		ts.tv_nsec = ns % NS_PER_SEC;
+	}
+	TIMESPEC_TO_TIMEVAL(&tv, &ts);
 	callout_reset(&it->it_callout, tvtohz(&tv), realtimer_expire, it);
 }
 
@@ -1622,7 +1673,7 @@ realtimer_gettime(struct itimer *it, struct itimerspec *ovalue)
 
 	mtx_assert(&it->it_mtx, MA_OWNED);
 
-	error = itimer_now(it, &cts);
+	error = itimer_now(it, &cts, false, false);
 	if (error != 0)
 		return (error);
 
@@ -1678,7 +1729,7 @@ realtimer_settime(struct itimer *it, int flags, struct itimerspec *value,
 			it->it_base = it->it_clockid;
 		else
 			it->it_base = CLOCK_MONOTONIC;
-		error = itimer_now(it, &cts);
+		error = itimer_now(it, &cts, false, false);
 		if (error != 0)
 			return (error);
 
@@ -1726,7 +1777,7 @@ itimers_clock_set(void)
 			if ((it->it_flags & (ITF_DELETING | ITF_PSTOPPED)) == 0 &&
 			    it->it_base == CLOCK_REALTIME &&
 			    timespecisset(&it->it_time.it_value) &&
-			    itimer_now(it, &cts) == 0) {
+			    itimer_now(it, &cts, true, true) == 0) {
 				timespecsub(&it->it_time.it_value, &cts, &ts);
 				itimer_arm(it, &ts);
 			}
@@ -1782,10 +1833,19 @@ realtimer_expire_l(struct itimer *it, bool proc_locked)
 	uint64_t interval, now, overruns, value;
 	int error;
 
-	error = itimer_now(it, &cts);
+	error = itimer_now(it, &cts, proc_locked, true);
+	if (error == EAGAIN) {
+		callout_reset(&it->it_callout, 1, realtimer_expire, it);
+		return;
+	}
+	if (error != 0) {
+		timespecclear(&it->it_time.it_value);
+		timespecclear(&it->it_time.it_interval);
+		return;
+	}
 
 	/* Only fire if time is reached. */
-	if (error == 0 && timespeccmp(&cts, &it->it_time.it_value, >=)) {
+	if (timespeccmp(&cts, &it->it_time.it_value, >=)) {
 		if (timespecisset(&it->it_time.it_interval)) {
 			timespecadd(&it->it_time.it_value,
 			    &it->it_time.it_interval,
