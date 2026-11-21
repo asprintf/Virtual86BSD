@@ -32,67 +32,15 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "../misc/errors.h"
+#include "errors.h"
+
+#include "declaration.c"
 
 // TODO: Workaround for broken redox getopt weak symbols.
 #ifdef __redox__
 char* optarg;
 int optind;
 #endif
-
-enum type
-{
-	TYPE_DEFINITION,
-	TYPE_FUNCTION,
-	TYPE_GENERIC,
-	TYPE_EXTERNAL,
-	TYPE_SYMBOLIC_CONSTANT,
-	TYPE_ENUMERATION,
-	TYPE_ENUMERATION_MEMBER,
-	TYPE_UNION,
-	TYPE_UNION_MEMBER,
-	TYPE_STRUCTURE,
-	TYPE_STRUCTURE_MEMBER,
-	TYPE_TYPE,
-	TYPE_EXPRESSION,
-	TYPE_INCLUDE,
-	TYPE_NAMESPACE,
-	TYPE_COUNT,
-	TYPE_FIRST = TYPE_DEFINITION,
-};
-
-const char* type_names[] =
-{
-        [TYPE_DEFINITION] = "define",
-        [TYPE_FUNCTION] = "function",
-        [TYPE_GENERIC] = "generic",
-        [TYPE_EXTERNAL] = "external",
-        [TYPE_SYMBOLIC_CONSTANT] = "symbolic_constant",
-        [TYPE_ENUMERATION] = "enum",
-        [TYPE_ENUMERATION_MEMBER] = "enum_member",
-        [TYPE_UNION] = "union",
-        [TYPE_UNION_MEMBER] = "union_member",
-        [TYPE_STRUCTURE] = "struct",
-        [TYPE_STRUCTURE_MEMBER] = "struct_member",
-        [TYPE_TYPE] = "typedef",
-        [TYPE_EXPRESSION] = "expression",
-        [TYPE_INCLUDE] = "include",
-        [TYPE_NAMESPACE] = "namespace",
-};
-
-struct declaration
-{
-	int type_mask;
-	char* name;
-	char* sig;
-	char* parent;
-	char* options;
-	bool optional;
-	bool incomplete;
-};
-
-#define REQUIRED_TYPE(type) (1 << (type))
-#define OPTIONAL_TYPE(type) (1 << ((type) + TYPE_COUNT))
 
 static struct declaration** declarations = NULL;
 static size_t declarations_used = 0;
@@ -221,128 +169,6 @@ static bool array_add(char*** array_ptr,
 	array[(*used_ptr)++] = value;
 
 	return true;
-}
-
-static bool is_identifier(char c)
-{
-	return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') ||
-	       ('0' <= c && c <= '9') || c == '_';
-}
-
-static bool next_is_token(const char* input, const char* token)
-{
-	return !strncmp(input, token, strlen(token)) &&
-	       (!input[strlen(token)] ||
-	        isspace((unsigned char) input[strlen(token)]) ||
-	        (is_identifier(input[strlen(token)])) !=
-	         is_identifier(token[0]));
-}
-
-static struct declaration* parse_declaration(const char* input)
-{
-	struct declaration* declaration = calloc(1, sizeof(struct declaration));
-	if ( !declaration )
-		abort();
-	while ( isspace((unsigned char) input[0]) )
-		input++;
-	if ( input[0] == '[' )
-	{
-		input++;
-		size_t length = 0;
-		while ( input[length] && input[length] != ']' )
-			length++;
-		if ( input[length] != ']' )
-			abort();
-		if ( !(declaration->options = strndup(input, length)) )
-			abort();
-		input += length + 1;
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-	}
-	if ( next_is_token(input, "optional") )
-	{
-		declaration->optional = true;
-		input += strlen("optional");
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-	}
-	if ( next_is_token(input, "incomplete") )
-	{
-		declaration->incomplete = true;
-		input += strlen("incomplete");
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-	}
-	if ( next_is_token(input, "parent") )
-	{
-		input += strlen("parent");
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-		size_t length = 0;
-		if ( next_is_token(input, "struct") )
-			length += strlen("struct");
-		else if ( next_is_token(input, "union") )
-			length += strlen("union");
-		while ( isspace((unsigned char) input[length]) )
-			length++;
-		while ( input[length] && !isspace((unsigned char) input[length]) )
-			length++;
-		if ( !length )
-			abort();
-		if ( !(declaration->parent = strndup(input, length)) )
-			abort();
-		input += length;
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-	}
-	for ( enum type type = TYPE_FIRST; type < TYPE_COUNT; type++ )
-	{
-		if ( !strncmp(input, "maybe_", strlen("maybe_")) &&
-		     next_is_token(input + strlen("maybe_"), type_names[type]) )
-		{
-			input += strlen("maybe_") + strlen(type_names[type]);
-			declaration->type_mask |= OPTIONAL_TYPE(type);
-		}
-		else if ( next_is_token(input, type_names[type]) )
-		{
-			input += strlen(type_names[type]);
-			declaration->type_mask |= REQUIRED_TYPE(type);
-		}
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-	}
-	if ( !declaration->type_mask )
-		abort();
-	size_t length = 0;
-	while ( input[length] && !isspace((unsigned char) input[length]) &&
-	        input[length] != ';' && input[length] != ':' )
-		length++;
-	if ( !length )
-		abort();
-	if ( !(declaration->name = strndup(input, length)) )
-		abort();
-	input += length;
-	while ( isspace((unsigned char) input[0]) )
-		input++;
-	if ( input[0] == ':' )
-	{
-		input++;
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-		length = 0;
-		while ( input[length] && input[length] != ';' )
-			length++;
-		if ( input[length] != ';' )
-			abort();
-		if ( !(declaration->sig = strndup(input, length)) )
-			abort();
-		input += length;
-	}
-	else if ( !(declaration->sig = strdup(declaration->name)) )
-		abort();
-	if ( strcmp(input, ";") != 0 )
-		abort();
-	return declaration;
 }
 
 static bool type_check(enum type type, int type_mask)

@@ -74,7 +74,7 @@ const char* strerrno(int errnum)
 	case ENOTTY: return "ENOTTY";
 	case ENXIO: return "ENXIO";
 #if EOPNOTSUPP != ENOTSUP
-	case EOPNOTSUPP: return "ENOTSUP";
+	case EOPNOTSUPP: return "EOPNOTSUPP";
 #endif
 	case EOVERFLOW: return "EOVERFLOW";
 #ifdef EOWNERDEAD
@@ -100,7 +100,6 @@ const char* strerrno(int errnum)
 	case ETXTBSY: return "ETXTBSY";
 	case EWOULDBLOCK: return "EWOULDBLOCK";
 	case EXDEV: return "EXDEV";
-
 	default: return strerror(errnum);
 	}
 }

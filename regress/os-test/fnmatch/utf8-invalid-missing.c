@@ -7,7 +7,7 @@
 
 void run(void)
 {
-	reject(".", "\xC3"); // Missing continuation
+	reject("?", "\xC3"); // Missing continuation
 
 	reject("[!x]", "\xC3"); // Missing continuation
 }

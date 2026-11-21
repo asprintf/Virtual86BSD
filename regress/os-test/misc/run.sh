@@ -1,5 +1,9 @@
 #!/usr/bin/env sh
 mkdir -p -- "$(dirname "$2")"
+if [ -e "$3" ]; then
+  cat "$3" > $2
+  exit
+fi
 ./$1 > $2 2>&1
 CODE=$?
 if [ ! -s $2 ] || [ 2 -le $CODE ]; then

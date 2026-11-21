@@ -5,6 +5,8 @@ OUT_DIRECTORY ?= ../out
 OUT_SUITE != basename "$$(pwd)"
 OUT_OS != echo "$(OS)" | tr '[:upper:]' '[:lower:]'
 OUT_PATH = $(OUT_DIRECTORY)/$(OUT_OS)/$(OUT_SUITE)
+SKIP_DIRECTORY ?= ../skip
+SKIP_PATH = $(SKIP_DIRECTORY)/$(OUT_OS)/$(OUT_SUITE)
 TEST_RESULTS =
 TEST_ERRORS =
 .for TEST in $(TEST_SOURCES)

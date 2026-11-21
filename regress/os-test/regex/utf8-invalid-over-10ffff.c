@@ -7,13 +7,13 @@
 
 void run(void)
 {
-	reject(".", "\xF5\x80\x80\x8"); // Above U+10FFFF
+	reject(".", "\xF5\x80\x80\x80"); // Above U+10FFFF
 
-	reject("[^x]", "\xF5\x80\x80\x8"); // Above U+10FFFF
+	reject("[^x]", "\xF5\x80\x80\x80"); // Above U+10FFFF
 
-	reject("....", "\xF5\x80\x80\x8"); // Above U+10FFFF
+	reject("....", "\xF5\x80\x80\x80"); // Above U+10FFFF
 
-	reject("[!x][!x][!x][!x]", "\xF5\x80\x80\x8"); // Above U+10FFFF
+	reject("[^x][^x][^x][^x]", "\xF5\x80\x80\x80"); // Above U+10FFFF
 }
 
 int main(void)

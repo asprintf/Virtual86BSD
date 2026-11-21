@@ -22,7 +22,7 @@ $(OUT_PATH)/uname.out:
 .PHONY: clean
 test: $(OUT_PATH)/uname.out $(SUITE_LIST:=-test)
 
-%-test: %/Makefile
+%-test: %/Makefile $(OUT_PATH)/uname.out
 	$(MAKE) -C $* test
 
 .PHONY: clean

@@ -1,6 +1,7 @@
 html
 in
 out
+skip
 uname.out
 */*
 !*/BSDmakefile

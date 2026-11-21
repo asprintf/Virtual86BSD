@@ -6,8 +6,8 @@
 int main(void)
 {
 #ifdef TEXTDOMAIN_MAX
-        if ( TEXTDOMAIN_MAX < _XOPEN_TEXTDOMAIN_MAX - 3 )
-                errx(1, "TEXTDOMAIN_MAX < _XOPEN_TEXTDOMAIN_MAX - 3");
+        if ( TEXTDOMAIN_MAX < _XOPEN_NAME_MAX - 3 )
+                errx(1, "TEXTDOMAIN_MAX < _XOPEN_NAME_MAX - 3");
         return 0;
 #else
         errx(1, "missing_optional");

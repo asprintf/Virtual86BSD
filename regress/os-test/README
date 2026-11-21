@@ -233,14 +233,13 @@ found a bug in the operating _and_ os-test. Please report any hangs you
 experience. We may fix bugs and/or amend tests with an appropriate timeout.
 
 You can disable tests by simply making failing test results ahead of time, and
-copying them into your results before doing a fresh test execution.
+copying them into your results before doing a fresh test execution. For instance
+if the foo suite has a problematic bar test:
 
-    mkdir -p out.known/myos
-    echo panic > out.known/myos/foo/bar.out
-    cp -t out -R out.known/myos
+    mkdir -p skip/myos/foo
+    echo panic > skip/myos/foo/bar.out.skip
     make test
 
-The html report will show these outcomes as failures, so you don't forget about
-them. Alternatively you can delete the appropriate source files or edit the
-test source code, but this approach creates an alterate os-test that you may
-need to maintain and you risk forgetting about these tests.
+The test execution will use the bar.out.skip file as the output of the bar test
+instead of executing it. The html report will show these outcomes as failures,
+so you don't forget about them

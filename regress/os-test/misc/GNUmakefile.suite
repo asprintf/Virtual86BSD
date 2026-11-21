@@ -13,7 +13,7 @@ $(OUT_PATH):
 	mkdir -p $(OUT_PATH)
 
 $(OUT_PATH)/%.out: %
-	../misc/run.sh $* $@
+	../misc/run.sh $* $@ $(SKIP_PATH)/$*.skip
 
 .PHONY: clean
 clean: clean-test

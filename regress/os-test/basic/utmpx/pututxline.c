@@ -8,6 +8,7 @@
 #include <limits.h>
 #include <pwd.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <utmpx.h>
 
@@ -43,10 +44,10 @@ int main(void)
 				strncpy(entry.ut_line, name, sizeof(entry.ut_line));
 		}
 	}
-	struct timeval now;
-	gettimeofday(&now, NULL);
+	struct timespec now;
+	clock_gettime(CLOCK_REALTIME, &now);
 	entry.ut_tv.tv_sec = now.tv_sec;
-	entry.ut_tv.tv_usec = now.tv_usec;
+	entry.ut_tv.tv_usec = now.tv_nsec / 1000;
 	errno = 0;
 	// utmp_update may write to stderr on some BSD systems. Avoid that.
 	int dev_null = open("/dev/null", O_WRONLY);

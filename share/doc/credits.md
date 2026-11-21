@@ -224,7 +224,7 @@ turns it into the font file of vt(4) that the loader hands to the kernel.
 ## Test suites in the tree
 
 * `regress/os-test`: Sortix's os-test (https://gitlab.com/sortix/os-test),
-  git 8e790a4 (19 October 2026), ISC licence (`regress/os-test/LICENSE`),
+  git 5d947a8 (19 November 2026), ISC licence (`regress/os-test/LICENSE`),
   copyright Jonas 'Sortie' Termansen and contributors. Imported unchanged;
   what V86BSD added there (its own suites, a line in `misc/suites.list`) is
   listed in `regress/os-test/README.V86BSD`.

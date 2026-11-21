@@ -7,11 +7,11 @@
 
 void run(void)
 {
-	reject(".", "\xED\xA0\x80"); // U+D800
+	reject("?", "\xED\xA0\x80"); // U+D800
 
 	reject("[!x]", "\xED\xA0\x80"); // U+D800
 
-	reject("...", "\xED\xA0\x80"); // U+D800
+	reject("???", "\xED\xA0\x80"); // U+D800
 
 	reject("[!x][!x][!x]", "\xED\xA0\x80"); // U+D800
 }

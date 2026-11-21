@@ -12,6 +12,7 @@ regex
 signal
 stdio
 udp
+unix
 legacy-include
 legacy-basic
 xcurses-include

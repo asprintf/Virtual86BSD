@@ -6,7 +6,7 @@ all: test
 .PHONY: test
 test: $(TEST_RESULTS)
 
-../misc/namespace: ../misc/namespace.c
+../misc/namespace: ../misc/namespace.c ../misc/declaration.c
 	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(CPPFLAGS_FOR_BUILD) ../misc/namespace.c -o $@ $(LDFLAGS_FOR_BUILD)
 
 .SUFFIXES: .i .c .dM

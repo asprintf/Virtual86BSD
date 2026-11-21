@@ -2,7 +2,7 @@ os-test in V86BSD
 =================
 
 This directory is Sortix's os-test (https://gitlab.com/sortix/os-test),
-git 8e790a4 of 19 October 2026, ISC licence (LICENSE), copied unchanged.
+git 5d947a8 of 19 November 2026, ISC licence (LICENSE), copied unchanged.
 V86BSD runs it with lib/libc/tools/ost/ (POSIX sh and c17; see the
 README.md there): sh lib/libc/tools/ost/vmrun.sh OBJDIR WORKDIR builds
 and runs every suite on V86BSD's own kernel in QEMU and makes the report.

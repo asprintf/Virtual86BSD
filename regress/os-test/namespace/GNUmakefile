@@ -8,7 +8,7 @@ test: $(TEST_RESULTS)
 
 .SUFFIXES: .i .c .dM
 
-../misc/namespace: ../misc/namespace.c
+../misc/namespace: ../misc/namespace.c ../misc/declaration.c
 	$(CC_FOR_BUILD) $(CFLAGS_FOR_BUILD) $(CPPFLAGS_FOR_BUILD) ../misc/namespace.c -o $@ $(LDFLAGS_FOR_BUILD)
 
 .c.i:

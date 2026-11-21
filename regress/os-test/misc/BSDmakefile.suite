@@ -11,7 +11,7 @@ test: $(TEST_RESULTS)
 
 .for TEST in $(TEST_SOURCES)
 $(OUT_PATH)/$(TEST:.c=.out): $(TEST:.c=)
-	../misc/run.sh $(TEST:.c=) $@
+	../misc/run.sh $(TEST:.c=) $@ $(SKIP_PATH)/$(TEST:.c=.skip)
 .endfor
 
 .PHONY: clean

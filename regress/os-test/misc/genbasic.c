@@ -77,6 +77,30 @@
 
 #include "errors.h"
 
+#include "declaration.c"
+
+// Avoid asprintf since it's not portable to POSIX 2008.
+static int format_string(char** restrict result_ptr,
+                         const char* restrict format,
+                         ...)
+{
+	va_list list, list2;
+	va_start(list, format);
+	va_copy(list2, list);
+	int length = vsnprintf(NULL, 0, format, list);
+	va_end(list);
+	char* buffer = malloc(length + 1);
+	*result_ptr = buffer;
+	if ( !buffer )
+	{
+		va_end(list2);
+		return -1;
+	}
+	length = vsnprintf(buffer, length + 1, format, list2);
+	va_end(list2);
+	return length;
+}
+
 #if defined(TRAIN) || defined(GENERATE)
 
 #define VAR_ANY -1
@@ -154,6 +178,39 @@ static const struct mathflag mathflags[] =
 	{"cpow", {VAR_ANY, VAR_ANY, VAR_ANY, VAR_POSINF}, MF_UNSPEC},
 	{"cpow", {VAR_ANY, VAR_ANY, VAR_ANY, VAR_NEGINF}, MF_UNSPEC},
 	{"cpow", {VAR_ZERO, VAR_ZERO, VAR_ZERO, VAR_ANY}, MF_UNSPEC},
+	// glibc fails to set EDOM despite setting the invalid exception.
+	{"fma", {VAR_POSINF, VAR_ZERO, VAR_POS}, MF_FPINVALID},
+	{"fma", {VAR_NEGINF, VAR_ZERO, VAR_POS}, MF_FPINVALID},
+	{"fma", {VAR_ZERO, VAR_POSINF, VAR_POS}, MF_FPINVALID},
+	{"fma", {VAR_ZERO, VAR_NEGINF, VAR_POS}, MF_FPINVALID},
+	{"fma", {VAR_POSINF, VAR_ZERO, VAR_NEG}, MF_FPINVALID},
+	{"fma", {VAR_NEGINF, VAR_ZERO, VAR_NEG}, MF_FPINVALID},
+	{"fma", {VAR_ZERO, VAR_POSINF, VAR_NEG}, MF_FPINVALID},
+	{"fma", {VAR_ZERO, VAR_NEGINF, VAR_NEG}, MF_FPINVALID},
+	{"fma", {VAR_POSINF, VAR_ZERO, VAR_ZERO}, MF_FPINVALID},
+	{"fma", {VAR_NEGINF, VAR_ZERO, VAR_ZERO}, MF_FPINVALID},
+	{"fma", {VAR_ZERO, VAR_POSINF, VAR_ZERO}, MF_FPINVALID},
+	{"fma", {VAR_ZERO, VAR_NEGINF, VAR_ZERO}, MF_FPINVALID},
+	{"fma", {VAR_POSINF, VAR_ZERO, VAR_POSINF}, MF_FPINVALID},
+	{"fma", {VAR_NEGINF, VAR_ZERO, VAR_POSINF}, MF_FPINVALID},
+	{"fma", {VAR_ZERO, VAR_POSINF, VAR_POSINF}, MF_FPINVALID},
+	{"fma", {VAR_ZERO, VAR_NEGINF, VAR_POSINF}, MF_FPINVALID},
+	{"fma", {VAR_POSINF, VAR_ZERO, VAR_NEGINF}, MF_FPINVALID},
+	{"fma", {VAR_NEGINF, VAR_ZERO, VAR_NEGINF}, MF_FPINVALID},
+	{"fma", {VAR_ZERO, VAR_POSINF, VAR_NEGINF}, MF_FPINVALID},
+	{"fma", {VAR_ZERO, VAR_NEGINF, VAR_NEGINF}, MF_FPINVALID},
+	{"fma", {VAR_NEG, VAR_NEGINF, VAR_NEGINF}, MF_FPINVALID},
+	{"fma", {VAR_NEG, VAR_POSINF, VAR_POSINF}, MF_FPINVALID},
+	{"fma", {VAR_NEGINF, VAR_NEG, VAR_NEGINF}, MF_FPINVALID},
+	{"fma", {VAR_NEGINF, VAR_NEGINF, VAR_NEGINF}, MF_FPINVALID},
+	{"fma", {VAR_NEGINF, VAR_POS, VAR_POSINF}, MF_FPINVALID},
+	{"fma", {VAR_NEGINF, VAR_POSINF, VAR_POSINF}, MF_FPINVALID},
+	{"fma", {VAR_POS, VAR_NEGINF, VAR_POSINF}, MF_FPINVALID},
+	{"fma", {VAR_POS, VAR_POSINF, VAR_NEGINF}, MF_FPINVALID},
+	{"fma", {VAR_POSINF, VAR_NEG, VAR_POSINF}, MF_FPINVALID},
+	{"fma", {VAR_POSINF, VAR_NEGINF, VAR_POSINF}, MF_FPINVALID},
+	{"fma", {VAR_POSINF, VAR_POS, VAR_NEGINF}, MF_FPINVALID},
+	{"fma", {VAR_POSINF, VAR_POSINF, VAR_NEGINF}, MF_FPINVALID},
 	// Errors are optional in these cases.
 	{"fma", {VAR_POSINF, VAR_ZERO, VAR_NAN}, MF_MAYERR | MF_FPINVALID},
 	{"fma", {VAR_NEGINF, VAR_ZERO, VAR_NAN}, MF_MAYERR | MF_FPINVALID},
@@ -251,204 +308,6 @@ static const struct mathflag mathflags[] =
 };
 
 #endif
-
-enum type
-{
-	TYPE_DEFINITION,
-	TYPE_FUNCTION,
-	TYPE_GENERIC,
-	TYPE_EXTERNAL,
-	TYPE_SYMBOLIC_CONSTANT,
-	TYPE_ENUMERATION,
-	TYPE_ENUMERATION_MEMBER,
-	TYPE_UNION,
-	TYPE_UNION_MEMBER,
-	TYPE_STRUCTURE,
-	TYPE_STRUCTURE_MEMBER,
-	TYPE_TYPE,
-	TYPE_EXPRESSION,
-	TYPE_INCLUDE,
-	TYPE_NAMESPACE,
-	TYPE_COUNT,
-	TYPE_FIRST = TYPE_DEFINITION,
-};
-
-const char* type_names[] =
-{
-        [TYPE_DEFINITION] = "define",
-        [TYPE_FUNCTION] = "function",
-        [TYPE_GENERIC] = "generic",
-        [TYPE_EXTERNAL] = "external",
-        [TYPE_SYMBOLIC_CONSTANT] = "symbolic_constant",
-        [TYPE_ENUMERATION] = "enum",
-        [TYPE_ENUMERATION_MEMBER] = "enum_member",
-        [TYPE_UNION] = "union",
-        [TYPE_UNION_MEMBER] = "union_member",
-        [TYPE_STRUCTURE] = "struct",
-        [TYPE_STRUCTURE_MEMBER] = "struct_member",
-        [TYPE_TYPE] = "typedef",
-        [TYPE_EXPRESSION] = "expression",
-        [TYPE_INCLUDE] = "include",
-        [TYPE_NAMESPACE] = "namespace",
-};
-
-struct declaration
-{
-	int type_mask;
-	char* name;
-	char* sig;
-	char* parent;
-	char* options;
-	bool optional;
-	bool incomplete;
-};
-
-#define REQUIRED_TYPE(type) (1 << (type))
-#define OPTIONAL_TYPE(type) (1 << ((type) + TYPE_COUNT))
-
-// Avoid asprintf since it's not portable to POSIX 2008.
-static int format_string(char** restrict result_ptr,
-                         const char* restrict format,
-                         ...)
-{
-	va_list list, list2;
-	va_start(list, format);
-	va_copy(list2, list);
-	int length = vsnprintf(NULL, 0, format, list);
-	va_end(list);
-	char* buffer = malloc(length + 1);
-	*result_ptr = buffer;
-	if ( !buffer )
-	{
-		va_end(list2);
-		return -1;
-	}
-	length = vsnprintf(buffer, length + 1, format, list2);
-	va_end(list2);
-	return length;
-}
-
-static bool is_identifier(char c)
-{
-	return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z') ||
-	       ('0' <= c && c <= '9') || c == '_';
-}
-
-static bool next_is_token(const char* input, const char* token)
-{
-	return !strncmp(input, token, strlen(token)) &&
-	       (!input[strlen(token)] ||
-	        isspace((unsigned char) input[strlen(token)]) ||
-	        (is_identifier(input[strlen(token)])) !=
-	         is_identifier(token[0]));
-}
-
-static struct declaration* parse_declaration(const char* input)
-{
-	struct declaration* declaration = calloc(1, sizeof(struct declaration));
-	if ( !declaration )
-		abort();
-	while ( isspace((unsigned char) input[0]) )
-		input++;
-	if ( input[0] == '[' )
-	{
-		input++;
-		size_t length = 0;
-		while ( input[length] && input[length] != ']' )
-			length++;
-		if ( input[length] != ']' )
-			abort();
-		if ( !(declaration->options = strndup(input, length)) )
-			abort();
-		input += length + 1;
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-	}
-	if ( next_is_token(input, "optional") )
-	{
-		declaration->optional = true;
-		input += strlen("optional");
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-	}
-	if ( next_is_token(input, "incomplete") )
-	{
-		declaration->incomplete = true;
-		input += strlen("incomplete");
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-	}
-	if ( next_is_token(input, "parent") )
-	{
-		input += strlen("parent");
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-		size_t length = 0;
-		if ( next_is_token(input, "struct") )
-			length += strlen("struct");
-		else if ( next_is_token(input, "union") )
-			length += strlen("union");
-		while ( isspace((unsigned char) input[length]) )
-			length++;
-		while ( input[length] && !isspace((unsigned char) input[length]) )
-			length++;
-		if ( !length )
-			abort();
-		if ( !(declaration->parent = strndup(input, length)) )
-			abort();
-		input += length;
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-	}
-	for ( enum type type = TYPE_FIRST; type < TYPE_COUNT; type++ )
-	{
-		if ( !strncmp(input, "maybe_", strlen("maybe_")) &&
-		     next_is_token(input + strlen("maybe_"), type_names[type]) )
-		{
-			input += strlen("maybe_") + strlen(type_names[type]);
-			declaration->type_mask |= OPTIONAL_TYPE(type);
-		}
-		else if ( next_is_token(input, type_names[type]) )
-		{
-			input += strlen(type_names[type]);
-			declaration->type_mask |= REQUIRED_TYPE(type);
-		}
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-	}
-	if ( !declaration->type_mask )
-		abort();
-	size_t length = 0;
-	while ( input[length] && !isspace((unsigned char) input[length]) &&
-	        input[length] != ';' && input[length] != ':' )
-		length++;
-	if ( !length )
-		abort();
-	if ( !(declaration->name = strndup(input, length)) )
-		abort();
-	input += length;
-	while ( isspace((unsigned char) input[0]) )
-		input++;
-	if ( input[0] == ':' )
-	{
-		input++;
-		while ( isspace((unsigned char) input[0]) )
-			input++;
-		length = 0;
-		while ( input[length] && input[length] != ';' )
-			length++;
-		if ( input[length] != ';' )
-			abort();
-		if ( !(declaration->sig = strndup(input, length)) )
-			abort();
-		input += length;
-	}
-	else if ( !(declaration->sig = strdup(declaration->name)) )
-		abort();
-	if ( strcmp(input, ";") != 0 )
-		abort();
-	return declaration;
-}
 
 static bool is_return_type(const char* sig, const char* type)
 {

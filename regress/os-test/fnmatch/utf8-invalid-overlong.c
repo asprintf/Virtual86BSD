@@ -7,11 +7,11 @@
 
 void run(void)
 {
-	reject(".", "\xC0\xAF"); // Overlong encoding
+	reject("?", "\xC0\xAF"); // Overlong encoding
 
 	reject("[!x]", "\xC0\xAF"); // Overlong encoding
 
-	reject("..", "\xC0\xAF"); // Overlong encoding
+	reject("??", "\xC0\xAF"); // Overlong encoding
 
 	reject("[!x][!x]", "\xC0\xAF"); // Overlong encoding
 }

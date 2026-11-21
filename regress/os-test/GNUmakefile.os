@@ -17,6 +17,7 @@ test: $(OS_LIST)
 	rm -rf 'tmp/$*'
 	mkdir -p 'tmp/$*'
 	cp -R -t 'tmp/$*' -- Makefile BSDmakefile GNUmakefile misc $(SUITE_LIST)
+	if [ -d skip ]; then cp -R skip 'tmp/$*'/.; fi
 	echo $(SUITE_LIST) | tr ' ' '\n' > 'tmp/$*/misc/suites.list'
 	$(MAKE) -C tmp/$* clean
 	cd 'tmp/$*' && '../../os/$*'

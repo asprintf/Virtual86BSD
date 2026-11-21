@@ -27,7 +27,7 @@ test: $(OUT_PATH)/uname.out $(SUITE_LIST:=-test)
 
 .for SUITE in $(SUITE_LIST)
 .PHONY: $(SUITE)-test
-$(SUITE)-test:
+$(SUITE)-test: $(OUT_PATH)/uname.out
 	$(MAKE) -C $(SUITE) test
 .endfor
 

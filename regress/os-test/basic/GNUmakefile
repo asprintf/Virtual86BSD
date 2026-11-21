@@ -9,11 +9,11 @@ all: dlfcn/dlclose.so dlfcn/dlopen.so dlfcn/dlsym.so
 	$(CC) $(SHARED_CFLAGS) $(CFLAGS) $(CPPFLAGS) -DSHARED $< -o $@ $(LDFLAGS)
 
 $(OUT_PATH)/dlfcn/dlclose.out: dlfcn/dlclose dlfcn/dlclose.so
-	../misc/run.sh dlfcn/dlclose $(OUT_PATH)/dlfcn/dlclose.out
+	../misc/run.sh dlfcn/dlclose $(OUT_PATH)/dlfcn/dlclose.out $(SKIP_PATH)/dlfcn/dlclose.skip
 $(OUT_PATH)/dlfcn/dlopen.out: dlfcn/dlopen dlfcn/dlopen.so
-	../misc/run.sh dlfcn/dlopen $(OUT_PATH)/dlfcn/dlopen.out
+	../misc/run.sh dlfcn/dlopen $(OUT_PATH)/dlfcn/dlopen.out $(SKIP_PATH)/dlfcn/dlopen.skip
 $(OUT_PATH)/dlfcn/dlsym.out: dlfcn/dlsym dlfcn/dlsym.so
-	../misc/run.sh dlfcn/dlsym $(OUT_PATH)/dlfcn/dlsym.out
+	../misc/run.sh dlfcn/dlsym $(OUT_PATH)/dlfcn/dlsym.out $(SKIP_PATH)/dlfcn/dlsym.skip
 endif
 
 clean: clean-so
