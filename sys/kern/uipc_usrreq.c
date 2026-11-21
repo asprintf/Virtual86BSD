@@ -1718,6 +1718,9 @@ uipc_sopoll_stream_or_seqpacket(struct socket *so, int events,
 	} else {
 		if (so->so_state & SS_ISDISCONNECTED)
 			revents = POLLHUP;
+		else if ((so->so_state & (SS_ISCONNECTED | SS_ISCONNECTING |
+		    SS_ISDISCONNECTING)) == 0)
+			revents = POLLERR;	/* read and write fail ENOTCONN */
 		else
 			revents = 0;
 		if (events & (POLLIN | POLLRDNORM | POLLRDHUP)) {

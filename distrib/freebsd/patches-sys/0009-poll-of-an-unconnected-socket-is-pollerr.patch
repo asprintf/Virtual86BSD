@@ -1,0 +1,26 @@
+--- a/kern/uipc_socket.c
++++ b/kern/uipc_socket.c
+@@ -4476,6 +4476,11 @@
+ 		}
+ 		if (so->so_rcv.sb_state & SBS_CANTRCVMORE)
+ 			revents |= events & POLLRDHUP;
++		/* read and write fail ENOTCONN: POSIX says POLLERR */
++		if ((so->so_proto->pr_flags & PR_CONNREQUIRED) != 0 &&
++		    (so->so_state & (SS_ISCONNECTED | SS_ISCONNECTING |
++		    SS_ISDISCONNECTING | SS_ISDISCONNECTED)) == 0)
++			revents |= POLLERR;
+ 		if (revents == 0) {
+ 			if (events &
+ 			    (POLLIN | POLLPRI | POLLRDNORM | POLLRDBAND | POLLRDHUP)) {
+--- a/kern/uipc_usrreq.c
++++ b/kern/uipc_usrreq.c
+@@ -1718,6 +1718,9 @@
+ 	} else {
+ 		if (so->so_state & SS_ISDISCONNECTED)
+ 			revents = POLLHUP;
++		else if ((so->so_state & (SS_ISCONNECTED | SS_ISCONNECTING |
++		    SS_ISDISCONNECTING)) == 0)
++			revents = POLLERR;	/* read and write fail ENOTCONN */
+ 		else
+ 			revents = 0;
+ 		if (events & (POLLIN | POLLRDNORM | POLLRDHUP)) {

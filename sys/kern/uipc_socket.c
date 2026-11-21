@@ -4476,6 +4476,11 @@ sopoll_generic(struct socket *so, int events, struct thread *td)
 		}
 		if (so->so_rcv.sb_state & SBS_CANTRCVMORE)
 			revents |= events & POLLRDHUP;
+		/* read and write fail ENOTCONN: POSIX says POLLERR */
+		if ((so->so_proto->pr_flags & PR_CONNREQUIRED) != 0 &&
+		    (so->so_state & (SS_ISCONNECTED | SS_ISCONNECTING |
+		    SS_ISDISCONNECTING | SS_ISDISCONNECTED)) == 0)
+			revents |= POLLERR;
 		if (revents == 0) {
 			if (events &
 			    (POLLIN | POLLPRI | POLLRDNORM | POLLRDBAND | POLLRDHUP)) {
