@@ -1,0 +1,17 @@
+--- a/kern/sys_socket.c
++++ b/kern/sys_socket.c
+@@ -250,11 +250,10 @@
+ 
+ 	case SIOCATMARK:
+ 		/* Unlocked read. */
+-		if (SOLISTENING(so)) {
+-			error = EINVAL;
+-		} else {
++		if (SOLISTENING(so))
++			*(int *)data = 0;
++		else
+ 			*(int *)data = (so->so_rcv.sb_state & SBS_RCVATMARK) != 0;
+-		}
+ 		break;
+ 	default:
+ 		/*

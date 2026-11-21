@@ -250,11 +250,10 @@ soo_ioctl(struct file *fp, u_long cmd, void *data, struct ucred *active_cred,
 
 	case SIOCATMARK:
 		/* Unlocked read. */
-		if (SOLISTENING(so)) {
-			error = EINVAL;
-		} else {
+		if (SOLISTENING(so))
+			*(int *)data = 0;
+		else
 			*(int *)data = (so->so_rcv.sb_state & SBS_RCVATMARK) != 0;
-		}
 		break;
 	default:
 		/*
