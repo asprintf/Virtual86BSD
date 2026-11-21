@@ -491,8 +491,15 @@ kern_clock_getres(struct thread *td, clockid_t clock_id, struct timespec *ts)
 		ts->tv_nsec = 1000000000 / cpu_tickrate() + 1;
 		break;
 	default:
-		if ((int)clock_id < 0)
+		if ((int)clock_id < 0) {
+			struct timespec cts;
+			int error;
+
+			error = get_cputime(td, clock_id, &cts);
+			if (error != 0)
+				return (error);
 			goto cputime;
+		}
 		return (EINVAL);
 	}
 	return (0);
