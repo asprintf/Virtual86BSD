@@ -3616,8 +3616,10 @@ vm_map_wire_locked(vm_map_t map, vm_offset_t start, vm_offset_t end, int flags)
 		    ("owned map entry %p", entry));
 		entry->eflags |= MAP_ENTRY_IN_TRANSITION;
 		entry->wiring_thread = curthread;
-		if ((entry->protection & (VM_PROT_READ | VM_PROT_EXECUTE)) == 0
-		    || (entry->protection & prot) != prot) {
+		/* A write-only mapping is wired too (POSIX mlockall). */
+		if ((entry->protection & (VM_PROT_READ | VM_PROT_WRITE |
+		    VM_PROT_EXECUTE)) == 0 ||
+		    (entry->protection & prot) != prot) {
 			entry->eflags |= MAP_ENTRY_WIRE_SKIPPED;
 			if (!holes_ok) {
 				end = entry->end;
