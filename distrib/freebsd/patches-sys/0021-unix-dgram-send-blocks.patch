@@ -1,0 +1,60 @@
+--- a/kern/uipc_usrreq.c
++++ b/kern/uipc_usrreq.c
+@@ -2048,6 +2048,40 @@
+ 	}
+ 	SOCK_SENDBUF_UNLOCK(so);
+ 
++	/*
++	 * A full send buffer blocks a connected sender until the peer reads
++	 * (POSIX send(), SO_SNDTIMEO) instead of failing with ENOBUFS.
++	 */
++	if (addr == NULL && (so->so_state & SS_NBIO) == 0 &&
++	    (flags & (MSG_DONTWAIT | MSG_NBIO)) == 0) {
++		for (;;) {
++			UNP_PCB_LOCK(unp);
++			unp2 = unp_pcb_lock_peer(unp);
++			if (unp2 == NULL) {
++				UNP_PCB_UNLOCK(unp);
++				break;
++			}
++			so2 = unp2->unp_socket;
++			SOCK_RECVBUF_LOCK(so2);
++			if (uipc_dgram_sbspace(&so->so_snd, cc, mbcnt) ||
++			    so->so_snd.uxdg_cc == 0 ||
++			    (so->so_snd.sb_state & SBS_CANTRCVMORE) != 0 ||
++			    (so2->so_rcv.sb_state & SBS_CANTRCVMORE) != 0) {
++				SOCK_RECVBUF_UNLOCK(so2);
++				unp_pcb_unlock_pair(unp, unp2);
++				break;
++			}
++			soref(so2);
++			unp_pcb_unlock_pair(unp, unp2);
++			error = msleep_sbt(&so->so_snd, SOCK_RECVBUF_MTX(so2),
++			    PSOCK | PCATCH, "uxdgsnd", so->so_snd.sb_timeo, 0, 0);
++			SOCK_RECVBUF_UNLOCK(so2);
++			sorele(so2);
++			if (error != 0)
++				goto out3;
++		}
++	}
++
+ 	if (addr != NULL) {
+ 		if ((error = unp_connectat(AT_FDCWD, so, addr, td, true)))
+ 			goto out3;
+@@ -2334,6 +2368,8 @@
+ 	sb->uxdg_cc -= m->m_pkthdr.len;
+ 	sb->uxdg_ctl -= m->m_pkthdr.ctllen;
+ 	sb->uxdg_mbcnt -= m->m_pkthdr.memlen;
++	if (sb != &so->so_rcv)
++		wakeup(sb);	/* a sender waiting for room, see above */
+ 
+ 	if (__predict_false(flags & MSG_PEEK))
+ 		return (uipc_peek_dgram(so, m, psa, uio, controlp, flagsp));
+@@ -4313,6 +4349,7 @@
+ 			TAILQ_REMOVE(&so->so_rcv.uxdg_conns, sb, uxdg_clist);
+ 			/* Note: socket of sb may reconnect. */
+ 			sb->uxdg_cc = sb->uxdg_ctl = sb->uxdg_mbcnt = 0;
++			wakeup(sb);
+ 		}
+ 		sb = &so->so_rcv;
+ 		if (sb->uxdg_peeked != NULL) {
