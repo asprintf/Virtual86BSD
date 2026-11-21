@@ -37,6 +37,11 @@
 long double _Complex catanhl(long double _Complex z)
 {
 	long double x = __cre(z), y = __cim(z), ax = fabsl(x), ay = fabsl(y), r;
+	{
+		long double zr, zi;
+		if (__ddl_catanhl(x, y, &zr, &zi))
+			return __cpack(zr, zi);
+	}
 	if (INF(x) || INF(y))
 		return __cpack(copysignl(0, x), y == y ? copysignl(__PIO2, y) : y);
 	if (x != x || y != y) {

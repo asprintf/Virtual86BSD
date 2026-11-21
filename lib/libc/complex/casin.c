@@ -49,6 +49,11 @@ static long double reconjmul(long double ar, long double ai, long double br, lon
 long double _Complex casinhl(long double _Complex z)
 {
 	long double x = __cre(z), y = __cim(z), ax = fabsl(x), r1, i1, r2, i2, xi, eta;
+	{
+		long double zr, zi;
+		if (__ddl_casinhl(x, y, &zr, &zi))
+			return __cpack(zr, zi);
+	}
 	if (y == 0)
 		return __cpack(asinhl(x), y);
 	if (!(ax < BIG && fabsl(y) < BIG) && (ax == ax || fabsl(y) - fabsl(y) != 0)) {
@@ -70,6 +75,11 @@ long double _Complex casinhl(long double _Complex z)
 long double _Complex cacoshl(long double _Complex z)
 {
 	long double x = __cre(z), y = __cim(z), r1, i1, r2, i2;
+	{
+		long double zr, zi;
+		if (__ddl_cacoshl(x, y, &zr, &zi))
+			return __cpack(zr, zi);
+	}
 	if (!(fabsl(x) < BIG && fabsl(y) < BIG) && (x == x || fabsl(y) - fabsl(y) != 0)
 	    && (y == y || fabsl(x) - fabsl(x) != 0))
 		return __cpack(logl(hypotl(x, y)) + __LN2, atan2l(y, x));

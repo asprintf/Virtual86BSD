@@ -65,7 +65,11 @@ __CWRAP(clog)
 /* z^w = e^(w log z) */
 long double _Complex cpowl(long double _Complex z, long double _Complex w)
 {
-	long double _Complex l = clogl(z);
+	long double _Complex l;
+	long double zr, zi;
+	if (__ddl_cpowl(__cre(z), __cim(z), __cre(w), __cim(w), &zr, &zi))
+		return __cpack(zr, zi);
+	l = clogl(z);
 	long double a = __cre(l), b = __cim(l), c = __cre(w), d = __cim(w);
 	return cexpl(__cpack(a * c - b * d, a * d + b * c));
 }

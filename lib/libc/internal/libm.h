@@ -92,6 +92,14 @@ long double __ddl_log10l(long double x);
 long double __ddl_atanhl(long double x);
 long double __ddl_sinl(long double x);
 long double __ddl_cosl(long double x);
+int __ddl_cexpl(long double x, long double y, long double *re, long double *im);
+int __ddl_csinhl(long double x, long double y, long double *re, long double *im);
+int __ddl_ccoshl(long double x, long double y, long double *re, long double *im);
+int __ddl_ctanhl(long double x, long double y, long double *re, long double *im);
+int __ddl_catanhl(long double x, long double y, long double *re, long double *im);
+int __ddl_casinhl(long double x, long double y, long double *re, long double *im);
+int __ddl_cacoshl(long double x, long double y, long double *re, long double *im);
+int __ddl_cpowl(long double x, long double y, long double c, long double d, long double *re, long double *im);
 
 /* cores in long double */
 long double __expl(long double x);           /* no error handling; |x| moderate */

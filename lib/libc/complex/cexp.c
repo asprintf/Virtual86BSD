@@ -33,6 +33,11 @@
 long double _Complex cexpl(long double _Complex z)
 {
 	long double x = __cre(z), y = __cim(z), e, c, s;
+	{
+		long double zr, zi;
+		if (__ddl_cexpl(x, y, &zr, &zi))
+			return __cpack(zr, zi);
+	}
 	if (y == 0)
 		return __cpack(expl(x), y);
 	if (__ld_nonfinite(y)) {                       /* y infinite or NaN */
