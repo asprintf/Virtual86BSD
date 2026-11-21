@@ -41,6 +41,7 @@
 #include <sys/sysproto.h>
 #include <sys/resourcevar.h>
 #include <sys/signalvar.h>
+#include <sys/sx.h>
 #include <sys/kernel.h>
 #include <sys/sleepqueue.h>
 #include <sys/syscallsubr.h>
@@ -104,6 +105,7 @@ static int	realtimer_settime(struct itimer *, int,
 static int	realtimer_delete(struct itimer *);
 static void	realtimer_expire(void *);
 static void	realtimer_expire_l(struct itimer *it, bool proc_locked);
+static void	itimers_clock_set(void);
 
 static void	realitexpire(void *arg);
 
@@ -165,6 +167,7 @@ settime(struct thread *td, struct timeval *tv)
 	ts.tv_sec = tv->tv_sec;
 	ts.tv_nsec = tv->tv_usec * 1000;
 	tc_setclock(&ts);
+	itimers_clock_set();
 	resettodr();
 	return (0);
 }
@@ -1697,6 +1700,41 @@ realtimer_settime(struct itimer *it, int flags, struct itimerspec *value,
 	}
 
 	return (0);
+}
+
+/* CLOCK_REALTIME was set: armed absolute timers on it expire by the new value. */
+static void
+itimers_clock_set(void)
+{
+	struct timespec cts, ts;
+	struct proc *p;
+	struct itimer *it;
+	int id;
+
+	sx_slock(&allproc_lock);
+	FOREACH_PROC_IN_SYSTEM(p) {
+		PROC_LOCK(p);
+		if (p->p_itimers == NULL) {
+			PROC_UNLOCK(p);
+			continue;
+		}
+		for (id = 3; id < TIMER_MAX; id++) {
+			it = p->p_itimers->its_timers[id];
+			if (it == NULL)
+				continue;
+			ITIMER_LOCK(it);
+			if ((it->it_flags & (ITF_DELETING | ITF_PSTOPPED)) == 0 &&
+			    it->it_base == CLOCK_REALTIME &&
+			    timespecisset(&it->it_time.it_value) &&
+			    itimer_now(it, &cts) == 0) {
+				timespecsub(&it->it_time.it_value, &cts, &ts);
+				itimer_arm(it, &ts);
+			}
+			ITIMER_UNLOCK(it);
+		}
+		PROC_UNLOCK(p);
+	}
+	sx_sunlock(&allproc_lock);
 }
 
 int
