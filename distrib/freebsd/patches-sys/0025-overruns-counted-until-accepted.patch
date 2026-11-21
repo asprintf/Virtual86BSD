@@ -1,0 +1,39 @@
+--- a/kern/kern_time.c
++++ b/kern/kern_time.c
+@@ -1803,11 +1803,36 @@
+ int
+ itimer_accept(struct proc *p, int timerid, ksiginfo_t *ksi)
+ {
++	struct timespec cts;
+ 	struct itimer *it;
+ 
+ 	PROC_LOCK_ASSERT(p, MA_OWNED);
+ 	it = itimer_find(p, timerid);
+ 	if (it != NULL) {
++		/*
++		 * Expirations since the last callout count up to now: the
++		 * overruns are those until the signal is delivered or accepted.
++		 */
++		if (timespecisset(&it->it_time.it_value) &&
++		    timespecisset(&it->it_time.it_interval) &&
++		    itimer_now(it, &cts, true, true) == 0 &&
++		    timespeccmp(&cts, &it->it_time.it_value, >=)) {
++			uint64_t interval, now, value, missed;
++
++			interval = (uint64_t)it->it_time.it_interval.tv_sec *
++			    NS_PER_SEC + it->it_time.it_interval.tv_nsec;
++			value = (uint64_t)it->it_time.it_value.tv_sec *
++			    NS_PER_SEC + it->it_time.it_value.tv_nsec;
++			now = (uint64_t)cts.tv_sec * NS_PER_SEC + cts.tv_nsec;
++			missed = (now - value) / interval + 1;
++			if (it->it_overrun + missed <= INT_MAX)
++				it->it_overrun += (int)missed;
++			else
++				it->it_overrun = INT_MAX;
++			value += missed * interval;
++			it->it_time.it_value.tv_sec = value / NS_PER_SEC;
++			it->it_time.it_value.tv_nsec = value % NS_PER_SEC;
++		}
+ 		ksi->ksi_overrun = it->it_overrun;
+ 		it->it_overrun_last = it->it_overrun;
+ 		it->it_overrun = 0;
