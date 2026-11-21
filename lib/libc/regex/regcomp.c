@@ -770,7 +770,7 @@ static int interval(P *p, int *min, int *max)
 	long a = 0, b;
 	int digits = 0;
 	while (*s >= '0' && *s <= '9') { if (a <= RE_DUP_MAX) a = a * 10 + (*s - '0'); s++; digits++; }
-	if (!digits && !(p->ere && *s == ',')) return REG_BADBR;
+	if (!digits && *s != ',') return REG_BADBR;
 	b = a;
 	if (*s == ',') {
 		s++;
