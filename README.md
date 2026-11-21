@@ -191,11 +191,12 @@ built for it, see "Where things stand").
   `share/doc/conformance.md` (UDP's open questions, last-ulp long double results,
   readings of the standard).
 * The Open POSIX Test Suite (LTP): `sh lib/libc/tools/gate.sh pts WORKDIR`.
-  1805 of the 1876 that compile pass (glibc on Linux passes 1693 of its
-  1848; V86BSD's old kernel passed 1812 of 1848).  Most of the 71 others have a
-  cause in the kernel or the test that `conformance.md` names (no
-  `SCHED_SPORADIC`, the scheduler's own `SCHED_OTHER` priorities, timers on
-  CPU-time clocks, ...); about 27 have no proven cause yet.
+  1814 of the 1876 that compile pass (glibc on Linux passes 1693 of its
+  1848; V86BSD's old kernel passed 1812 of 1848).  `conformance.md` names the
+  cause of every other one: behaviour that POSIX leaves open, makes optional or
+  only recommends (no `SCHED_SPORADIC`, the scheduler's own `SCHED_OTHER`
+  priorities, ...), tests that are wrong, and two that depend on how a datagram
+  socket buffer counts its memory.
 * The utilities: `sh distrib/utilsuite-freebsd.sh [UTILITY...]` runs
   `regress/<dir>/<utility>/test_<utility>.sh` for every utility as root in
   QEMU, on programs built by `boot-freebsd.sh -n`.  The tests use only what

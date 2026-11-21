@@ -45,7 +45,7 @@ is gone; read them as history.
 
 **Tested** (`share/doc/conformance.md`): `regress/lib/libc` 47 of 47 (static,
 dynamic, four processors); os-test 5750 of 5863, every non-pass explained;
-Open POSIX Test Suite 1805 of 1876.  The utilities' tests: 6484 pass, 556
+Open POSIX Test Suite 1814 of 1876.  The utilities' tests: 6484 pass, 556
 fail on the first full run, about 300 of them for want of a compiler in the
 image.
 
