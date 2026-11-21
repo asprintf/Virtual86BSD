@@ -2652,7 +2652,9 @@ sousrsend(struct socket *so, struct sockaddr *addr, struct uio *uio,
 			error = 0;
 		/* Generation of SIGPIPE can be controlled per socket. */
 		if (error == EPIPE && (so->so_options & SO_NOSIGPIPE) == 0 &&
-		    (flags & MSG_NOSIGNAL) == 0) {
+		    (flags & MSG_NOSIGNAL) == 0 &&
+		    (so->so_type == SOCK_STREAM ||
+		    so->so_type == SOCK_SEQPACKET)) {
 			if (userproc != NULL) {
 				/* aio(4) job */
 				PROC_LOCK(userproc);
