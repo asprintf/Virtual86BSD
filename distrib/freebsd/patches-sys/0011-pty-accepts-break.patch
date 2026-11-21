@@ -1,0 +1,29 @@
+--- a/kern/tty_pts.c
++++ b/kern/tty_pts.c
+@@ -718,12 +718,26 @@
+ 	free(psc, M_PTS);
+ }
+ 
++static int
++ptsdrv_ioctl(struct tty *tp, u_long cmd, caddr_t data, struct thread *td)
++{
++
++	/* No line to hold a break on: tcsendbreak() takes no action (POSIX). */
++	switch (cmd) {
++	case TIOCSBRK:
++	case TIOCCBRK:
++		return (0);
++	}
++	return (ENOIOCTL);
++}
++
+ static struct ttydevsw pts_class = {
+ 	.tsw_flags	= TF_NOPREFIX,
+ 	.tsw_outwakeup	= ptsdrv_outwakeup,
+ 	.tsw_inwakeup	= ptsdrv_inwakeup,
+ 	.tsw_open	= ptsdrv_open,
+ 	.tsw_close	= ptsdrv_close,
++	.tsw_ioctl	= ptsdrv_ioctl,
+ 	.tsw_pktnotify	= ptsdrv_pktnotify,
+ 	.tsw_free	= ptsdrv_free,
+ };
