@@ -186,8 +186,8 @@ built for it, see "Where things stand").
 * os-test (Sortix's, 5863 tests in 15 suites: headers, namespace, every
   function at a basic level, fnmatch, regex, limits, I/O, processes, signals,
   pseudoterminals, stdio, UDP, Unix sockets): `sh lib/libc/tools/gate.sh ost WORKDIR`.
-  5749 pass (glibc on Linux 5228 of an older snapshot), all of the header and namespace tests
-  among them.  Every one of the other 114 is explained in
+  5750 pass (glibc on Linux 5228 of an older snapshot), all of the header and namespace tests
+  among them.  Every one of the other 113 is explained in
   `share/doc/conformance.md` (UDP's open questions, last-ulp long double results,
   readings of the standard).
 * The Open POSIX Test Suite (LTP): `sh lib/libc/tools/gate.sh pts WORKDIR`.
