@@ -183,13 +183,12 @@ built for it, see "Where things stand").
   (`-d`: dynamic, `-s`: processors).  47 of 47 pass, static, dynamic and
   with `-s 4`.  Most of its tests compare with glibc on the host
   (differential tests).
-* os-test (Sortix's, 5816 tests in 14 suites: headers, namespace, every
+* os-test (Sortix's, 5863 tests in 15 suites: headers, namespace, every
   function at a basic level, fnmatch, regex, limits, I/O, processes, signals,
-  pseudoterminals, stdio, UDP): `sh lib/libc/tools/gate.sh ost WORKDIR`.
-  5670 pass (glibc on Linux 5228), all of the header and namespace tests
-  among them.  Every one of the other 146 is explained in
-  `share/doc/conformance.md` (UDP's open questions and signal order, tests
-  that os-test itself marks `[nonstandard]`, last-ulp long double results,
+  pseudoterminals, stdio, UDP, Unix sockets): `sh lib/libc/tools/gate.sh ost WORKDIR`.
+  5745 pass (glibc on Linux 5228 of an older snapshot), all of the header and namespace tests
+  among them.  Every one of the other 118 is explained in
+  `share/doc/conformance.md` (UDP's open questions, last-ulp long double results,
   readings of the standard).
 * The Open POSIX Test Suite (LTP): `sh lib/libc/tools/gate.sh pts WORKDIR`.
   1805 of the 1876 that compile pass (glibc on Linux passes 1693 of its
